@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: mira
+      POSTGRES_USER: mira_user
+      POSTGRES_PASSWORD: mira_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: db
+      DB_NAME: mira
+      DB_USER: mira_user
+      DB_PASSWORD: mira_pass
+      DB_PORT: 5432
+      DEBUG: "True"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

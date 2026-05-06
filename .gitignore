@@ -1,0 +1,11 @@
+.env
+__pycache__
+*.pyc
+venv/
+ENV/
+.env.local
+db.sqlite3
+staticfiles/
+media/
+docker-compose.override.yml
+.postgres_data/
