@@ -4,3 +4,5 @@ safety
 bandit
 pytest
 pytest-django
+pre-commit
+drf-spectacular
