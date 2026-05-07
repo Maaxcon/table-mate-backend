@@ -9,7 +9,7 @@
 2. Speckit is already initialized in this repo. Do not run `specify init .` again.
 3. Use one Speckit execution mode:
 4. IDE mode: use your Speckit-enabled agent integration.
-5. CLI mode: verify command access with `uvx --from git+https://github.com/github/spec-kit.git specify --help`
+5. CLI mode: verify command access with `uv tool install specify-cli --from git+https://github.com/github/spec-kit.git`
 
 ### 3. Create a Working Branch
 1. `git checkout -b feature/<short-name>`
@@ -21,6 +21,13 @@
 2. `speckit-plan`
 3. `speckit-tasks`
 4. `speckit-implement` or implement manually from `tasks.md`
+
+if you use codex  command - $speckit-specify, $speckit-plan, $speckit-implement
+
+/speckit.specify: Describing exactly what a module should do (e.g., "Create a data processing utility for employee records").
+/speckit.plan: Reviewing the architectural plan before any code is written. This ensures the agent is correctly planning the React hooks or Django DRF endpoints you actually need.
+/speckit.tasks: Breaking the plan down into actionable steps.
+/speckit.implement: Executing the code generation.
 
 ### 5. CLI Alternative (If you do not use IDE commands)
 1. `uvx --from git+https://github.com/github/spec-kit.git specify run speckit.specify "feature description"`

@@ -20,7 +20,7 @@ Sync Impact Report
   - None
 -->
 
-# Mira Backend Constitution
+# Table-mate Backend Constitution
 
 ## Core Principles
 
@@ -74,13 +74,23 @@ Sync Impact Report
 - If commit hooks are added, they MUST be Python-native (`pre-commit`);
   Node/Husky is out of scope.
 
-### VII. Auth & Permissions
-- API endpoints are closed by default via DRF `IsAuthenticated`.
-- Current default authentication is `SessionAuthentication`.
-- Migration to JWT is allowed only as an explicit architecture decision
-  (spec + plan + rollout).
-- Role-based access (Owner/Manager/Staff) MUST be implemented through custom
-  DRF permission classes when the role model is introduced.
+### VII. Auth & Permissions (amended)
+
+- API endpoints are closed by default via DRF IsAuthenticated.
+- Authentication: JWT via djangorestframework-simplejwt.
+  This is an explicit architecture decision for this project
+  because the frontend is a React SPA with Google OAuth
+  and WebSocket connections.
+- Flow:
+    Frontend sends Google OAuth token
+    → POST /api/auth/google/
+    → Backend verifies with Google
+    → Returns JWT access + refresh tokens
+    → Frontend stores in Redux + localStorage
+    → Attaches JWT as Authorization: Bearer <token>
+      on every request via Axios interceptor
+- Role-based access (Guest, AuthUser, Admin, Waiter, Hostess)
+  MUST be implemented through custom DRF permission classes.
 
 ## Operational Constraints
 
