@@ -89,7 +89,7 @@ Sync Impact Report
     → Frontend stores in Redux + localStorage
     → Attaches JWT as Authorization: Bearer <token>
       on every request via Axios interceptor
-- Role-based access (Guest, AuthUser, Admin, Waiter, Hostess)
+- Role-based access (`ROOT`, `OWNER`, `ADMIN`, `WAITER`, `COOK`, `GUEST`)
   MUST be implemented through custom DRF permission classes.
 
 ## Operational Constraints

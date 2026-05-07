@@ -31,7 +31,7 @@
 
 - [ ] T007 Implement `common/mixins.py` with `UUIDMixin` and `TimestampMixin` and migrate models to use them.
 - [ ] T008 Implement `common/exceptions.py` with base domain exception + `ReservationConflictError` and standard error payload mapping.
-- [ ] T009 Implement role permissions in `common/permissions.py` (`IsAdmin`, `IsWaiter`, `IsHostess`, `IsAuthUser`).
+- [ ] T009 Implement role permissions in `common/permissions.py` (`IsRoot`, `IsOwner`, `IsAdmin`, `IsWaiter`, `IsCook`, `IsGuest`) or equivalent role policy classes.
 - [ ] T010 Configure DRF + JWT in `core/settings/base.py` with `simplejwt` authentication and default permission policy.
 - [ ] T011 Configure Channels + Redis layer in `core/settings/base.py` and websocket entry in `core/asgi.py`.
 - [ ] T012 Update root routing in `core/urls.py` and `core/routing.py` for API includes and websocket routes (`ws/cart/:session_id/`, `ws/hall/`).
@@ -98,7 +98,7 @@
 ### Tests for User Story 3
 
 - [ ] T030 [P] [US3] Add menu contract tests in `tests/contract/test_menu_api.py` for categories/items with `AllowAny`.
-- [ ] T031 [P] [US3] Add permission matrix tests in `tests/integration/test_permission_matrix.py` for guest/auth/admin/waiter/hostess endpoint access.
+- [ ] T031 [P] [US3] Add permission matrix tests in `tests/integration/test_permission_matrix.py` for `ROOT`/`OWNER`/`ADMIN`/`WAITER`/`COOK`/`GUEST` endpoint access.
 
 ### Implementation for User Story 3
 
@@ -152,7 +152,7 @@
 - [ ] T047 [US5] Implement restaurants API in `apps/restaurants/api/{serializers.py,views.py,urls.py}` for list/update endpoints.
 - [ ] T048 [US5] Implement table position update service in `apps/editor/services.py` and connect to editor API patch endpoint.
 - [ ] T049 [US5] Implement `apps/editor/consumers.py` and `apps/editor/routing.py` for `ws/hall/` events.
-- [ ] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with waiter/hostess/admin access rules.
+- [ ] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with `ROOT`/`OWNER`/`ADMIN`/`WAITER` access rules.
 
 **Checkpoint**: Staff/admin operations and hall realtime channels are complete.
 

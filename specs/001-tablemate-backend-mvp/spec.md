@@ -74,9 +74,9 @@ As reservation participants, users can create cart sessions, mutate cart items, 
 
 ---
 
-### User Story 5 - Staff and Admin Operational APIs + Hall Realtime (Priority: P3)
+### User Story 5 - Role-Based Operational APIs + Hall Realtime (Priority: P3)
 
-As Admin/Waiter/Hostess roles, I can access table positioning, restaurant metadata, reservation status workflows, and live hall updates according to policy.
+As `ROOT`/`OWNER`/`ADMIN`/`WAITER`/`COOK`/`GUEST` role users, I can access backend operations according to hierarchy policy and receive hall/cart realtime updates where applicable.
 
 **Why this priority**: Operational tooling is required for staff usage but can follow core auth/reservation/cart foundation.
 
@@ -84,10 +84,11 @@ As Admin/Waiter/Hostess roles, I can access table positioning, restaurant metada
 
 **Acceptance Scenarios**:
 
-1. **Given** Admin token, **When** client calls `PATCH /api/editor/tables/:id/position/`, **Then** backend updates coordinates via `editor/services.py`.
-2. **Given** Waiter token, **When** client calls `PATCH /api/reservations/:id/status/`, **Then** backend allows status mutation under policy.
-3. **Given** Hostess token, **When** client connects to `ws/hall/`, **Then** backend streams hall events (`TABLE_STATUS_CHANGED`, `NEW_RESERVATION`).
-4. **Given** authorized restaurant staff, **When** client calls `GET /api/restaurants/` or `PATCH /api/restaurants/:id/`, **Then** backend returns/updates restaurant metadata by permission scope.
+1. **Given** `ROOT` or `OWNER` token, **When** client calls `GET /api/restaurants/` or `PATCH /api/restaurants/:id/`, **Then** backend returns/updates restaurant metadata by permission scope.
+2. **Given** `ROOT`, `OWNER`, or `ADMIN` token, **When** client calls `PATCH /api/editor/tables/:id/position/`, **Then** backend updates coordinates via `editor/services.py`.
+3. **Given** `WAITER` token, **When** client calls `PATCH /api/reservations/:id/status/`, **Then** backend allows status mutation under policy.
+4. **Given** `COOK` token, **When** client accesses kitchen order workflow endpoints, **Then** backend allows order-state operations defined for kitchen board.
+5. **Given** `WAITER` token, **When** client connects to `ws/hall/`, **Then** backend streams hall events (`TABLE_STATUS_CHANGED`, `NEW_RESERVATION`).
 
 ### Edge Cases
 
@@ -126,13 +127,22 @@ As Admin/Waiter/Hostess roles, I can access table positioning, restaurant metada
 - **FR-019**: Only cart participants may add/remove cart items.
 - **FR-020**: Cart websocket broadcasts MUST be triggered from services, never views.
 - **FR-021**: Restaurants API MUST expose `GET /api/restaurants/` and `PATCH /api/restaurants/:id/`.
-- **FR-022**: Role permissions MUST be implemented in `common/permissions.py` (`IsAdmin`, `IsWaiter`, `IsHostess`, `IsAuthUser`).
+- **FR-022**: Role permissions MUST be implemented in `common/permissions.py` using role matrix classes (`IsRoot`, `IsOwner`, `IsAdmin`, `IsWaiter`, `IsCook`, `IsGuest`) or equivalent policy layer.
 - **FR-023**: Websocket endpoints MUST include `ws/cart/:session_id/` (orders consumer) and `ws/hall/` (editor consumer).
 - **FR-024**: Cart websocket events MUST include `ITEM_ADDED`, `ITEM_REMOVED`, `USER_JOINED`, `USER_LEFT`.
 - **FR-025**: Hall websocket events MUST include `TABLE_STATUS_CHANGED`, `NEW_RESERVATION`.
 - **FR-026**: Environment variables MUST include `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_HOSTS`.
 - **FR-027**: CI/CD workflow files MUST live under `.github/workflows/` and enforce backend quality gates.
 - **FR-028**: MVP MUST exclude payments, AI features, predictive models, SMS/email notifications, and multi-restaurant support.
+
+### Role Permission Matrix
+
+- **ROOT (Level 1)**: create/delete restaurants, manage owners, global system access.
+- **OWNER (Level 2)**: manage staff roles, financial/manager-level reporting, restaurant settings.
+- **ADMIN (Level 3)**: floor plan editor, menu editing, table layout management.
+- **WAITER (Level 4)**: table map operations, table status updates, shared cart operations.
+- **COOK (Level 5)**: kitchen kanban access, order detail visibility, mark orders ready.
+- **GUEST (Level 6)**: menu visibility, reservations, assigned-table ordering.
 
 ### Key Entities *(include if feature involves data)*
 
