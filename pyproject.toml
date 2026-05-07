@@ -1,0 +1,39 @@
+[project]
+name = "table-mate"
+version = "0.1.0"
+dependencies = [
+    "Django>=5.0",
+    "djangorestframework",
+    "django-cors-headers",
+    "psycopg2-binary",
+    "python-dotenv",
+    "channels",
+    "daphne",
+    "drf-spectacular",
+]
+requires-python = ">=3.11"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+plugins = ["mypy_django_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "core.settings"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build-meta"
