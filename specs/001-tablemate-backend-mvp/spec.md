@@ -2,175 +2,268 @@
 
 **Feature Branch**: `001-tablemate-backend-mvp`  
 **Created**: 2026-05-07  
-**Status**: Draft  
-**Input**: User description: "Tablemate backend MVP with Django 5 + DRF + JWT + Google OAuth, Redis/Channels realtime flows, skinny views/fat services/selectors, and project-aligned app structure."
+**Updated**: 2026-05-11  
+**Status**: Finalized  
+**Input**: User description: "Tablemate backend MVP with Constitution v3.0.0 alignment for roles, realtime contracts, webhook authority, and immutable boundaries."
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Authenticate via Google OAuth and JWT (Priority: P1)
+### User Story 1 - Authenticate with Google and Role-Scoped JWT (Priority: P1)
 
-As a client app, I can exchange a Google token for JWT credentials and fetch current user profile/role to access protected backend routes.
+As a client app, I can exchange a Google token for JWT credentials and fetch the current profile so protected routes are accessed with backend-authorized identity.
 
-**Why this priority**: Auth is a hard dependency for all protected backend modules.
+**Why this priority**: Authentication and role claims are prerequisites for all protected flows.
 
-**Independent Test**: Test `google`, `refresh`, `me`, and `logout` auth endpoints in isolation.
+**Independent Test**: Validate Google exchange, refresh, profile lookup, logout, and stale-role-token invalidation behavior.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid Google access token, **When** client calls `POST /api/auth/google/`, **Then** backend returns access and refresh JWT tokens plus normalized user payload.
-2. **Given** a valid refresh token, **When** client calls `POST /api/auth/refresh/`, **Then** backend returns a fresh access token.
-3. **Given** an authenticated JWT request, **When** client calls `GET /api/auth/me/`, **Then** backend returns current user profile including role.
-4. **Given** logout request, **When** client calls `POST /api/auth/logout/`, **Then** backend invalidates token state according to JWT strategy.
+1. **Given** a valid Google access token, **When** client calls `POST /api/auth/google/`, **Then** backend returns access/refresh credentials and normalized user profile with role.
+2. **Given** a valid refresh token, **When** client calls `POST /api/auth/refresh/`, **Then** backend issues a new access token.
+3. **Given** an authenticated request, **When** client calls `GET /api/auth/me/`, **Then** backend returns current profile and effective role.
+4. **Given** a staff role update, **When** previously issued tokens are used, **Then** backend rejects stale tokens and requires re-authentication.
 
 ---
 
 ### User Story 2 - Reserve Tables with Conflict Safety (Priority: P1)
 
-As an authenticated user, I can check table availability and book a reservation without double booking during concurrent requests.
+As a customer, I can check table availability and create a reservation without double-booking under concurrent requests.
 
-**Why this priority**: Reservation consistency is core business-critical behavior.
+**Why this priority**: Reservation consistency is core operational behavior.
 
-**Independent Test**: Test `available tables`, `create reservation`, and conflict responses with parallel requests.
+**Independent Test**: Execute parallel reservation attempts for the same table/time window and verify exactly one success.
 
 **Acceptance Scenarios**:
 
-1. **Given** date/time/guest filters, **When** client calls `GET /api/editor/tables/available/`, **Then** backend returns currently available tables only.
-2. **Given** an available table, **When** client calls `POST /api/reservations/`, **Then** backend creates reservation and returns persisted data.
-3. **Given** two simultaneous reservations for the same table/time window, **When** transaction re-check detects conflict, **Then** backend raises `ReservationConflictError` and returns HTTP 409.
-4. **Given** authenticated user, **When** client calls `GET /api/reservations/my/`, **Then** backend returns only that user's reservations.
+1. **Given** date/time/guest filters, **When** client calls `GET /api/editor/tables/available/`, **Then** backend returns only currently available tables.
+2. **Given** an available table, **When** client calls `POST /api/reservations/`, **Then** backend stores reservation and returns persisted details.
+3. **Given** two simultaneous reservation requests for the same table/time window, **When** backend re-checks availability in transaction, **Then** one request succeeds and the conflicting request returns HTTP 409.
+4. **Given** authenticated customer, **When** client calls `GET /api/reservations/my/`, **Then** backend returns only that customer’s reservations.
 
 ---
 
-### User Story 3 - Browse Menu as Guest, Enforce Role Permissions Elsewhere (Priority: P1)
+### User Story 3 - Public Menu and Protected Operations (Priority: P1)
 
-As a guest, I can read menu categories/items without authentication while non-menu endpoints stay protected by JWT and role permissions.
+As a customer, I can browse menu data without authentication while protected operational endpoints remain guarded by JWT and role policy.
 
-**Why this priority**: Guest menu browsing is explicit MVP requirement.
+**Why this priority**: Public menu visibility is required while operational APIs must remain protected.
 
-**Independent Test**: Test unauthenticated menu access and denial on protected endpoints with no token.
+**Independent Test**: Verify unauthenticated access to menu endpoints and authorization denial on protected endpoints.
 
 **Acceptance Scenarios**:
 
-1. **Given** no auth token, **When** client calls `GET /api/menu/categories/` or `GET /api/menu/items/`, **Then** backend responds successfully (`AllowAny`).
-2. **Given** no auth token, **When** client calls reservation/order/editor/restaurant protected endpoints, **Then** backend returns authorization error.
-3. **Given** insufficient role token, **When** protected role-scoped endpoint is called, **Then** custom DRF permission class denies access.
+1. **Given** no auth token, **When** client calls `GET /api/menu/categories/` and `GET /api/menu/items/`, **Then** backend returns menu data successfully.
+2. **Given** no auth token, **When** client calls protected reservation/order/editor/restaurant endpoints, **Then** backend returns authorization error.
+3. **Given** authenticated staff with insufficient permissions, **When** restricted endpoint is called, **Then** backend denies the action according to role matrix.
 
 ---
 
-### User Story 4 - Shared Cart with REST + WebSocket Events (Priority: P2)
+### User Story 4 - Shared Cart with Live WebSocket Updates (Priority: P2)
 
-As reservation participants, users can create cart sessions, mutate cart items, and receive realtime cart updates through websocket events.
+As reservation participants, users can mutate a shared cart and receive realtime updates through backend-originated WebSocket events.
 
-**Why this priority**: Shared cart is the collaborative ordering engine.
+**Why this priority**: Shared cart collaboration depends on deterministic live updates.
 
-**Independent Test**: Test cart REST endpoints and websocket `ws/cart/:session_id/` event stream together.
+**Independent Test**: Validate cart REST mutations together with WebSocket event delivery, replay, and idempotent handling.
 
 **Acceptance Scenarios**:
 
-1. **Given** valid reservation, **When** client calls `POST /api/orders/cart/sessions/`, **Then** backend creates active cart session.
-2. **Given** participant user, **When** client calls add/remove item endpoints, **Then** backend updates cart and emits corresponding websocket events.
-3. **Given** non-participant user, **When** item mutation endpoint is called, **Then** backend denies action via service-level participant rule.
-4. **Given** active cart websocket channel, **When** users join/leave or mutate items, **Then** events include `ITEM_ADDED`, `ITEM_REMOVED`, `USER_JOINED`, `USER_LEFT`.
+1. **Given** a valid reservation, **When** client calls `POST /api/orders/cart/sessions/`, **Then** backend creates an active cart session.
+2. **Given** a cart participant, **When** item add/remove endpoints are called, **Then** backend applies mutation and emits cart events.
+3. **Given** a non-participant, **When** item mutation endpoint is called, **Then** backend denies mutation.
+4. **Given** reconnect after disconnection, **When** client provides replay cursor, **Then** backend replays missed events for the session window.
 
 ---
 
-### User Story 5 - Role-Based Operational APIs + Hall Realtime (Priority: P3)
+### User Story 5 - Staff Operations and Hall Realtime (Priority: P2)
 
-As `ROOT`/`OWNER`/`ADMIN`/`WAITER`/`COOK`/`GUEST` role users, I can access backend operations according to hierarchy policy and receive hall/cart realtime updates where applicable.
+As staff (Owner, Manager, Waiter, Cook), I can perform only role-allowed operations and receive hall updates relevant to my context.
 
-**Why this priority**: Operational tooling is required for staff usage but can follow core auth/reservation/cart foundation.
+**Why this priority**: Safe staff operations require strict backend role enforcement.
 
-**Independent Test**: Test role-scoped access to editor/restaurant/reservation-status endpoints and hall websocket events.
+**Independent Test**: Validate role-scoped access for restaurants/editor/reservation-status routes and hall stream behavior.
 
 **Acceptance Scenarios**:
 
-1. **Given** `ROOT` or `OWNER` token, **When** client calls `GET /api/restaurants/` or `PATCH /api/restaurants/:id/`, **Then** backend returns/updates restaurant metadata by permission scope.
-2. **Given** `ROOT`, `OWNER`, or `ADMIN` token, **When** client calls `PATCH /api/editor/tables/:id/position/`, **Then** backend updates coordinates via `editor/services.py`.
-3. **Given** `WAITER` token, **When** client calls `PATCH /api/reservations/:id/status/`, **Then** backend allows status mutation under policy.
-4. **Given** `COOK` token, **When** client accesses kitchen order workflow endpoints, **Then** backend allows order-state operations defined for kitchen board.
-5. **Given** `WAITER` token, **When** client connects to `ws/hall/`, **Then** backend streams hall events (`TABLE_STATUS_CHANGED`, `NEW_RESERVATION`).
+1. **Given** Owner role, **When** restaurant management endpoints are called, **Then** backend allows owner-level operations.
+2. **Given** Manager role, **When** waiter-level endpoints are called, **Then** backend allows inherited waiter actions and denies owner-only actions.
+3. **Given** Waiter role, **When** reservation status update endpoint is called, **Then** backend applies allowed status transitions.
+4. **Given** Cook role, **When** kitchen workflow endpoints are called, **Then** backend allows kitchen-only order item updates.
+5. **Given** authorized hall subscriber, **When** table/reservation state changes, **Then** backend emits hall events with declared schema version.
+
+---
+
+### User Story 6 - Payment Confirmation via Trusted Webhook (Priority: P1)
+
+As the operations platform, payment confirmation is accepted only from a verified provider webhook, and paid orders are injected into kitchen flow atomically.
+
+**Why this priority**: Constitution v3.0.0 requires trusted webhook authority for payment state.
+
+**Independent Test**: Verify signature validation, idempotent duplicate webhook handling, and atomic paid+ticker injection behavior.
+
+**Acceptance Scenarios**:
+
+1. **Given** a valid signed payment webhook, **When** backend processes callback, **Then** order transitions from `unpaid` to `paid`, kitchen ticket is created, and events are broadcast.
+2. **Given** invalid webhook signature, **When** callback is received, **Then** backend rejects request and no order state change occurs.
+3. **Given** duplicate delivery of same webhook event, **When** backend processes retries, **Then** payment transition side effects are applied exactly once.
 
 ### Edge Cases
 
-- Google token invalid/expired or audience mismatch for configured client ID.
-- Refresh token revoked, malformed, or missing at `/api/auth/refresh/`.
-- Reservation overlap by partial interval (e.g., intersects start/end boundaries).
-- Concurrent reservation creates for same table/date/time.
-- Cart item remove request targets already removed item due to concurrent participant update.
-- Websocket connection attempts with unauthorized user to cart/hall channels.
-- Stale JWT role claims after role update in `restaurants` employee mapping.
-- Editor position patch with invalid coordinates or inactive table.
-- Orders API version mismatch under `apps/orders/api/v1/` routes.
+- Google token is expired, invalid, or for a mismatched client audience.
+- Refresh token is revoked, malformed, or missing.
+- Reservation intervals overlap at boundaries or during high concurrency.
+- Cart removal is requested for an item already removed by another participant.
+- Unauthorized WebSocket connection attempts occur for cart/hall channels.
+- Event replay cursor is stale or points before retention window.
+- Unsupported `schema_version` is received by a consumer.
+- Duplicate payment webhook deliveries arrive out of order.
+- Webhook signature is missing or invalid.
+- Staff role changes while existing staff tokens are still active.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: Backend MUST use Python 3.12, Django 5+, and DRF.
-- **FR-002**: Backend MUST use JWT auth via `djangorestframework-simplejwt`.
-- **FR-003**: Backend MUST support Google OAuth login exchange in `apps/authentication/services.py`.
-- **FR-004**: Auth API MUST expose `POST /api/auth/google/`, `POST /api/auth/refresh/`, `GET /api/auth/me/`, `POST /api/auth/logout/`.
-- **FR-005**: Project settings MUST follow `core/settings/base.py`, `core/settings/local.py`, `core/settings/production.py` split.
-- **FR-006**: ASGI websocket entry MUST be configured through `core/asgi.py`.
-- **FR-007**: Domain apps MUST include `users`, `authentication`, `restaurants`, `editor`, `reservations`, `orders`, `menu`, and shared `common`.
-- **FR-008**: Domain models MUST use `UUIDMixin` and `TimestampMixin` from `common/mixins.py`.
-- **FR-009**: API views MUST be skinny (routing, validation, response shaping only); business logic MUST live in services.
-- **FR-010**: Complex ORM reads MUST be implemented in selectors.
-- **FR-011**: Reservations service `create_reservation()` MUST re-check availability inside DB transaction before save.
-- **FR-012**: Reservation conflict MUST raise `ReservationConflictError` and map to HTTP 409.
-- **FR-013**: Editor API MUST expose `GET /api/editor/tables/`, `GET /api/editor/tables/available/`, `PATCH /api/editor/tables/:id/position/`.
-- **FR-014**: Reservations API MUST expose `POST /api/reservations/`, `GET /api/reservations/my/`, `PATCH /api/reservations/:id/status/`.
-- **FR-015**: Menu API MUST expose `GET /api/menu/categories/`, `GET /api/menu/items/`.
-- **FR-016**: Menu read endpoints MUST be `AllowAny` for guest browsing.
-- **FR-017**: Orders API MUST expose `POST /api/orders/cart/sessions/`, `GET /api/orders/cart/sessions/:id/`, `POST /api/orders/cart/sessions/:id/items/`, `DELETE /api/orders/cart/sessions/:id/items/:item_id/`.
-- **FR-018**: Orders API implementation MUST be versioned under `apps/orders/api/v1/`.
-- **FR-019**: Only cart participants may add/remove cart items.
-- **FR-020**: Cart websocket broadcasts MUST be triggered from services, never views.
-- **FR-021**: Restaurants API MUST expose `GET /api/restaurants/` and `PATCH /api/restaurants/:id/`.
-- **FR-022**: Role permissions MUST be implemented in `common/permissions.py` using role matrix classes (`IsRoot`, `IsOwner`, `IsAdmin`, `IsWaiter`, `IsCook`, `IsGuest`) or equivalent policy layer.
-- **FR-023**: Websocket endpoints MUST include `ws/cart/:session_id/` (orders consumer) and `ws/hall/` (editor consumer).
-- **FR-024**: Cart websocket events MUST include `ITEM_ADDED`, `ITEM_REMOVED`, `USER_JOINED`, `USER_LEFT`.
-- **FR-025**: Hall websocket events MUST include `TABLE_STATUS_CHANGED`, `NEW_RESERVATION`.
-- **FR-026**: Environment variables MUST include `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_HOSTS`.
-- **FR-027**: CI/CD workflow files MUST live under `.github/workflows/` and enforce backend quality gates.
-- **FR-028**: MVP MUST exclude payments, AI features, predictive models, SMS/email notifications, and multi-restaurant support.
+- **FR-002**: Backend MUST use JWT authentication.
+- **FR-003**: Backend MUST support Google OAuth exchange for sign-in.
+- **FR-004**: Auth API MUST expose `POST /api/auth/google/`, `POST /api/auth/refresh/`, `GET /api/auth/me/`, and `POST /api/auth/logout/`.
+- **FR-005**: Settings MUST be split into base/local/production configuration files.
+- **FR-006**: ASGI entry MUST be configured for REST + WebSocket runtime.
+- **FR-007**: Domain apps MUST include users, authentication, restaurants, editor, reservations, orders, menu, and shared common layer.
+- **FR-008**: Domain models MUST use shared UUID and timestamp mixins.
+- **FR-009**: API views MUST stay orchestration-only; business rules MUST be implemented in services.
+- **FR-010**: Complex read queries MUST be implemented in selectors.
+- **FR-011**: Reservation creation MUST re-check availability inside database transaction before persistence.
+- **FR-012**: Reservation conflicts MUST return HTTP 409.
+- **FR-013**: Editor API MUST expose table list, available tables, and table position update endpoints.
+- **FR-014**: Reservations API MUST expose create, self-list, and status update endpoints.
+- **FR-015**: Menu API MUST expose categories and items read endpoints.
+- **FR-016**: Menu read endpoints MUST allow unauthenticated access.
+- **FR-017**: Orders API MUST expose cart session create/get, item add, and item remove endpoints.
+- **FR-018**: Orders API MUST remain versioned.
+- **FR-019**: Only cart participants MAY mutate cart contents.
+- **FR-020**: Cart and hall WebSocket broadcasts MUST be emitted from service layer, not views.
+- **FR-021**: Restaurants API MUST expose list and update endpoints under role policy.
+- **FR-022**: Staff authorization MUST enforce canonical roles only: Owner, Manager, Waiter, Cook.
+- **FR-023**: WebSocket endpoints MUST include cart session channel and hall channel.
+- **FR-024**: Cart events MUST include item add/remove and participant join/leave event types.
+- **FR-025**: Hall events MUST include table status and reservation creation event types.
+- **FR-026**: Required environment variables MUST include `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_HOSTS`, and payment webhook secret.
+- **FR-027**: CI workflows MUST enforce lint, security, and automated tests.
+- **FR-028**: MVP MUST exclude AI features, predictive models, SMS/email notifications, and multi-restaurant support.
+- **FR-029**: Payment confirmation MUST be accepted only through provider webhook after signature validation.
+- **FR-030**: Order payment status transition `unpaid -> paid` MUST be performed only by webhook processing.
+- **FR-031**: Successful payment webhook processing MUST atomically apply: payment confirmation, kitchen ticket injection, and event publication intent.
+- **FR-032**: Duplicate webhook deliveries MUST be idempotent and MUST NOT duplicate payment-side effects.
+- **FR-033**: Event contracts MUST include typed names, audience, required payload fields, and `schema_version`.
+- **FR-034**: Event delivery MUST be at-least-once with reconnect replay for missed session events.
+- **FR-035**: Unsupported event versions MUST be ignored safely by consumers and logged for observability.
+- **FR-036**: Staff role change MUST invalidate active staff tokens immediately.
+- **FR-037**: Session close MUST be explicit waiter action; backend inactivity timeout MUST NOT auto-close sessions.
+- **FR-038**: Financial write operations MUST be internal-only; external APIs are read-only for financial data.
+- **FR-039**: Immutable boundaries MUST be enforced for closed sessions, settled orders, finalized tickets, payment records, and reporting snapshots.
 
-### Role Permission Matrix
+### Canonical Contract Impact
 
-- **ROOT (Level 1)**: create/delete restaurants, manage owners, global system access.
-- **OWNER (Level 2)**: manage staff roles, financial/manager-level reporting, restaurant settings.
-- **ADMIN (Level 3)**: floor plan editor, menu editing, table layout management.
-- **WAITER (Level 4)**: table map operations, table status updates, shared cart operations.
-- **COOK (Level 5)**: kitchen kanban access, order detail visibility, mark orders ready.
-- **GUEST (Level 6)**: menu visibility, reservations, assigned-table ordering.
+- **Impacted Entities**: Restaurant, Table, Reservation, Order, OrderItem, Ticket, Session, Staff, PaymentRecord, SessionSnapshot.
+- **Contract Delta**: Adds explicit webhook-confirmed payment transitions, replay cursor semantics for live events, and immutable lifecycle boundaries for finalized records.
+- **Backward Compatibility**: Existing event fields remain stable within active `schema_version`; new optional fields are additive.
+- **Backend Source of Truth Rule**: Canonical state transitions are accepted only through backend service operations and confirmed by backend event broadcast.
+
+### Role Access Matrix
+
+- **Owner**: Full operational access including restaurant management, staff management, layout publishing, and financial reporting.
+- **Owner Restricted**: None inside backend MVP operational scope.
+- **Manager**: Waiter capabilities plus void/discount approval and operational oversight.
+- **Manager Restricted**: No staff management, no spatial editor publish permissions, no financial report administration.
+- **Waiter**: Table/hall operations, reservation handling, session close action, and customer order support.
+- **Waiter Restricted**: No financial administration, no staff management, no kitchen-only item lifecycle operations.
+- **Cook**: Kitchen queue and order item preparation lifecycle updates.
+- **Cook Restricted**: No floor-plan editing, no reservation creation, no financial operations.
+
+### Event Catalog (Mandatory)
+
+| Event Name | schema_version | Producer | Consumer | Required Payload Fields | Replay Behavior | Idempotency / Dedup Rule |
+|---|---|---|---|---|---|---|
+| `CART_ITEM_ADDED` | `1` | Cart service | Cart participants | `event_id`, `session_id`, `item_id`, `menu_item_id`, `quantity`, `actor_id`, `occurred_at` | Replay if newer than client cursor and inside retention window | Deduplicate by `event_id`; ignore duplicates |
+| `CART_ITEM_REMOVED` | `1` | Cart service | Cart participants | `event_id`, `session_id`, `item_id`, `actor_id`, `occurred_at` | Replay on reconnect within retention | Deduplicate by `event_id` |
+| `CART_PARTICIPANT_JOINED` | `1` | Cart presence service | Cart participants | `event_id`, `session_id`, `user_id`, `occurred_at` | Replay within retention for missed presence transitions | Deduplicate by `event_id` |
+| `CART_PARTICIPANT_LEFT` | `1` | Cart presence service | Cart participants | `event_id`, `session_id`, `user_id`, `occurred_at` | Replay within retention for missed presence transitions | Deduplicate by `event_id` |
+| `HALL_TABLE_STATUS_CHANGED` | `1` | Table state service | Hall subscribers (staff) | `event_id`, `table_id`, `previous_status`, `current_status`, `session_id`, `occurred_at` | Replay if change occurred after cursor | Deduplicate by `event_id` |
+| `HALL_NEW_RESERVATION` | `1` | Reservation service | Hall subscribers (staff) | `event_id`, `reservation_id`, `table_id`, `start_at`, `end_at`, `occurred_at` | Replay within retention to restore hall timeline | Deduplicate by `event_id` |
+| `PAYMENT_CONFIRMED` | `1` | Payment webhook service | Waiter and kitchen channels | `event_id`, `provider_event_id`, `order_id`, `payment_status`, `amount`, `currency`, `occurred_at` | Replay for subscribers that missed confirmation | Deduplicate by `provider_event_id` |
+| `KITCHEN_TICKET_INJECTED` | `1` | Ticket injection service | Kitchen channel | `event_id`, `ticket_id`, `order_id`, `injected_at`, `priority`, `occurred_at` | Replay for disconnected kitchen clients | Deduplicate by `ticket_id` |
+| `ORDER_ITEM_STATUS_CHANGED` | `1` | Kitchen workflow service | Waiter and kitchen channels | `event_id`, `order_item_id`, `previous_status`, `current_status`, `actor_role`, `occurred_at` | Replay after cursor within retention | Deduplicate by `event_id` |
+| `SESSION_CLOSED` | `1` | Session lifecycle service | Waiter and manager channels | `event_id`, `session_id`, `table_id`, `closed_by`, `snapshot_id`, `occurred_at` | Replay close notifications for disconnected staff | Deduplicate by `session_id` + `occurred_at` |
+
+### Replay Semantics
+
+- Event delivery guarantee is at-least-once per connected client session.
+- Each event includes immutable `event_id`, `schema_version`, and `occurred_at` fields.
+- Clients reconnect with last processed cursor; backend replays only events newer than that cursor within configured retention window.
+- Consumers MUST be idempotent and deduplicate using event-level key specified in event catalog.
+- Ordering assumption: strict ordering is guaranteed only within a single stream key (for example per `session_id` or per `ticket_id`).
+- If consumer receives unsupported `schema_version`, consumer MUST ignore the event payload for state mutation and log unsupported version occurrence.
+- Version compatibility policy is additive-first: existing fields are not removed from active versions during the deprecation window.
+
+### Authoritative State Transitions
+
+| Transition Domain | Authoritative Backend Service | Allowed Transition Rule | Client Restriction |
+|---|---|---|---|
+| Table status | Table state service | `free <-> reserved <-> occupied` only through backend validation | Clients MAY request; clients MUST NOT set canonical table status directly |
+| Session lifecycle | Session lifecycle service | Open on waiter manual flow or prepaid confirmation; close only on explicit waiter close action | No client-side auto-close or timeout-driven canonical close |
+| Order lifecycle | Order orchestration service | `draft -> submitted -> unpaid -> paid -> settled` with policy checks | Clients cannot mark paid/settled directly |
+| Order item lifecycle | Kitchen workflow service | `pending -> in_progress -> ready -> completed` and void branch by policy | Frontend cannot bypass kitchen policy or set terminal status directly |
+| Kitchen ticket creation | Ticket injection service | Ticket created only from successful paid order transition | No direct client endpoint for ticket injection |
+| Payment status | Payment webhook service | `unpaid -> paid` only after signature-validated provider webhook | Client/staff endpoints cannot confirm payment |
+| Void/refund | Void and refund service | Transactional void/refund with audit trail and correction records | No direct client-side mutation of finalized financial state |
+
+Frontend applications may request actions but MUST NOT perform authoritative business state transitions.
+
+### Immutable Boundaries
+
+| Record Type | Becomes Immutable At | Allowed Changes After Boundary |
+|---|---|---|
+| Completed session | Session close confirmation and snapshot creation | No mutable field updates; only append-only correction records with audit linkage |
+| Settled order | Transition to `settled` | No direct edits to order totals/items; adjustments require separate audited compensation flow |
+| Payment record | Successful webhook confirmation persisted | No update/delete via external API; append-only reconciliation metadata only |
+| Kitchen ticket | Dispatch to kitchen or completion | No field mutation of dispatched/completed ticket; cancellation uses separate cancellation record |
+| Reporting snapshot / audit log | Snapshot write completion | Fully immutable; corrections stored as new records, never in-place overwrite |
 
 ### Key Entities *(include if feature involves data)*
 
-- **User** (`apps/users/models.py`): identity with unique email, profile fields, and role enum.
-- **Restaurant** (`apps/restaurants/models.py`): venue metadata with employee membership relation to users.
-- **Table** (`apps/editor/models.py`): hall table with position, shape, capacity, active flag, and status.
-- **Reservation** (`apps/reservations/models.py`): time-bounded booking linking guest and table.
-- **Category** (`apps/menu/models.py`): menu grouping with ordering semantics.
-- **MenuItem** (`apps/menu/models.py`): priced dish linked to category and availability.
-- **CartSession** (`apps/orders/models/cart_session.py`): active shared cart linked to reservation and participants.
-- **CartItem** (`apps/orders/models/cart_item.py`): quantity entry in cart session with author and menu item linkage.
+- **User**: Account identity with role-scoped authorization context.
+- **StaffRoleAssignment**: Canonical mapping of staff account to Owner/Manager/Waiter/Cook role.
+- **Restaurant**: Venue metadata and staff membership relation.
+- **Table**: Hall table identity and occupancy state.
+- **Reservation**: Time-bounded customer booking linked to table.
+- **MenuCategory**: Grouping entity for menu organization.
+- **MenuItem**: Orderable dish with availability and price metadata.
+- **CartSession**: Shared ordering context linked to reservation participants.
+- **CartItem**: Item entry within cart session.
+- **Order**: Confirmed customer order with payment lifecycle.
+- **OrderItem**: Individual kitchen-trackable line item with lifecycle state.
+- **KitchenTicket**: Kitchen projection created from confirmed paid order.
+- **PaymentRecord**: Immutable payment confirmation record derived from webhook.
+- **SessionSnapshot**: Immutable analytics snapshot created at session close.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of protected endpoints reject unauthenticated access while menu read endpoints succeed for guests.
-- **SC-002**: Concurrent reservation tests for same table/time result in exactly one success and one HTTP 409 conflict.
-- **SC-003**: Participant authorization tests for cart mutations pass in 100% of cases.
-- **SC-004**: Websocket integration tests confirm all declared cart and hall event types are emitted.
-- **SC-005**: Static architecture review confirms no business-rule orchestration lives in API views for implemented modules.
-- **SC-006**: CI checks in `.github/workflows/` pass lint/security/test pipeline for backend scope.
+- **SC-001**: 100% of protected operational endpoints reject unauthorized access while public menu endpoints remain accessible without login.
+- **SC-002**: Concurrent reservation conflict tests for same table/time produce exactly one success and one conflict response.
+- **SC-003**: 100% of duplicate payment webhook retries produce no duplicate paid transitions or duplicate kitchen ticket injections.
+- **SC-004**: Reconnect tests confirm missed realtime events are replayed within retention and processed without duplicate side effects.
+- **SC-005**: Role-matrix verification confirms Owner/Manager/Waiter/Cook boundaries are enforced on all scoped endpoints.
+- **SC-006**: Closed sessions, settled orders, payment records, and reporting snapshots remain immutable in all post-settlement test scenarios.
+- **SC-007**: Quality and security validation gates pass before release readiness review.
 
 ## Assumptions
 
-- PostgreSQL is the transactional source of truth and is configured through `DATABASE_URL`.
-- Redis is available for channels layer and websocket pub/sub behavior.
-- Google OAuth server-side verification is available with configured `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
-- Frontend clients send JWT bearer tokens for protected REST and websocket requests.
-- Single-restaurant support means one active venue context for MVP (no multi-tenant/multi-restaurant behavior).
-- Notification features (email/SMS) are intentionally out of scope.
+- Single restaurant context remains active for MVP; multi-restaurant tenancy is deferred.
+- Payment provider sends signed webhook events with stable provider event identifiers.
+- Clients can persist and send replay cursors for reconnect recovery.
+- Event retention window is sufficient for normal short-lived disconnections.
+- Frontend consumes backend event contracts and does not apply local authoritative state transitions.
