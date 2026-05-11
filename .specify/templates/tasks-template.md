@@ -8,7 +8,9 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
+**Tests**: The examples below include test tasks. Tests are OPTIONAL unless
+the feature specification or constitution mandates them. When realtime,
+role-based access, or transactional integrity is in scope, tests are REQUIRED.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -66,8 +68,10 @@ Examples of foundational tasks (adjust based on your project):
 - [ ] T005 [P] Implement authentication/authorization framework
 - [ ] T006 [P] Setup API routing and middleware structure
 - [ ] T007 Create base models/entities that all stories depend on
-- [ ] T008 Configure error handling and logging infrastructure
-- [ ] T009 Setup environment configuration management
+- [ ] T008 Configure websocket event catalog/versioning, reconnect replay
+      strategy, and idempotent event handling when live state exists
+- [ ] T009 Setup webhook signature validation, transactional rollback behavior,
+      role-token invalidation flow, and immutable financial-write boundaries
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -245,6 +249,22 @@ With multiple developers:
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
 - Each user story should be independently completable and testable
+- Include explicit tasks for role-permission coverage whenever route access
+  differs by role
+- Include explicit tasks for canonical shared-entity contract compatibility
+  whenever entity shapes or semantics are modified
+- Include explicit tasks for websocket event contracts and unknown-version
+  handling whenever live updates exist
+- Include explicit tasks for at-least-once delivery verification and reconnect
+  replay behavior whenever websocket streams carry live state
+- Include explicit tasks for webhook-only payment confirmation paths and
+  signature validation whenever payment state is affected
+- Include explicit tasks for all-or-nothing transaction behavior whenever
+  state changes must remain atomic
+- Include explicit tasks for layout versioning and stable table identity when
+  floor-plan updates are in scope
+- Include explicit tasks ensuring financial records remain externally read-only
+  and derived metrics are computed from raw records where required
 - Verify tests fail before implementing
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently

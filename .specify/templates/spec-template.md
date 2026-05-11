@@ -95,6 +95,98 @@
 - **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
 - **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
 
+### Canonical Contract Impact *(mandatory when shared entities are affected)*
+
+<!--
+  Document whether the feature changes canonical entity shape/semantics.
+  Include backward compatibility and rollout expectations for clients.
+-->
+
+- **Impacted Entities**: [Restaurant/Table/Order/OrderItem/Ticket/Session/Staff or N/A]
+- **Contract Delta**: [added/changed/removed fields with compatibility plan]
+- **Backend Source of Truth Rule**: [how backend-authoritative state is enforced]
+
+### Role Access Matrix *(mandatory when feature touches role-based behavior)*
+
+<!--
+  Define capabilities per affected role and explicitly list restricted actions.
+  Backend enforcement is mandatory; UI hiding alone is insufficient.
+-->
+
+- **[Role A]**: [allowed capabilities]
+- **[Role A Restricted]**: [explicitly denied capabilities]
+- **[Role B]**: [allowed capabilities]
+- **[Role B Restricted]**: [explicitly denied capabilities]
+
+### Realtime Event Contracts *(mandatory when feature has live state)*
+
+<!--
+  For each event, define source, audience, channel, payload fields, and
+  schema_version behavior. Live state must be delivered by WebSocket;
+  REST should create/mutate state only.
+-->
+
+- **Event**: `[EVENT_NAME]`
+- **Audience**: [role/session scope]
+- **Transport**: [websocket channel/path]
+- **Payload**: [field list]
+- **schema_version**: [version value and compatibility notes]
+
+### Event Delivery Guarantees *(mandatory when feature has live state)*
+
+<!--
+  Define live delivery semantics. Constitution baseline is at-least-once
+  delivery with reconnect replay for the session window.
+-->
+
+- **Delivery Guarantee**: [at-least-once / N/A with rationale]
+- **Replay Window**: [how disconnected clients recover missed events]
+- **Idempotency Strategy**: [how duplicate event handling is made safe]
+
+### Transaction & State Authority *(mandatory when payments/voids/session totals are involved)*
+
+<!--
+  Define which transitions are backend-authoritative and what must be atomic.
+  If partial failure is possible, document rollback contract.
+-->
+
+- **Authoritative Transition**: [e.g., payment status update via webhook]
+- **Atomic Group**: [list of state changes/events that commit together]
+- **Rollback Rule**: [all-or-nothing behavior]
+
+### Session Lifecycle Rules *(mandatory when table/session occupancy is affected)*
+
+<!--
+  Sessions must have explicit open and close triggers. If snapshots are written
+  at close, define immutable analytics contract and live-state discard behavior.
+-->
+
+- **Open Trigger(s)**: [manual order start, prepaid webhook, etc.]
+- **Close Trigger(s)**: [explicit close-table action only / other]
+- **Close Snapshot Contract**: [fields persisted for analytics]
+
+### Layout Versioning Contract *(mandatory when floor plan/editor is affected)*
+
+<!--
+  Layout publications should create immutable versions and maintain stable table
+  identity references.
+-->
+
+- **Version Model**: [immutable versioned layouts / other]
+- **ID Stability Rule**: [table ID behavior across versions]
+- **Update Delivery Path**: [backend-initiated event and client apply behavior]
+
+### Financial Data Boundary *(mandatory when billing/revenue/reporting is affected)*
+
+<!--
+  Financial records are API read-only from external callers. Specify internal
+  write paths and any derived metric computation rules.
+-->
+
+- **External Write Access**: [forbidden/allowed with rationale]
+- **Internal Write Sources**: [payment webhook, void transaction, session close]
+- **Derived Metric Rule**: [e.g., AVG PREP from raw cycle records, query-time]
+
 ### Key Entities *(include if feature involves data)*
 
 - **[Entity 1]**: [What it represents, key attributes without implementation]

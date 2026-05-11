@@ -31,7 +31,19 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+| Gate | Rule | Status | Evidence in Plan |
+|------|------|--------|------------------|
+| C1 | Backend owns state transitions; clients do not authoritatively mutate canonical entities | [PASS/FAIL] | [List all state transitions and authoritative backend path] |
+| C2 | WebSocket-only live state with typed versioned catalog | [PASS/FAIL] | [List events, schemas, schema versions, and audiences] |
+| C3 | At-least-once delivery + reconnect replay supported for affected channels | [PASS/FAIL/N/A] | [Describe delivery semantics, replay window, idempotency handling] |
+| C4 | Payment confirmation only via validated provider webhook | [PASS/FAIL/N/A] | [Describe webhook signature checks and blocked alternate paths] |
+| C5 | Void flow is data-atomic with explicit rollback policy | [PASS/FAIL/N/A] | [Describe transaction scope and receipt-queue failure behavior] |
+| C6 | Kitchen queue ordering preserves injection-time priority | [PASS/FAIL/N/A] | [Describe queue key/order semantics and batch-view ordering] |
+| C7 | Session lifecycle is explicit (open triggers, human close, immutable snapshot) | [PASS/FAIL/N/A] | [Describe close conditions and snapshot/discard semantics] |
+| C8 | Auth uses role-scoped tokens with immediate invalidation on role change | [PASS/FAIL/N/A] | [Describe token claims, server-side mapping, invalidation path] |
+| C9 | Floor layout is immutable/versioned; updates flow by backend event | [PASS/FAIL/N/A] | [Describe version model, stable IDs, and update delivery path] |
+| C10 | Financial records are write-protected externally; AVG PREP computed from raw records | [PASS/FAIL/N/A] | [Describe immutable writes and query-time metric computation] |
+| C11 | Mandatory stack + architecture constraints (Python/Django/DRF/Postgres/Redis/Channels + Skinny Views/Fat Services/Selectors) | [PASS/FAIL] | [List concrete modules/services/selectors ownership] |
 
 ## Project Structure
 
