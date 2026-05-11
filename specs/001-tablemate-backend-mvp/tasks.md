@@ -1,22 +1,22 @@
 # Tasks: Tablemate Backend MVP API
 
-**Input**: Design documents from `/specs/001-tablemate-backend-mvp/`  
-**Prerequisites**: `spec.md` (plan not yet generated; tasks derived directly from specification)  
-**Tests**: Included for API contracts, permissions, and websocket flows  
+**Input**: Design documents from `/specs/001-tablemate-backend-mvp/`
+**Prerequisites**: `plan.md` (required), `spec.md` (required)
+**Tests**: Included for API contracts, permissions, websocket flows, and webhook idempotency
 **Organization**: Tasks grouped by user story with foundational blockers first
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: `US1..US5` mapping to spec user stories
+- **[Story]**: `US1..US6` mapping to spec user stories
 
 ## Phase 1: Setup (Shared Infrastructure)
 
 **Purpose**: Align repository shape with backend constitution and target project structure.
 
 - [ ] T001 Create settings package split by adding `core/settings/__init__.py`, `core/settings/base.py`, `core/settings/local.py`, `core/settings/production.py` and move logic from `core/settings.py`.
-- [ ] T002 [P] Add environment template updates in `.env.example` for `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_HOSTS`.
-- [ ] T003 [P] Update dependency files `requirements/base.txt`, `requirements/dev.txt`, `requirements/prod.txt` with `djangorestframework-simplejwt`, Google token verification dependency, and Redis/Channels runtime deps.
+- [ ] T002 [P] Add environment template updates in `.env.example` for `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_HOSTS`, `PAYMENT_WEBHOOK_SECRET`.
+- [ ] T003 [P] Update dependency files `requirements/base.txt`, `requirements/dev.txt`, `requirements/prod.txt` with `djangorestframework-simplejwt`, Google token verification dependency, Redis/Channels runtime deps, and webhook signature helpers.
 - [ ] T004 Create missing app skeleton `apps/users/` with `apps.py`, `models.py`, `selectors.py`, and init files.
 - [ ] T005 [P] Refactor orders package structure to `apps/orders/models/cart_session.py`, `apps/orders/models/cart_item.py`, `apps/orders/api/v1/{views.py,serializers.py,urls.py}` with `__init__.py` files.
 - [ ] T006 [P] Add missing architecture files across apps: `services.py` and `selectors.py` in `apps/authentication`, `apps/restaurants`, `apps/editor`, `apps/reservations`, `apps/menu`, `apps/orders`.
@@ -31,13 +31,13 @@
 
 - [ ] T007 Implement `common/mixins.py` with `UUIDMixin` and `TimestampMixin` and migrate models to use them.
 - [ ] T008 Implement `common/exceptions.py` with base domain exception + `ReservationConflictError` and standard error payload mapping.
-- [ ] T009 Implement role permissions in `common/permissions.py` (`IsRoot`, `IsOwner`, `IsAdmin`, `IsWaiter`, `IsCook`, `IsGuest`) or equivalent role policy classes.
+- [ ] T009 Implement role permissions in `common/permissions.py` for canonical staff roles `admin`, `manager`, `waiter`, `cook`.
 - [ ] T010 Configure DRF + JWT in `core/settings/base.py` with `simplejwt` authentication and default permission policy.
 - [ ] T011 Configure Channels + Redis layer in `core/settings/base.py` and websocket entry in `core/asgi.py`.
 - [ ] T012 Update root routing in `core/urls.py` and `core/routing.py` for API includes and websocket routes (`ws/cart/:session_id/`, `ws/hall/`).
 - [ ] T013 Add backend quality gates to `.github/workflows/main.yml` for lint/security/tests (`flake8`, `bandit`, `safety`, test suite).
 
-**Checkpoint**: Architecture, auth infrastructure, and routing foundation are ready for feature implementation.
+**Checkpoint**: Architecture, auth infrastructure, role policy, and routing foundation are ready for feature implementation.
 
 ---
 
@@ -54,12 +54,12 @@
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Implement `apps/users/models.py` custom `User` model with UUID PK, unique email, profile fields, and role enum.
+- [ ] T016 [US1] Implement `apps/users/models.py` custom `User` model with UUID PK, unique email, profile fields, and staff role enum (`admin/manager/waiter/cook`).
 - [ ] T017 [US1] Implement `apps/users/selectors.py` with `get_user_by_email()` and helper lookup functions.
 - [ ] T018 [US1] Implement `apps/authentication/services.py` Google verification and JWT issuance workflow.
 - [ ] T019 [US1] Implement auth serializers and views in `apps/authentication/api/serializers.py` and `apps/authentication/api/views.py`.
 - [ ] T020 [US1] Wire auth URLs in `apps/authentication/api/urls.py` and include from `core/urls.py`.
-- [ ] T021 [US1] Add/logout token invalidation strategy and error handling in auth service layer.
+- [ ] T021 [US1] Add logout token invalidation strategy and stale-role token rejection in auth service layer.
 
 **Checkpoint**: Auth endpoints return JWTs and identity reliably.
 
@@ -91,23 +91,23 @@
 
 ## Phase 5: User Story 3 - Public Menu + Protected Access Elsewhere (Priority: P1)
 
-**Goal**: Guest menu browsing with strict protection outside menu scope.
+**Goal**: Public menu browsing with strict protection outside menu scope.
 
 **Independent Test**: Menu endpoints are public; protected endpoints require JWT/role.
 
 ### Tests for User Story 3
 
 - [ ] T030 [P] [US3] Add menu contract tests in `tests/contract/test_menu_api.py` for categories/items with `AllowAny`.
-- [ ] T031 [P] [US3] Add permission matrix tests in `tests/integration/test_permission_matrix.py` for `ROOT`/`OWNER`/`ADMIN`/`WAITER`/`COOK`/`GUEST` endpoint access.
+- [ ] T031 [P] [US3] Add permission matrix tests in `tests/integration/test_permission_matrix.py` for `admin`/`manager`/`waiter`/`cook` endpoint access.
 
 ### Implementation for User Story 3
 
 - [ ] T032 [US3] Implement menu models in `apps/menu/models.py` for `Category` and `MenuItem` with availability and ordering fields.
 - [ ] T033 [US3] Implement menu selectors in `apps/menu/selectors.py` including `get_items_by_category()` and `search_menu_items()`.
 - [ ] T034 [US3] Implement menu serializers/views/urls in `apps/menu/api/{serializers.py,views.py,urls.py}` with `AllowAny` for read endpoints.
-- [ ] T035 [US3] Apply role permission classes to non-menu viewsets across editor, reservations, restaurants, and orders APIs.
+- [ ] T035 [US3] Apply role permission classes to non-menu views across editor, reservations, restaurants, and orders APIs.
 
-**Checkpoint**: Guests can browse menu; protected APIs enforce policy.
+**Checkpoint**: Guests can browse menu; protected APIs enforce canonical staff role policy.
 
 ---
 
@@ -120,7 +120,7 @@
 ### Tests for User Story 4
 
 - [ ] T036 [P] [US4] Add cart contract tests in `tests/contract/test_orders_cart_api.py` for session CRUD/mutations.
-- [ ] T037 [P] [US4] Add websocket integration tests in `tests/integration/test_cart_socket_events.py` for `ITEM_ADDED`, `ITEM_REMOVED`, `USER_JOINED`, `USER_LEFT`.
+- [ ] T037 [P] [US4] Add websocket integration tests in `tests/integration/test_cart_socket_events.py` for `CART_ITEM_ADDED`, `CART_ITEM_REMOVED`, `CART_PARTICIPANT_JOINED`, `CART_PARTICIPANT_LEFT`.
 
 ### Implementation for User Story 4
 
@@ -134,16 +134,16 @@
 
 ---
 
-## Phase 7: User Story 5 - Restaurants/Editor Staff Operations + Hall Realtime (Priority: P3)
+## Phase 7: User Story 5 - Staff Operations + Hall Realtime (Priority: P2)
 
-**Goal**: Admin/staff operational endpoints and hall status stream.
+**Goal**: Staff operational endpoints and hall status stream.
 
 **Independent Test**: Role-scoped update endpoints and hall websocket stream work for allowed roles only.
 
 ### Tests for User Story 5
 
 - [ ] T043 [P] [US5] Add restaurants/editor/reservation-status contract tests in `tests/contract/test_staff_ops_api.py`.
-- [ ] T044 [P] [US5] Add hall websocket integration tests in `tests/integration/test_hall_socket_events.py` for `TABLE_STATUS_CHANGED` and `NEW_RESERVATION`.
+- [ ] T044 [P] [US5] Add hall websocket integration tests in `tests/integration/test_hall_socket_events.py` for `HALL_TABLE_STATUS_CHANGED` and `HALL_NEW_RESERVATION`.
 
 ### Implementation for User Story 5
 
@@ -152,18 +152,41 @@
 - [ ] T047 [US5] Implement restaurants API in `apps/restaurants/api/{serializers.py,views.py,urls.py}` for list/update endpoints.
 - [ ] T048 [US5] Implement table position update service in `apps/editor/services.py` and connect to editor API patch endpoint.
 - [ ] T049 [US5] Implement `apps/editor/consumers.py` and `apps/editor/routing.py` for `ws/hall/` events.
-- [ ] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with `ROOT`/`OWNER`/`ADMIN`/`WAITER` access rules.
+- [ ] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with `admin`/`manager`/`waiter` access rules.
 
-**Checkpoint**: Staff/admin operations and hall realtime channels are complete.
+**Checkpoint**: Staff operations and hall realtime channels are complete.
 
 ---
 
-## Phase 8: Polish & Cross-Cutting
+## Phase 8: User Story 6 - Payment Confirmation via Trusted Webhook (Priority: P1)
 
-- [ ] T051 [P] Add seed scripts for categories/menu/tables/reservations demo data in `scripts/`.
-- [ ] T052 [P] Update project docs (`README.md`, `CONTRIBUTING.md`) with new API routes, env vars, and local setup for Redis/Channels.
-- [ ] T053 Run full validation: migrations, tests, flake8, bandit, safety, and fix failing checks.
-- [ ] T054 Final API contract sanity check against frontend endpoints and websocket event names.
+**Goal**: Accept payment confirmation only through trusted webhook and apply paid+ticker side effects exactly once.
+
+**Independent Test**: Valid signature triggers atomic transition; invalid signature rejected; duplicate webhook is idempotent.
+
+### Tests for User Story 6
+
+- [ ] T051 [P] [US6] Add payment webhook contract tests in `tests/contract/test_payment_webhook_api.py`.
+- [ ] T052 [P] [US6] Add idempotency integration tests in `tests/integration/test_payment_webhook_idempotency.py`.
+
+### Implementation for User Story 6
+
+- [ ] T053 [US6] Implement webhook endpoint in `apps/orders/api/v1/views.py` with signature verification.
+- [ ] T054 [US6] Implement webhook service in `apps/orders/services.py` for atomic payment confirmation + ticket injection.
+- [ ] T055 [US6] Persist immutable payment records in `apps/orders/models.py` (or dedicated payment model module).
+- [ ] T056 [US6] Emit `PAYMENT_CONFIRMED` and `KITCHEN_TICKET_INJECTED` events with `schema_version` and dedup keys.
+- [ ] T057 [US6] Ensure duplicate provider event id is deduplicated and side effects are not replayed.
+
+**Checkpoint**: Webhook authority and idempotent payment transition are complete.
+
+---
+
+## Phase 9: Polish & Cross-Cutting
+
+- [ ] T058 [P] Add seed scripts for categories/menu/tables/reservations demo data in `scripts/`.
+- [ ] T059 [P] Update project docs (`README.md`, `CONTRIBUTING.md`) with new API routes, env vars, and local setup for Redis/Channels.
+- [ ] T060 Run full validation: migrations, tests, flake8, bandit, safety, and fix failing checks.
+- [ ] T061 Final API contract sanity check against frontend endpoints and websocket event names.
 
 ---
 
@@ -173,9 +196,11 @@
 
 - Phase 1 must complete before feature delivery work.
 - Phase 2 blocks all user stories.
-- US1, US2, and US3 can start after Phase 2; US4 depends on US2 and US3 data models.
-- US5 can run in parallel with US4 after Phase 2, but should consume finalized permission classes.
-- Phase 8 runs after desired user stories are complete.
+- US1, US2, and US3 can start after Phase 2.
+- US4 depends on US2 and US3 data models.
+- US5 can run in parallel with US4 after permission layer is stable.
+- US6 depends on order/ticket lifecycle readiness (US4) and role/event foundation from Phase 2.
+- Phase 9 runs after desired user stories are complete.
 
 ### Parallel Opportunities
 
@@ -184,10 +209,11 @@
 - Stream A: US1 auth implementation.
 - Stream B: US2 reservation/editor API.
 - Stream C: US3 menu + permission matrix.
-- US4 and US5 can be split between two developers once dependencies are met.
+- Stream D: US4 websocket/event transport.
+- Stream E: US6 webhook and idempotency tests after US4 readiness.
 
 ## Notes
 
 - Keep business rules in `services.py`; views remain orchestration-only.
 - Keep complex query logic in `selectors.py`.
-- Keep websocket event emission in service layer; consumers deliver transport only.
+- Keep websocket and webhook side effects emitted by services with typed/versioned contracts.

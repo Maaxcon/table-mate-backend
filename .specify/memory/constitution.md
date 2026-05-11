@@ -153,8 +153,8 @@ corrections.
 
 ### Foundation Scope
 TableMate is a real-time, multi-role restaurant operations platform shared by
-frontend and backend. The platform surfaces are Customer, Waiter, Cook, and
-Admin. Latency and inconsistency are functional defects, not UX-only concerns.
+frontend and backend. The platform surfaces are Customer, Waiter, Cook, Manager,
+and Admin. Latency and inconsistency are functional defects, not UX-only concerns.
 
 ### Canonical Shared Data Contracts
 Frontend and backend MUST treat the following contracts as source of truth and
@@ -175,7 +175,7 @@ MUST NOT create role-specific local variants:
 - `Session`: active occupancy window for one table; opens on waiter manual
   order start or prepaid webhook, closes on explicit close-table action.
 - `Staff`: `id`, `name`, `email`, assigned role (`cook`, `waiter`, `manager`,
-  `owner`), shift status (`online`, `offline`).
+  `admin`), shift status (`online`, `offline`).
 
 ### Role Access Matrix
 Backend MUST enforce this matrix on every request:
@@ -184,7 +184,7 @@ Backend MUST enforce this matrix on every request:
   overlays; cannot approve voids, view financial reports, or edit layout.
 - `Manager`: inherits waiter permissions and may approve voids and discounts;
   cannot access financial reports, spatial editor, or staff management.
-- `Owner`: full access including financial reports, spatial editor, staff
+- `Admin`: full access including financial reports, spatial editor, staff
   management, and menu control.
 
 ### Real-Time Architecture Constraints

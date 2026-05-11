@@ -77,7 +77,7 @@ As reservation participants, users can mutate a shared cart and receive realtime
 
 ### User Story 5 - Staff Operations and Hall Realtime (Priority: P2)
 
-As staff (Owner, Manager, Waiter, Cook), I can perform only role-allowed operations and receive hall updates relevant to my context.
+As staff (`admin`, `manager`, `waiter`, `cook`), I can perform only role-allowed operations and receive hall updates relevant to my context.
 
 **Why this priority**: Safe staff operations require strict backend role enforcement.
 
@@ -85,10 +85,10 @@ As staff (Owner, Manager, Waiter, Cook), I can perform only role-allowed operati
 
 **Acceptance Scenarios**:
 
-1. **Given** Owner role, **When** restaurant management endpoints are called, **Then** backend allows owner-level operations.
-2. **Given** Manager role, **When** waiter-level endpoints are called, **Then** backend allows inherited waiter actions and denies owner-only actions.
-3. **Given** Waiter role, **When** reservation status update endpoint is called, **Then** backend applies allowed status transitions.
-4. **Given** Cook role, **When** kitchen workflow endpoints are called, **Then** backend allows kitchen-only order item updates.
+1. **Given** `admin` role, **When** restaurant management endpoints are called, **Then** backend allows admin-level operations.
+2. **Given** `manager` role, **When** waiter-level endpoints are called, **Then** backend allows inherited waiter actions and denies admin-only actions.
+3. **Given** `waiter` role, **When** reservation status update endpoint is called, **Then** backend applies allowed status transitions.
+4. **Given** `cook` role, **When** kitchen workflow endpoints are called, **Then** backend allows kitchen-only order item updates.
 5. **Given** authorized hall subscriber, **When** table/reservation state changes, **Then** backend emits hall events with declared schema version.
 
 ---
@@ -145,7 +145,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-019**: Only cart participants MAY mutate cart contents.
 - **FR-020**: Cart and hall WebSocket broadcasts MUST be emitted from service layer, not views.
 - **FR-021**: Restaurants API MUST expose list and update endpoints under role policy.
-- **FR-022**: Staff authorization MUST enforce canonical roles only: Owner, Manager, Waiter, Cook.
+- **FR-022**: Staff authorization MUST enforce canonical roles only: `admin`, `manager`, `waiter`, `cook`.
 - **FR-023**: WebSocket endpoints MUST include cart session channel and hall channel.
 - **FR-024**: Cart events MUST include item add/remove and participant join/leave event types.
 - **FR-025**: Hall events MUST include table status and reservation creation event types.
@@ -173,14 +173,14 @@ As the operations platform, payment confirmation is accepted only from a verifie
 
 ### Role Access Matrix
 
-- **Owner**: Full operational access including restaurant management, staff management, layout publishing, and financial reporting.
-- **Owner Restricted**: None inside backend MVP operational scope.
-- **Manager**: Waiter capabilities plus void/discount approval and operational oversight.
-- **Manager Restricted**: No staff management, no spatial editor publish permissions, no financial report administration.
-- **Waiter**: Table/hall operations, reservation handling, session close action, and customer order support.
-- **Waiter Restricted**: No financial administration, no staff management, no kitchen-only item lifecycle operations.
-- **Cook**: Kitchen queue and order item preparation lifecycle updates.
-- **Cook Restricted**: No floor-plan editing, no reservation creation, no financial operations.
+- **admin**: Full operational access including restaurant management, staff management, layout publishing, and financial reporting.
+- **admin restricted**: None inside backend MVP operational scope.
+- **manager**: Waiter capabilities plus void/discount approval and operational oversight.
+- **manager restricted**: No staff management, no spatial editor publish permissions, no financial report administration.
+- **waiter**: Table/hall operations, reservation handling, session close action, and customer order support.
+- **waiter restricted**: No financial administration, no staff management, no kitchen-only item lifecycle operations.
+- **cook**: Kitchen queue and order item preparation lifecycle updates.
+- **cook restricted**: No floor-plan editing, no reservation creation, no financial operations.
 
 ### Event Catalog (Mandatory)
 
@@ -192,10 +192,10 @@ As the operations platform, payment confirmation is accepted only from a verifie
 | `CART_PARTICIPANT_LEFT` | `1` | Cart presence service | Cart participants | `event_id`, `session_id`, `user_id`, `occurred_at` | Replay within retention for missed presence transitions | Deduplicate by `event_id` |
 | `HALL_TABLE_STATUS_CHANGED` | `1` | Table state service | Hall subscribers (staff) | `event_id`, `table_id`, `previous_status`, `current_status`, `session_id`, `occurred_at` | Replay if change occurred after cursor | Deduplicate by `event_id` |
 | `HALL_NEW_RESERVATION` | `1` | Reservation service | Hall subscribers (staff) | `event_id`, `reservation_id`, `table_id`, `start_at`, `end_at`, `occurred_at` | Replay within retention to restore hall timeline | Deduplicate by `event_id` |
-| `PAYMENT_CONFIRMED` | `1` | Payment webhook service | Waiter and kitchen channels | `event_id`, `provider_event_id`, `order_id`, `payment_status`, `amount`, `currency`, `occurred_at` | Replay for subscribers that missed confirmation | Deduplicate by `provider_event_id` |
+| `PAYMENT_CONFIRMED` | `1` | Payment webhook service | waiter and kitchen channels | `event_id`, `provider_event_id`, `order_id`, `payment_status`, `amount`, `currency`, `occurred_at` | Replay for subscribers that missed confirmation | Deduplicate by `provider_event_id` |
 | `KITCHEN_TICKET_INJECTED` | `1` | Ticket injection service | Kitchen channel | `event_id`, `ticket_id`, `order_id`, `injected_at`, `priority`, `occurred_at` | Replay for disconnected kitchen clients | Deduplicate by `ticket_id` |
-| `ORDER_ITEM_STATUS_CHANGED` | `1` | Kitchen workflow service | Waiter and kitchen channels | `event_id`, `order_item_id`, `previous_status`, `current_status`, `actor_role`, `occurred_at` | Replay after cursor within retention | Deduplicate by `event_id` |
-| `SESSION_CLOSED` | `1` | Session lifecycle service | Waiter and manager channels | `event_id`, `session_id`, `table_id`, `closed_by`, `snapshot_id`, `occurred_at` | Replay close notifications for disconnected staff | Deduplicate by `session_id` + `occurred_at` |
+| `ORDER_ITEM_STATUS_CHANGED` | `1` | Kitchen workflow service | waiter and kitchen channels | `event_id`, `order_item_id`, `previous_status`, `current_status`, `actor_role`, `occurred_at` | Replay after cursor within retention | Deduplicate by `event_id` |
+| `SESSION_CLOSED` | `1` | Session lifecycle service | waiter and manager channels | `event_id`, `session_id`, `table_id`, `closed_by`, `snapshot_id`, `occurred_at` | Replay close notifications for disconnected staff | Deduplicate by `session_id` + `occurred_at` |
 
 ### Replay Semantics
 
@@ -234,7 +234,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 ### Key Entities *(include if feature involves data)*
 
 - **User**: Account identity with role-scoped authorization context.
-- **StaffRoleAssignment**: Canonical mapping of staff account to Owner/Manager/Waiter/Cook role.
+- **StaffRoleAssignment**: Canonical mapping of staff account to `admin`/`manager`/`waiter`/`cook` role.
 - **Restaurant**: Venue metadata and staff membership relation.
 - **Table**: Hall table identity and occupancy state.
 - **Reservation**: Time-bounded customer booking linked to table.
@@ -256,7 +256,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 - **SC-002**: Concurrent reservation conflict tests for same table/time produce exactly one success and one conflict response.
 - **SC-003**: 100% of duplicate payment webhook retries produce no duplicate paid transitions or duplicate kitchen ticket injections.
 - **SC-004**: Reconnect tests confirm missed realtime events are replayed within retention and processed without duplicate side effects.
-- **SC-005**: Role-matrix verification confirms Owner/Manager/Waiter/Cook boundaries are enforced on all scoped endpoints.
+- **SC-005**: Role-matrix verification confirms `admin`/`manager`/`waiter`/`cook` boundaries are enforced on all scoped endpoints.
 - **SC-006**: Closed sessions, settled orders, payment records, and reporting snapshots remain immutable in all post-settlement test scenarios.
 - **SC-007**: Quality and security validation gates pass before release readiness review.
 

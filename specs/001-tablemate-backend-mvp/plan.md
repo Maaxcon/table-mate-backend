@@ -16,8 +16,8 @@ Implement backend MVP for Tablemate using Django 5 + DRF + JWT + Google OAuth, w
 **Target Platform**: Linux containers via Docker/Docker Compose  
 **Project Type**: Backend web service (REST + WebSocket)  
 **Performance Goals**: Deterministic reservation conflict handling, low-latency cart/hall event delivery  
-**Constraints**: Service-layer business logic only, selector-layer complex queries, role-based permissions, no AI/payments/multi-restaurant  
-**Scale/Scope**: MVP domains `users/authentication/restaurants/editor/reservations/orders/menu`
+**Constraints**: Service-layer business logic only, selector-layer complex queries, role-based permissions, no AI and no multi-restaurant tenancy  
+**Scale/Scope**: MVP domains `users/authentication/restaurants/editor/reservations/orders/menu` plus webhook-confirmed payment transition path
 
 ## Constitution Check
 
@@ -40,10 +40,8 @@ Implement backend MVP for Tablemate using Django 5 + DRF + JWT + Google OAuth, w
 specs/001-tablemate-backend-mvp/
 ├── spec.md
 ├── plan.md
-├── research.md
-├── data-model.md
-├── quickstart.md
-├── contracts/
+├── checklists/
+│   └── requirements.md
 └── tasks.md
 ```
 
@@ -137,7 +135,15 @@ requirements/
 4. Implement reservation status update policy for staff roles.
 5. Add staff ops + hall event tests.
 
-### Phase 8 - Polish
+### Phase 8 - US6 Payment Webhook Authority
+
+1. Implement payment webhook endpoint with signature validation.
+2. Implement idempotency using provider event identifiers.
+3. Implement atomic `unpaid -> paid` transition with kitchen ticket injection.
+4. Emit `PAYMENT_CONFIRMED` and `KITCHEN_TICKET_INJECTED` events from service layer.
+5. Add webhook contract + idempotency integration tests.
+
+### Phase 9 - Polish
 
 1. Add seed scripts for local/demo data.
 2. Update docs (`README.md`, `CONTRIBUTING.md`).
@@ -150,6 +156,7 @@ requirements/
 - US1, US2, US3 start after foundational phase.
 - US4 depends on reservation + menu domain maturity.
 - US5 can run in parallel with late US4 once permission layer is stable.
+- US6 depends on orders/ticket lifecycle readiness from US4 and role/event foundation from US2.
 - Polish runs last.
 
 ## Complexity Tracking
