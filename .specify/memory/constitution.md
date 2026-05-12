@@ -1,11 +1,10 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 -> 1.1.0
+- Version change: 1.1.0 -> 1.2.0
 - Modified principles:
-  - None
+  - X. Average Prep Time Is Query-Time Derived (index requirements expanded for hot read paths and floor-plan latency budget)
 - Modified sections:
-  - Foundation Contracts / Canonical Entity Definitions (added `RestaurantSettings`, added top-level `Menu`, clarified `Restaurant` scope)
-  - Foundation Contracts / Payment Contract (currency source anchored to `RestaurantSettings.currency`)
+  - None
 - Added sections:
   - None
 - Removed sections:
@@ -279,7 +278,13 @@ Rationale: immutable financial writes preserve tamper-evident audits.
 
 ### X. Average Prep Time Is Query-Time Derived
 Average Prep Time MUST be computed from raw cycle-time records at query time.
-Metric queries MUST be indexed by restaurant and session timestamp.
+Metric queries MUST be indexed by restaurant and session timestamp. Backend read
+paths supporting kitchen and floor-plan live views MUST include:
+
+- `Ticket(restaurant, status, injected_at)` for FIFO `INCOMING` retrieval.
+- `OrderItem(restaurant, status, menu_item)` for batch kitchen views.
+- Partial index `Session(restaurant, table_id)` where `status = 'open'` for live
+  floor-plan lookup.
 
 Rationale: query-time derivation keeps corrections immediately accurate.
 
@@ -314,4 +319,4 @@ Rationale: query-time derivation keeps corrections immediately accurate.
 - Compliance reviews are mandatory at planning, task generation, code review,
   and CI.
 
-**Version**: 1.1.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12
+**Version**: 1.2.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12

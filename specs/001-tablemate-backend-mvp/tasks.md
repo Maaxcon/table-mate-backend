@@ -102,8 +102,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T032 [US3] Implement menu models in `apps/menu/models.py` for `Category` and `MenuItem` with availability and ordering fields.
-- [ ] T033 [US3] Implement menu selectors in `apps/menu/selectors.py` including `get_items_by_category()` and `search_menu_items()`.
+- [ ] T032 [US3] Implement menu models in `apps/menu/models.py` for top-level `Menu`, `Category`, and `MenuItem` with availability and ordering fields.
+- [ ] T033 [US3] Implement menu selectors in `apps/menu/selectors.py` including top-level menu lookup, `get_items_by_category()`, and `search_menu_items()`.
 - [ ] T034 [US3] Implement menu serializers/views/urls in `apps/menu/api/{serializers.py,views.py,urls.py}` with `AllowAny` for read endpoints.
 - [ ] T035 [US3] Apply role permission classes to non-menu views across editor, reservations, restaurants, and orders APIs.
 
@@ -147,8 +147,8 @@
 
 ### Implementation for User Story 5
 
-- [ ] T045 [US5] Implement `apps/restaurants/models.py` restaurant entity with employee relation to user.
-- [ ] T046 [US5] Implement `apps/restaurants/selectors.py` and `apps/restaurants/services.py` (`get_restaurant()`, `manage_employees()`).
+- [ ] T045 [US5] Implement `apps/restaurants/models.py` with `Restaurant` plus one-to-one `RestaurantSettings` (`timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`) and employee relation to user.
+- [ ] T046 [US5] Implement `apps/restaurants/selectors.py` and `apps/restaurants/services.py` (`get_restaurant()`, `get_restaurant_settings()`, `manage_employees()`).
 - [ ] T047 [US5] Implement restaurants API in `apps/restaurants/api/{serializers.py,views.py,urls.py}` for list/update endpoints.
 - [ ] T048 [US5] Implement table position update service in `apps/editor/services.py` and connect to editor API patch endpoint.
 - [ ] T049 [US5] Implement `apps/editor/consumers.py` and `apps/editor/routing.py` for `ws/hall/` events.
@@ -160,7 +160,7 @@
 
 ## Phase 8: User Story 6 - Payment Confirmation via Trusted Webhook (Priority: P1)
 
-**Goal**: Accept payment confirmation only through trusted webhook and apply paid+ticker side effects exactly once.
+**Goal**: Accept payment confirmation only through trusted webhook and apply paid+ticket side effects exactly once.
 
 **Independent Test**: Valid signature triggers atomic transition; invalid signature rejected; duplicate webhook is idempotent.
 
@@ -176,6 +176,7 @@
 - [ ] T055 [US6] Persist immutable payment records in `apps/orders/models.py` (or dedicated payment model module).
 - [ ] T056 [US6] Emit `PAYMENT_CONFIRMED` and `KITCHEN_TICKET_INJECTED` events with `schema_version` and dedup keys.
 - [ ] T057 [US6] Ensure duplicate provider event id is deduplicated and side effects are not replayed.
+- [ ] T062 [US6] Source payment and `PAYMENT_CONFIRMED.currency` from `RestaurantSettings.currency` in webhook processing and event payload mapping.
 
 **Checkpoint**: Webhook authority and idempotent payment transition are complete.
 
@@ -183,10 +184,12 @@
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T058 [P] Add seed scripts for categories/menu/tables/reservations demo data in `scripts/`.
+- [ ] T058 [P] Add seed scripts for menus/categories/items, restaurant settings, tables, and reservations demo data in `scripts/`.
 - [ ] T059 [P] Update project docs (`README.md`, `CONTRIBUTING.md`) with new API routes, env vars, and local setup for Redis/Channels.
 - [ ] T060 Run full validation: migrations, tests, flake8, bandit, safety, and fix failing checks.
 - [ ] T061 Final API contract sanity check against frontend endpoints and websocket event names.
+- [ ] T063 Add DB migrations for hot-path indexes: `Ticket(restaurant, status, injected_at)`, `OrderItem(restaurant, status, menu_item)`, and partial `Session(restaurant, table_id) WHERE status='open'`.
+- [ ] T064 [P] Add integration/query-plan checks in `tests/integration/test_hot_path_indexes.py` to verify hot-path queries use declared indexes.
 
 ---
 

@@ -2,9 +2,9 @@
 
 **Feature Branch**: `001-tablemate-backend-mvp`  
 **Created**: 2026-05-07  
-**Updated**: 2026-05-11  
+**Updated**: 2026-05-12  
 **Status**: Finalized  
-**Input**: User description: "Tablemate backend MVP with Constitution v3.0.0 alignment for roles, realtime contracts, webhook authority, and immutable boundaries."
+**Input**: User description: "Tablemate backend MVP with Constitution v1.2.0 alignment for roles, realtime contracts, webhook authority, immutable boundaries, canonical entities, and hot-path indexing."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -97,9 +97,9 @@ As staff (`admin`, `manager`, `waiter`, `cook`), I can perform only role-allowed
 
 As the operations platform, payment confirmation is accepted only from a verified provider webhook, and paid orders are injected into kitchen flow atomically.
 
-**Why this priority**: Constitution v3.0.0 requires trusted webhook authority for payment state.
+**Why this priority**: Constitution v1.2.0 requires trusted webhook authority for payment state.
 
-**Independent Test**: Verify signature validation, idempotent duplicate webhook handling, and atomic paid+ticker injection behavior.
+**Independent Test**: Verify signature validation, idempotent duplicate webhook handling, and atomic paid+ticket injection behavior.
 
 **Acceptance Scenarios**:
 
@@ -163,11 +163,15 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-037**: Session close MUST be explicit waiter action; backend inactivity timeout MUST NOT auto-close sessions.
 - **FR-038**: Financial write operations MUST be internal-only; external APIs are read-only for financial data.
 - **FR-039**: Immutable boundaries MUST be enforced for closed sessions, settled orders, finalized tickets, payment records, and reporting snapshots.
+- **FR-040**: `RestaurantSettings` MUST exist as a one-to-one sibling of `Restaurant` and include `timezone`, `currency`, `locale`, `working_hours`, and `default_tax_rate`.
+- **FR-041**: Menu domain MUST include top-level `Menu` entity (for example breakfast/lunch/dinner) with category/item associations.
+- **FR-042**: Payment and payment-derived event currency (including `PAYMENT_CONFIRMED.currency`) MUST be sourced from `RestaurantSettings.currency`.
+- **FR-043**: Backend hot read paths MUST be indexed with `Ticket(restaurant, status, injected_at)`, `OrderItem(restaurant, status, menu_item)`, and partial index `Session(restaurant, table_id) WHERE status='open'`.
 
 ### Canonical Contract Impact
 
-- **Impacted Entities**: Restaurant, Table, Reservation, Order, OrderItem, Ticket, Session, Staff, PaymentRecord, SessionSnapshot.
-- **Contract Delta**: Adds explicit webhook-confirmed payment transitions, replay cursor semantics for live events, and immutable lifecycle boundaries for finalized records.
+- **Impacted Entities**: Restaurant, RestaurantSettings, Menu, Table, Reservation, Order, OrderItem, Ticket, Session, Staff, PaymentRecord, SessionSnapshot.
+- **Contract Delta**: Adds explicit webhook-confirmed payment transitions, replay cursor semantics for live events, immutable lifecycle boundaries for finalized records, canonical currency source (`RestaurantSettings.currency`), and hot-path indexing requirements.
 - **Backward Compatibility**: Existing event fields remain stable within active `schema_version`; new optional fields are additive.
 - **Backend Source of Truth Rule**: Canonical state transitions are accepted only through backend service operations and confirmed by backend event broadcast.
 
@@ -196,6 +200,8 @@ As the operations platform, payment confirmation is accepted only from a verifie
 | `KITCHEN_TICKET_INJECTED` | `1` | Ticket injection service | Kitchen channel | `event_id`, `ticket_id`, `order_id`, `injected_at`, `priority`, `occurred_at` | Replay for disconnected kitchen clients | Deduplicate by `ticket_id` |
 | `ORDER_ITEM_STATUS_CHANGED` | `1` | Kitchen workflow service | waiter and kitchen channels | `event_id`, `order_item_id`, `previous_status`, `current_status`, `actor_role`, `occurred_at` | Replay after cursor within retention | Deduplicate by `event_id` |
 | `SESSION_CLOSED` | `1` | Session lifecycle service | waiter and manager channels | `event_id`, `session_id`, `table_id`, `closed_by`, `snapshot_id`, `occurred_at` | Replay close notifications for disconnected staff | Deduplicate by `session_id` + `occurred_at` |
+
+`PAYMENT_CONFIRMED.currency` source of truth is `RestaurantSettings.currency` for the order's restaurant.
 
 ### Replay Semantics
 
@@ -235,11 +241,13 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 
 - **User**: Account identity with role-scoped authorization context.
 - **StaffRoleAssignment**: Canonical mapping of staff account to `admin`/`manager`/`waiter`/`cook` role.
-- **Restaurant**: Venue metadata and staff membership relation.
+- **Restaurant**: Venue metadata, active floor-plan reference, and staff membership relation.
+- **RestaurantSettings**: One-to-one restaurant settings entity carrying `timezone`, `currency`, `locale`, `working_hours`, and `default_tax_rate`.
 - **Table**: Hall table identity and occupancy state.
 - **Reservation**: Time-bounded customer booking linked to table.
-- **MenuCategory**: Grouping entity for menu organization.
-- **MenuItem**: Orderable dish with availability and price metadata.
+- **Menu**: Top-level menu container per restaurant (for example breakfast/lunch/dinner).
+- **MenuCategory**: Grouping entity for menu organization within a menu.
+- **MenuItem**: Orderable dish with availability and price metadata within a menu/category.
 - **CartSession**: Shared ordering context linked to reservation participants.
 - **CartItem**: Item entry within cart session.
 - **Order**: Confirmed customer order with payment lifecycle.
@@ -259,6 +267,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 - **SC-005**: Role-matrix verification confirms `admin`/`manager`/`waiter`/`cook` boundaries are enforced on all scoped endpoints.
 - **SC-006**: Closed sessions, settled orders, payment records, and reporting snapshots remain immutable in all post-settlement test scenarios.
 - **SC-007**: Quality and security validation gates pass before release readiness review.
+- **SC-008**: Hot-path queries for incoming tickets, kitchen batch items, and open table sessions use declared composite/partial indexes in production query plans.
 
 ## Assumptions
 
