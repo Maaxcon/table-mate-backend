@@ -98,10 +98,15 @@ requirements/
 1. Implement `UUIDMixin` and `TimestampMixin`.
 2. Implement domain exceptions and permission classes.
 3. Establish enum convention: `models.TextChoices` for role and all status fields (`table`, `order`, `order_item`, `ticket`, `session`).
-4. Configure DRF JWT auth defaults.
-5. Configure Channels + Redis routing.
-6. Align core URL and websocket routing.
-7. Enforce CI quality/security pipeline.
+4. Add schema/type contract pipeline: generate validated OpenAPI (`spectacular --validate --file schema.yaml`) and enforce CI drift checks with frontend type generation.
+5. Seed foundational `VoidReason` codes (`mispick`, `guest_changed_mind`, `quality_issue`, `out_of_stock`).
+6. Add foundational `RestaurantSettings` fields (`timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, `default_service_charge`) and wire reservation/payment dependencies.
+7. Add foundational financial columns (tax/discount/tip defaults) on `Order` and `OrderItem`.
+8. Make `on_delete` policies explicit with protection baseline (`OrderItem.menu_item`, all `*.restaurant` FKs -> `PROTECT`).
+9. Configure DRF JWT auth defaults.
+10. Configure Channels + Redis routing.
+11. Align core URL and websocket routing.
+12. Enforce CI quality/security pipeline.
 
 ### Phase 3 - US1 Auth
 

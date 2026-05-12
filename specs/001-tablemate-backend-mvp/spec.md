@@ -163,7 +163,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-037**: Session close MUST be explicit waiter action; backend inactivity timeout MUST NOT auto-close sessions.
 - **FR-038**: Financial write operations MUST be internal-only; external APIs are read-only for financial data.
 - **FR-039**: Immutable boundaries MUST be enforced for closed sessions, settled orders, finalized tickets, payment records, and reporting snapshots.
-- **FR-040**: `RestaurantSettings` MUST exist as a one-to-one sibling of `Restaurant` and include `timezone`, `currency`, `locale`, `working_hours`, and `default_tax_rate`.
+- **FR-040**: `RestaurantSettings` MUST exist as a one-to-one sibling of `Restaurant` and include `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, and `default_service_charge`.
 - **FR-041**: Menu domain MUST include top-level `Menu` entity (for example breakfast/lunch/dinner) with category/item associations.
 - **FR-042**: Payment and payment-derived event currency (including `PAYMENT_CONFIRMED.currency`) MUST be sourced from `RestaurantSettings.currency`.
 - **FR-043**: Backend hot read paths MUST be indexed with `Ticket(restaurant, status, injected_at)`, `OrderItem(restaurant, status, menu_item)`, and partial index `Session(restaurant, table_id) WHERE status='open'`.
@@ -172,11 +172,15 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-046**: Role/status enums MUST use Django `models.TextChoices` (not plain Python enums) across the codebase, including `table`, `order`, `order_item`, `ticket`, and `session` status fields.
 - **FR-047**: Provider webhook endpoints MUST live in a dedicated `payments` app (signature-authenticated callback surface) and MUST NOT be mixed into customer-facing orders REST endpoints.
 - **FR-048**: Payments persistence MUST use dedicated models in `apps/payments`: `Payment(order, provider, provider_transaction_id UNIQUE, amount, currency, status, raw_payload jsonb)` and `WebhookEvent(provider, event_id UNIQUE, payload, received_at, processed_at)` as required idempotency primitives for FR-032.
+- **FR-049**: OpenAPI/TypeScript contract pipeline MUST be foundational: backend MUST generate validated schema (`manage.py spectacular --validate --file schema.yaml`) and CI MUST fail on contract drift; frontend type generation MUST consume this schema.
+- **FR-050**: Void reason master data MUST be seeded with exactly: `mispick`, `guest_changed_mind`, `quality_issue`, `out_of_stock`.
+- **FR-051**: `Order` and `OrderItem` MUST include tax/discount/tip columns with default `0`, including per-line tax support for receipt-grade breakdowns.
+- **FR-052**: Foreign-key `on_delete` policies MUST be explicit; minimum protections: `OrderItem.menu_item -> PROTECT` and all `*.restaurant -> PROTECT`.
 
 ### Canonical Contract Impact
 
 - **Impacted Entities**: Restaurant, RestaurantSettings, Menu, Table, Reservation, Order, OrderItem, Ticket, Session, Staff, Payment, WebhookEvent, SessionSnapshot.
-- **Contract Delta**: Adds explicit webhook-confirmed payment transitions, replay cursor semantics for live events, immutable lifecycle boundaries for finalized records, canonical currency source (`RestaurantSettings.currency`), required payment/webhook idempotency primitives (`Payment` + `WebhookEvent` unique keys), and hot-path indexing requirements.
+- **Contract Delta**: Adds explicit webhook-confirmed payment transitions, replay cursor semantics for live events, immutable lifecycle boundaries for finalized records, canonical currency source (`RestaurantSettings.currency`), required payment/webhook idempotency primitives (`Payment` + `WebhookEvent` unique keys), foundational contract-generation/type-sync gate, and hot-path indexing requirements.
 - **Backward Compatibility**: Existing event fields remain stable within active `schema_version`; new optional fields are additive.
 - **Backend Source of Truth Rule**: Canonical state transitions are accepted only through backend service operations and confirmed by backend event broadcast.
 
@@ -247,7 +251,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 - **User**: Account identity with role-scoped authorization context.
 - **RoleAssignment**: Canonical mapping of account to `admin`/`waiter`/`cook`/`customer` role.
 - **Restaurant**: Venue metadata, active floor-plan reference, and staff membership relation.
-- **RestaurantSettings**: One-to-one restaurant settings entity carrying `timezone`, `currency`, `locale`, `working_hours`, and `default_tax_rate`.
+- **RestaurantSettings**: One-to-one restaurant settings entity carrying `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, and `default_service_charge`.
 - **Table**: Hall table identity and occupancy state.
 - **Reservation**: Time-bounded customer booking linked to table.
 - **Menu**: Top-level menu container per restaurant (for example breakfast/lunch/dinner).
@@ -256,7 +260,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 - **CartSession**: Shared ordering context linked to reservation participants.
 - **CartItem**: Item entry within cart session.
 - **Order**: Confirmed customer order with payment lifecycle.
-- **OrderItem**: Individual kitchen-trackable line item with lifecycle state.
+- **OrderItem**: Individual kitchen-trackable line item with lifecycle state and per-line financial fields for receipt/tax breakdowns.
 - **KitchenTicket**: Kitchen projection created from confirmed paid order.
 - **Payment**: Provider transaction record with unique `provider_transaction_id`, payment amount/currency/status, and raw payload retention.
 - **WebhookEvent**: Immutable inbound webhook event record with unique provider `event_id`, payload, and processing timestamps.

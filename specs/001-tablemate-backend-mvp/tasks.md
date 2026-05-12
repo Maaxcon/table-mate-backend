@@ -39,6 +39,11 @@
 - [ ] T012 Update root routing in `core/urls.py` and `core/routing.py` for API includes and websocket routes (`ws/cart/:session_id/`, `ws/hall/`).
 - [ ] T013 Add backend quality gates to `.github/workflows/main.yml` for lint/security/tests (`flake8`, `bandit`, `safety`, test suite).
 - [ ] T013A Establish project-wide enum convention: use `models.TextChoices` (not plain Python enums) for role and all status fields (`table`, `order`, `order_item`, `ticket`, `session`) to keep DB constraints and generated client types aligned.
+- [ ] T013B Add TypeScript types pipeline as a foundational gate: generate OpenAPI via `drf-spectacular` (`manage.py spectacular --validate --file schema.yaml`), fail CI on schema drift, and wire frontend `npm run gen:types` to consume backend schema.
+- [ ] T013C Add foundational `VoidReason` model/seed migration with required codes: `mispick`, `guest_changed_mind`, `quality_issue`, `out_of_stock`.
+- [ ] T013D Move `RestaurantSettings` schema to foundational migrations with required fields `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, `default_service_charge`; keep US5 focused on API/service usage.
+- [ ] T013E Add foundational financial columns with default `0` on `Order` and `OrderItem`: tax, discount, tip, plus per-line tax breakdown support for receipt generation.
+- [ ] T013F Add explicit `on_delete` policy review task and apply minimum hard constraints: `OrderItem.menu_item -> PROTECT` and all `*.restaurant -> PROTECT` FKs.
 
 **Checkpoint**: Architecture, auth infrastructure, role policy, and routing foundation are ready for feature implementation.
 
@@ -150,7 +155,7 @@
 
 ### Implementation for User Story 5
 
-- [ ] T045 [US5] Implement `apps/restaurants/models.py` with `Restaurant` plus one-to-one `RestaurantSettings` (`timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`) and employee relation to user.
+- [ ] T045 [US5] Implement `apps/restaurants/models.py` usage layer for `Restaurant` + foundational `RestaurantSettings` (`timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, `default_service_charge`) and employee relation to user.
 - [ ] T046 [US5] Implement `apps/restaurants/selectors.py` and `apps/restaurants/services.py` (`get_restaurant()`, `get_restaurant_settings()`, `manage_employees()`).
 - [ ] T047 [US5] Implement restaurants API in `apps/restaurants/api/{serializers.py,views.py,urls.py}` for list/update endpoints.
 - [ ] T048 [US5] Implement table position update service in `apps/editor/services.py` and connect to editor API patch endpoint.
