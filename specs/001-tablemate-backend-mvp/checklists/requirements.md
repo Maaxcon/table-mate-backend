@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-05-11  
-**Feature**: [spec.md](/Users/kurilchukmaks/Desktop/table-mate/table-mate-backend/specs/001-tablemate-backend-mvp/spec.md)
+**Feature**: [spec.md](../spec.md)
 
 ## Content Quality
 

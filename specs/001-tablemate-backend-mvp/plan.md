@@ -1,6 +1,6 @@
 # Implementation Plan: Tablemate Backend MVP API
 
-**Branch**: `001-tablemate-backend-mvp` | **Date**: 2026-05-07 | **Spec**: [Tablemate Backend MVP Spec](/Users/kurilchukmaks/Desktop/table-mate/table-mate-backend/specs/001-tablemate-backend-mvp/spec.md)
+**Branch**: `001-tablemate-backend-mvp` | **Date**: 2026-05-07 | **Spec**: [Tablemate Backend MVP Spec](spec.md)
 **Input**: Feature specification from `/specs/001-tablemate-backend-mvp/spec.md`
 
 ## Summary
