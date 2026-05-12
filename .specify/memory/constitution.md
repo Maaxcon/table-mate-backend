@@ -1,8 +1,11 @@
 <!--
 Sync Impact Report
-- Version change: N/A -> 1.0.0 (public repository baseline; prior iteration occurred off-repo)
+- Version change: 1.0.0 -> 1.1.0
 - Modified principles:
-  - III. Role-Scoped Access Is Structural and Enforced -> III. Role-Scoped Access Is Structural and Enforced (privileged role label standardized to `admin`)
+  - None
+- Modified sections:
+  - Foundation Contracts / Canonical Entity Definitions (added `RestaurantSettings`, added top-level `Menu`, clarified `Restaurant` scope)
+  - Foundation Contracts / Payment Contract (currency source anchored to `RestaurantSettings.currency`)
 - Added sections:
   - None
 - Removed sections:
@@ -62,10 +65,15 @@ Rationale: partial updates corrupt kitchen, receipt, and revenue truth.
 ### Canonical Entity Definitions
 The following entities are the source of truth across all surfaces:
 
-- `Restaurant`: `id`, `name`, working hours, active floor-plan reference, QR
-  mappings to table IDs.
+- `Restaurant`: `id`, `name`, active floor-plan reference, QR mappings to table
+  IDs.
+- `RestaurantSettings`: one-to-one sibling of `Restaurant` (`restaurant_id`);
+  `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`.
 - `Table`: `id`, sector, capacity, and status (`free`, `reserved`, `occupied`).
   Status is backend-computed and backend-pushed only.
+- `Menu`: top-level menu container for a restaurant (for example breakfast,
+  lunch, dinner) with `id`, restaurant reference, `name`, service window
+  metadata, active flag, and menu item/category associations.
 - `Order`: `id`, table reference, session reference, origin
   (`waiter_manual`, `customer_prepaid`), payment status
   (`unpaid`, `paid`, `settled`), and `OrderItem[]`.
@@ -107,6 +115,9 @@ Backend and frontend MUST implement this matrix consistently:
 - Customer-originated orders transition from `unpaid` to `paid` only through a
   validated payment-provider webhook.
 - The webhook signature MUST be validated before state transition.
+- Payment and payment-derived event currency (including
+  `PAYMENT_CONFIRMED.currency`) MUST come from `RestaurantSettings.currency` for
+  the order's restaurant.
 - Successful confirmation MUST atomically: mark order paid, inject ticket into
   kitchen queue, and broadcast role-relevant events.
 - Client or staff endpoints MUST NOT directly set paid status.
@@ -303,4 +314,4 @@ Rationale: query-time derivation keeps corrections immediately accurate.
 - Compliance reviews are mandatory at planning, task generation, code review,
   and CI.
 
-**Version**: 1.0.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12
+**Version**: 1.1.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12
