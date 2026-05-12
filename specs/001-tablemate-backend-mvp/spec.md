@@ -167,6 +167,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-041**: Menu domain MUST include top-level `Menu` entity (for example breakfast/lunch/dinner) with category/item associations.
 - **FR-042**: Payment and payment-derived event currency (including `PAYMENT_CONFIRMED.currency`) MUST be sourced from `RestaurantSettings.currency`.
 - **FR-043**: Backend hot read paths MUST be indexed with `Ticket(restaurant, status, injected_at)`, `OrderItem(restaurant, status, menu_item)`, and partial index `Session(restaurant, table_id) WHERE status='open'`.
+- **FR-044**: `AUTH_USER_MODEL` MUST be set in `core/settings/base.py` to the actual custom user model path (`<app_label>.User`, for example `authentication.User`) before the first `manage.py migrate`; auth model swapping after initial migration is out of scope and forbidden for MVP rollout.
 
 ### Canonical Contract Impact
 

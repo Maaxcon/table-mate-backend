@@ -33,3 +33,4 @@
 
 - Specification aligned to Constitution v2.0.0 principles for role model, payment webhook authority, realtime contracts, replay semantics, authoritative transitions, and immutable boundaries.
 - Minor technical labels remain in requirement wording where needed to preserve continuity with existing project artifacts.
+- Bootstrap guardrail: set `AUTH_USER_MODEL` in `core/settings/base.py` to the actual custom user model path (`<app_label>.User`, for example `authentication.User`) before the first `manage.py migrate`; changing auth model after initial migration is a destructive reset risk for user foreign keys.

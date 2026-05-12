@@ -14,10 +14,11 @@
 
 **Purpose**: Align repository shape with backend constitution and target project structure.
 
-- [ ] T001 Create settings package split by adding `core/settings/__init__.py`, `core/settings/base.py`, `core/settings/local.py`, `core/settings/production.py` and move logic from `core/settings.py`.
+- [ ] T001 Create settings package split by adding `core/settings/__init__.py`, `core/settings/base.py`, `core/settings/local.py`, `core/settings/production.py` and move logic from `core/settings.py`; set `AUTH_USER_MODEL` to the actual custom user model path (`<app_label>.User`, for example `authentication.User`) in `core/settings/base.py` before any `manage.py migrate` run.
 - [ ] T002 [P] Add environment template updates in `.env.example` for `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_HOSTS`, `PAYMENT_WEBHOOK_SECRET`.
 - [ ] T003 [P] Update dependency files `requirements/base.txt`, `requirements/dev.txt`, `requirements/prod.txt` with `djangorestframework-simplejwt`, Google token verification dependency, Redis/Channels runtime deps, and webhook signature helpers.
 - [ ] T004 Create missing app skeleton `apps/users/` with `apps.py`, `models.py`, `selectors.py`, and init files.
+- [ ] T004A Add bootstrap custom user model in the app that owns `User` sufficient for initial migrations, and verify configured `AUTH_USER_MODEL` resolves before first migration.
 - [ ] T005 [P] Refactor orders package structure to `apps/orders/models/cart_session.py`, `apps/orders/models/cart_item.py`, `apps/orders/api/v1/{views.py,serializers.py,urls.py}` with `__init__.py` files.
 - [ ] T006 [P] Add missing architecture files across apps: `services.py` and `selectors.py` in `apps/authentication`, `apps/restaurants`, `apps/editor`, `apps/reservations`, `apps/menu`, `apps/orders`.
 
@@ -54,7 +55,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Implement `apps/users/models.py` custom `User` model with UUID PK, unique email, profile fields, and role enum (`admin/waiter/cook/customer`).
+- [ ] T016 [US1] Extend bootstrap `apps/users/models.py` custom `User` model with UUID PK, unique email, profile fields, and role enum (`admin/waiter/cook/customer`).
 - [ ] T017 [US1] Implement `apps/users/selectors.py` with `get_user_by_email()` and helper lookup functions.
 - [ ] T018 [US1] Implement `apps/authentication/services.py` Google verification and JWT issuance workflow.
 - [ ] T019 [US1] Implement auth serializers and views in `apps/authentication/api/serializers.py` and `apps/authentication/api/views.py`.

@@ -83,10 +83,12 @@ requirements/
 ### Phase 1 - Setup
 
 1. Split settings into `core/settings/{base,local,production}.py`.
-2. Normalize environment variables in `.env.example`.
-3. Add/verify dependencies for JWT, OAuth verification, Redis/Channels.
-4. Create missing app/package skeletons (`users`, `orders/models/*`, `orders/api/v1/*`).
-5. Create baseline `services.py` and `selectors.py` files per app.
+2. Set `AUTH_USER_MODEL` in `core/settings/base.py` to the actual custom user model path (`<app_label>.User`, for example `authentication.User`) before the first `manage.py migrate`.
+3. Add bootstrap custom `User` model early in that app so auth model resolution is valid for initial migrations.
+4. Normalize environment variables in `.env.example`.
+5. Add/verify dependencies for JWT, OAuth verification, Redis/Channels.
+6. Create missing app/package skeletons (`users`, `orders/models/*`, `orders/api/v1/*`).
+7. Create baseline `services.py` and `selectors.py` files per app.
 
 ### Phase 2 - Foundational
 
