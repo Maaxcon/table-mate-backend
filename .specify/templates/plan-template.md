@@ -33,17 +33,20 @@
 
 | Gate | Rule | Status | Evidence in Plan |
 |------|------|--------|------------------|
-| C1 | Backend owns state transitions; clients do not authoritatively mutate canonical entities | [PASS/FAIL] | [List all state transitions and authoritative backend path] |
-| C2 | WebSocket-only live state with typed versioned catalog | [PASS/FAIL] | [List events, schemas, schema versions, and audiences] |
-| C3 | At-least-once delivery + reconnect replay supported for affected channels | [PASS/FAIL/N/A] | [Describe delivery semantics, replay window, idempotency handling] |
-| C4 | Payment confirmation only via validated provider webhook | [PASS/FAIL/N/A] | [Describe webhook signature checks and blocked alternate paths] |
-| C5 | Void flow is data-atomic with explicit rollback policy | [PASS/FAIL/N/A] | [Describe transaction scope and receipt-queue failure behavior] |
-| C6 | Kitchen queue ordering preserves injection-time priority | [PASS/FAIL/N/A] | [Describe queue key/order semantics and batch-view ordering] |
-| C7 | Session lifecycle is explicit (open triggers, human close, immutable snapshot) | [PASS/FAIL/N/A] | [Describe close conditions and snapshot/discard semantics] |
-| C8 | Auth uses role-scoped tokens with immediate invalidation on role change | [PASS/FAIL/N/A] | [Describe token claims, server-side mapping, invalidation path] |
-| C9 | Floor layout is immutable/versioned; updates flow by backend event | [PASS/FAIL/N/A] | [Describe version model, stable IDs, and update delivery path] |
-| C10 | Financial records are write-protected externally; AVG PREP computed from raw records | [PASS/FAIL/N/A] | [Describe immutable writes and query-time metric computation] |
-| C11 | Mandatory stack + architecture constraints (Python/Django/DRF/Postgres/Redis/Channels + Skinny Views/Fat Services/Selectors) | [PASS/FAIL] | [List concrete modules/services/selectors ownership] |
+| C1 | Right role, right moment, zero ambiguity is preserved | [PASS/FAIL] | [Describe role-targeted state delivery and ambiguity controls] |
+| C2 | Canonical shared entity contracts are preserved (Restaurant/Table/Order/OrderItem/Ticket/Session/Staff) | [PASS/FAIL/N/A] | [List contract impacts, compatibility approach, and source-of-truth ownership] |
+| C3 | Role access matrix is backend-enforced and structurally reflected in clients | [PASS/FAIL/N/A] | [List allowed/denied actions per affected role] |
+| C4 | Live state uses WebSocket-only typed/versioned events; REST is create/mutate only | [PASS/FAIL/N/A] | [List event catalog entries, `schema_version`, and transport paths] |
+| C5 | Delivery guarantee supports at-least-once semantics and reconnect replay | [PASS/FAIL/N/A] | [Describe replay window, idempotency strategy, and ordering constraints] |
+| C6 | Payment confirmation is webhook-only with signature validation | [PASS/FAIL/N/A] | [Describe blocked alternate paths and atomic post-webhook transitions] |
+| C7 | Void flow is atomic with explicit rollback and audit data | [PASS/FAIL/N/A] | [Describe transaction scope, failure behavior, and emitted events] |
+| C8 | Session lifecycle is explicit (open triggers, human close, immutable snapshot) | [PASS/FAIL/N/A] | [Describe open/close triggers and analytics snapshot contract] |
+| C9 | Kitchen queue ordering preserves injection-time priority | [PASS/FAIL/N/A] | [Describe queue key/order semantics and grouped-view ordering] |
+| C10 | Auth uses role-scoped tokens with immediate invalidation on role change | [PASS/FAIL/N/A] | [Describe token claims, runtime permission mapping, invalidation path] |
+| C11 | Floor layout updates are immutable/versioned with stable table IDs and backend-driven delivery | [PASS/FAIL/N/A] | [Describe layout versioning model and update event flow] |
+| C12 | Financial records are externally read-only; AVG PREP is query-time from raw cycle data | [PASS/FAIL/N/A] | [Describe write boundaries and metric computation/query indexing] |
+| C13 | Frontend-only constraints are respected when frontend scope exists (role trees, offline error state, destructive confirmations, floor plan <=100ms paint) | [PASS/FAIL/N/A] | [List UI architecture, error handling, and perf validation evidence] |
+| C14 | Mandatory backend stack and architecture are respected (Python/Django/DRF/PostgreSQL/Redis/Channels + Skinny Views/Fat Services/Selectors) | [PASS/FAIL] | [List concrete modules/services/selectors ownership] |
 
 ## Project Structure
 

@@ -113,10 +113,14 @@
   Backend enforcement is mandatory; UI hiding alone is insufficient.
 -->
 
-- **[Role A]**: [allowed capabilities]
-- **[Role A Restricted]**: [explicitly denied capabilities]
-- **[Role B]**: [allowed capabilities]
-- **[Role B Restricted]**: [explicitly denied capabilities]
+- **Cook**: [allowed capabilities]
+- **Cook Restricted**: [explicitly denied capabilities]
+- **Waiter**: [allowed capabilities]
+- **Waiter Restricted**: [explicitly denied capabilities]
+- **Manager**: [allowed capabilities]
+- **Manager Restricted**: [explicitly denied capabilities]
+- **Admin**: [allowed capabilities]
+- **Admin Restricted**: [explicitly denied capabilities]
 
 ### Realtime Event Contracts *(mandatory when feature has live state)*
 
@@ -131,6 +135,7 @@
 - **Transport**: [websocket channel/path]
 - **Payload**: [field list]
 - **schema_version**: [version value and compatibility notes]
+- **Unknown Version Handling**: [client ignore strategy and fallback behavior]
 
 ### Event Delivery Guarantees *(mandatory when feature has live state)*
 
@@ -153,6 +158,7 @@
 - **Authoritative Transition**: [e.g., payment status update via webhook]
 - **Atomic Group**: [list of state changes/events that commit together]
 - **Rollback Rule**: [all-or-nothing behavior]
+- **No-Optimistic-Truth Rule**: [how clients avoid authoritative local transitions]
 
 ### Session Lifecycle Rules *(mandatory when table/session occupancy is affected)*
 
@@ -176,6 +182,56 @@
 - **ID Stability Rule**: [table ID behavior across versions]
 - **Update Delivery Path**: [backend-initiated event and client apply behavior]
 
+### Frontend Surface Contract *(mandatory when frontend behavior is in scope)*
+
+<!--
+  Frontend is role-composed. Inaccessible role routes/components must not be
+  mounted. If floor plan is touched, define live patching path.
+-->
+
+- **Role Tree Mounting Rule**: [which role trees mount and which do not]
+- **Floor Plan State Source**: [backend-pushed status only / N/A]
+- **Spatial Editor Separation**: [separate route context behavior / N/A]
+
+### Offline & Reconnection Contract *(mandatory when frontend behavior is in scope)*
+
+<!--
+  There is no offline write mode. Disconnection should block writes and require
+  state refresh before writes resume after reconnect.
+-->
+
+- **Disconnect UX**: [persistent error state behavior]
+- **Write Blocking Rule**: [which actions are disabled while disconnected]
+- **Reconnect Recovery**: [state refresh before write re-enable]
+
+### Destructive Action Confirmation Contract *(mandatory when irreversible actions are in scope)*
+
+<!--
+  Void, cancel reservation, and close table require explicit consequence-facing
+  confirmation before execution.
+-->
+
+- **Impacted Actions**: [void/cancel reservation/close table or N/A]
+- **Required Fields**: [reason code, is_wasted, totals, served-item count, etc.]
+- **Dismiss/Cancel Behavior**: [outside tap and cancel semantics]
+
+### Theme & Token Contract *(mandatory when frontend behavior is in scope)*
+
+<!--
+  Status colors are semantic tokens, not inline component values. Theme changes
+  should be immediate and non-flashing.
+-->
+
+- **Semantic Token Rules**: [status and table-state token mapping]
+- **Theme Modes**: [light/dark support and contrast requirements]
+- **Switch Behavior**: [instant apply without flash]
+
+### Floor Plan Performance Contract *(mandatory when floor plan rendering is in scope)*
+
+- **Render Budget**: [<=100ms from WebSocket state delivery on target hardware]
+- **Verification Method**: [instrumentation/profiling approach]
+- **Network-on-Render Rule**: [confirm no per-table render fetches]
+
 ### Financial Data Boundary *(mandatory when billing/revenue/reporting is affected)*
 
 <!--
@@ -186,6 +242,7 @@
 - **External Write Access**: [forbidden/allowed with rationale]
 - **Internal Write Sources**: [payment webhook, void transaction, session close]
 - **Derived Metric Rule**: [e.g., AVG PREP from raw cycle records, query-time]
+- **Indexing Requirement**: [restaurant + session timestamp index strategy]
 
 ### Key Entities *(include if feature involves data)*
 

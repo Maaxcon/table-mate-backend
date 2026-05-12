@@ -1,31 +1,17 @@
 <!--
 Sync Impact Report
-- Version change: 2.0.0 -> 3.0.0
+- Version change: 4.0.0 -> 5.0.0
 - Modified principles:
-  - I. Right Role, Right Moment, Zero Ambiguity -> I. Backend Owns All State
-    Transitions
-  - II. Canonical Shared Data Contracts -> II. WebSocket Events Deliver All
-    Live State
-  - III. Backend-Enforced Role Access Matrix -> III. Payment Webhook Is the
-    Trusted Confirmation Signal
-  - IV. WebSocket-Only Live State and Event Versioning -> IV. Void Execution Is
-    Atomic at the Data Layer
-  - V. Transactional State Integrity -> V. Kitchen Queue Ordering Uses
-    Injection Time
+  - III. Role-Scoped Access Is Structural and Enforced -> III. Role-Scoped Access Is Structural and Enforced (privileged role label standardized to `admin`)
 - Added sections:
-  - VI. Session Integrity Is Backend-Managed
-  - VII. Staff Authentication Is Role-Scoped at Token Level
-  - VIII. Floor Plan Layout Is Immutable and Versioned
-  - IX. Financial Data Is API Read-Only
-  - X. Average Prep Time Is Computed from Raw Cycle Time Records
+  - None
 - Removed sections:
   - None
 - Templates requiring updates:
-  - ✅ .specify/templates/plan-template.md
+  - ✅ .specify/templates/plan-template.md (no changes required)
   - ✅ .specify/templates/spec-template.md
   - ✅ .specify/templates/tasks-template.md
-  - ⚠ pending: .specify/templates/commands/*.md (directory not present in this
-    repository; no files to validate)
+  - ⚠ pending: .specify/templates/commands/*.md (directory not present in this repository)
 - Deferred TODOs:
   - None
 -->
@@ -34,201 +20,287 @@ Sync Impact Report
 
 ## Core Principles
 
-### I. Backend Owns All State Transitions
-Canonical entities MUST transition state only through backend-controlled
-operations. Clients MUST NOT optimistically transition canonical state and sync
-later. Every state change (table status, order item lifecycle, payment status,
-session open/close) MUST be initiated by backend request handling and confirmed
-by backend event broadcast. The event broadcast is the authoritative state
-announcement, not a non-authoritative notification.
+### I. Right Role, Right Moment, Zero Ambiguity
+TableMate MUST deliver authoritative information to each role with no ambiguity
+and no avoidable delay. Latency and inconsistency are functional defects,
+including stale floor state, delayed kitchen updates, and delayed financial
+visibility.
 
-Rationale: backend-owned transitions prevent divergent client truth and remove
-race-induced ambiguity.
+Rationale: service operations fail when truth arrives late or differs by
+surface.
 
-### II. WebSocket Events Deliver All Live State
-Live state delivery MUST use WebSocket only. REST endpoints MUST handle
-creation and mutation and MUST NOT be used for polling live updates. The
-backend MUST maintain a typed event catalog where every event defines name,
-schema, audience, and `schema_version`. Event schema changes MUST be versioned,
-event removals MUST include a deprecation period of at least one release cycle,
-and existing event fields MUST NOT be removed from active versions.
+### II. Canonical Shared Data Contracts
+Frontend and backend MUST use one canonical contract for shared entities.
+Role-specific local variants of canonical entities are forbidden.
 
-Event delivery MUST provide at-least-once delivery per connected client.
-On reconnect, the backend MUST replay events that occurred during the
-disconnection window for that session.
+Rationale: divergent entity shapes create silent operational drift.
 
-Rationale: role-timed operations require deterministic, replay-safe live-state
-delivery.
+### III. Role-Scoped Access Is Structural and Enforced
+Backend MUST enforce role permissions on every request and event audience.
+Frontend MUST structurally omit inaccessible routes and components from the
+render tree; hiding is insufficient.
 
-### III. Payment Webhook Is the Trusted Confirmation Signal
-Customer-originated payment confirmation MUST be accepted only through the
-payment provider webhook endpoint after signature validation. Orders MUST
-transition from `unpaid` to `paid` only through this webhook path. No client
-request, staff action, or internal shortcut endpoint may perform this
-transition directly.
+Rationale: true least-privilege requires both server enforcement and client
+structure.
 
-On successful validation, the backend MUST atomically mark the order paid,
-inject the ticket into the kitchen queue, and broadcast relevant events to
-waiter and kitchen channels.
+### IV. Live State Is WebSocket-Delivered, Typed, and Versioned
+Live state MUST be delivered by WebSocket only. REST MUST be limited to create
+and mutate operations. Events MUST be typed, versioned, and audience-scoped.
+Clients MUST ignore unknown event versions safely.
 
-Rationale: a single verified signal prevents payment-state manipulation.
+Rationale: deterministic live delivery is required for kitchen and floor timing.
 
-### IV. Void Execution Is Atomic at the Data Layer
-Void execution MUST be implemented as a database transaction with explicit audit
-data. The transaction scope MUST include: `OrderItem` status update to
-`voided`, session running-total decrement, void log entry with reason code and
-`is_wasted`, and corrected receipt queueing. If receipt queueing fails, the
-transaction MUST roll back.
+### V. Critical Transactions Are Backend-Atomic
+Critical transitions (payment confirmation, void execution, and session-close
+financial impact) MUST be executed as backend-controlled atomic transactions
+with explicit rollback behavior.
 
-WebSocket broadcast failures MUST NOT roll back committed data updates; data
-integrity has higher priority than live event transport. Kitchen void events
-MUST include a backend-set priority flag for cancellation audio behavior.
+Rationale: partial updates corrupt kitchen, receipt, and revenue truth.
 
-Rationale: the system must guarantee correct financial/kitchen data even during
-transport outages.
+## Foundation Contracts
 
-### V. Kitchen Queue Ordering Uses Injection Time
-Kitchen queue ordering MUST be based on ticket injection timestamp only. Table
-number, waiter identity, and order size MUST NOT affect queue position. Batch
-views MAY group by dish type but MUST preserve injection-time ordering within
-each group.
+### Canonical Entity Definitions
+The following entities are the source of truth across all surfaces:
 
-Rationale: strict timestamp ordering preserves fairness and predictable prep
-flow.
-
-### VI. Session Integrity Is Backend-Managed
-Session lifecycle ownership belongs to the backend. Sessions MUST open when
-manual ordering starts or prepaid webhook confirmation arrives. Sessions MUST
-close only when waiter-triggered close-table action is received. Backend
-timeouts or inactivity heuristics MUST NOT auto-close sessions.
-
-At session close, backend MUST create a permanent analytics snapshot that
-includes revenue, cycle times, void count, and item count, then clear live
-session state.
-
-Rationale: human-controlled closure and immutable snapshots protect operational
-traceability.
-
-### VII. Staff Authentication Is Role-Scoped at Token Level
-Staff tokens MUST encode role identity and backend authorization MUST derive
-permissions from canonical role mapping at request time. The backend MUST NOT
-accept role identity from request body or client-supplied headers.
-
-If an admin changes a staff role, active tokens for that staff account MUST be
-invalidated immediately and re-authentication MUST be required.
-
-Rationale: token-scoped identity prevents privilege spoofing and stale grants.
-
-### VIII. Floor Plan Layout Is Immutable and Versioned
-Each published layout MUST create a new immutable version and set it as active
-for the restaurant while preserving prior versions. Table IDs MUST remain stable
-across layout versions. If sessions are active during publication, backend MUST
-broadcast layout-updated events containing the new version payload.
-
-After initial load, clients MUST apply floor-plan changes only from backend
-broadcast events and MUST NOT independently refetch layout as an update path.
-
-Rationale: immutable versions preserve referential safety for active sessions.
-
-### IX. Financial Data Is API Read-Only
-External APIs MUST NOT create, update, or delete financial records. Financial
-records MUST be written only by internal backend flows (payment confirmation,
-void transaction, and session-close snapshot). Financial APIs may expose read
-aggregation and filtering only.
-
-Rationale: immutable financial writes preserve auditability and prevent
-tampering.
-
-### X. Average Prep Time Is Computed from Raw Cycle Time Records
-Average Prep Time MUST be computed at query time from raw cycle-time records and
-MUST NOT be stored as a precomputed persisted metric column. Historical cycle
-time corrections MUST be reflected immediately in query results without separate
-recompute jobs. Query paths for this metric MUST be indexed by restaurant and
-session timestamps.
-
-Rationale: raw-record computation keeps analytics correct under historical
-corrections.
-
-## Operational Constraints
-
-### Foundation Scope
-TableMate is a real-time, multi-role restaurant operations platform shared by
-frontend and backend. The platform surfaces are Customer, Waiter, Cook, Manager,
-and Admin. Latency and inconsistency are functional defects, not UX-only concerns.
-
-### Canonical Shared Data Contracts
-Frontend and backend MUST treat the following contracts as source of truth and
-MUST NOT create role-specific local variants:
-- `Restaurant`: `id`, `name`, working hours, active floor-plan reference, and
-  QR-code mappings to table IDs.
-- `Table`: `id`, sector assignment, capacity, and status
-  (`free`, `reserved`, `occupied`). Status is backend-computed and backend-
-  pushed only.
+- `Restaurant`: `id`, `name`, working hours, active floor-plan reference, QR
+  mappings to table IDs.
+- `Table`: `id`, sector, capacity, and status (`free`, `reserved`, `occupied`).
+  Status is backend-computed and backend-pushed only.
 - `Order`: `id`, table reference, session reference, origin
-  (`waiter_manual` or `customer_prepaid`), payment status
-  (`unpaid`, `paid`, `settled`), and `OrderItems`.
+  (`waiter_manual`, `customer_prepaid`), payment status
+  (`unpaid`, `paid`, `settled`), and `OrderItem[]`.
 - `OrderItem`: `id`, menu item reference, quantity, modifier text, guest slot
-  index, and lifecycle status
-  (`pending`, `in_progress`, `ready`, `voided`, `completed`).
-- `Ticket`: kitchen projection of an order, created when backend injects order
-  into kitchen queue.
-- `Session`: active occupancy window for one table; opens on waiter manual
-  order start or prepaid webhook, closes on explicit close-table action.
-- `Staff`: `id`, `name`, `email`, assigned role (`cook`, `waiter`, `manager`,
-  `admin`), shift status (`online`, `offline`).
+  index, lifecycle status (`pending`, `in_progress`, `ready`, `voided`,
+  `completed`).
+- `Ticket`: kitchen-facing projection of an order, created by backend injection
+  into the kitchen queue.
+- `Session`: one table occupancy window; opens on manual order start or prepaid
+  webhook confirmation; closes only by explicit close-table action.
+- `Staff`: `id`, `name`, `email`, role (`cook`, `waiter`, `manager`, `admin`),
+  shift status (`online`, `offline`).
 
 ### Role Access Matrix
-Backend MUST enforce this matrix on every request:
+Backend and frontend MUST implement this matrix consistently:
+
 - `Cook`: kitchen kanban only; no floor plan, order creation, or financials.
-- `Waiter`: floor plan, order creation, notification stream, and table detail
-  overlays; cannot approve voids, view financial reports, or edit layout.
+- `Waiter`: floor plan, order creation, notification stream, table overlays;
+  cannot approve voids, access financial reports, edit layout, or manage staff.
 - `Manager`: inherits waiter permissions and may approve voids and discounts;
   cannot access financial reports, spatial editor, or staff management.
-- `Admin`: full access including financial reports, spatial editor, staff
+- `Admin`: full access, including financial reports, spatial editor, staff
   management, and menu control.
 
-### Real-Time Architecture Constraints
-- Live state transport is WebSocket only; REST handles create/mutate flows.
-- One WebSocket connection per authenticated session MUST be maintained.
-- Backend MUST track presence state for connected clients.
-- Backend MUST broadcast targeted events by role and context.
-- Events MUST be typed and versioned; unknown versions are ignored client-side.
-- Existing event fields MUST NOT be removed from active schema versions.
+### Real-Time Delivery Contract
 
-### Platform and Architecture Baseline
-- Supported customer payment methods are Apple Pay, Google Pay, and card.
-- Backend stack is mandatory: Python 3.12, Django 5+, DRF, PostgreSQL, Redis,
-  Channels, and JWT auth.
-- Backend architecture pattern is mandatory: Skinny Views, Fat Services,
-  Selectors.
+- One WebSocket connection per authenticated session MUST be maintained.
+- Backend MUST maintain presence state for connected clients.
+- Backend MUST broadcast role-targeted events.
+- Event payloads MUST include `schema_version`.
+- Existing event fields MUST NOT be removed from active versions; optional
+  additive fields are allowed.
+- At-least-once delivery per connected client is required.
+- On reconnect, backend MUST replay events from the disconnection window for
+  that session.
+
+### Payment Contract
+
+- Customer-originated orders transition from `unpaid` to `paid` only through a
+  validated payment-provider webhook.
+- The webhook signature MUST be validated before state transition.
+- Successful confirmation MUST atomically: mark order paid, inject ticket into
+  kitchen queue, and broadcast role-relevant events.
+- Client or staff endpoints MUST NOT directly set paid status.
+- There is no "call waiter" fallback for customer-originated unpaid orders.
+- Supported payment methods are Apple Pay, Google Pay, and card.
+
+### Void Contract
+
+- Void reason code MUST be one of: `mispick`, `guest_changed_mind`,
+  `quality_issue`, `out_of_stock`.
+- Void request MUST include `is_wasted` to control inventory return behavior.
+- Void execution MUST be all-or-nothing for: order-item state change to
+  `voided`, session running-total decrement, corrected receipt queueing, and
+  audit log creation.
+- If receipt queueing fails, transaction MUST roll back.
+- If WebSocket broadcast fails, data transaction MUST still commit.
+- Kitchen void events MUST include backend-set high-priority cancellation flag.
+
+### Cycle Time Metric Contract
+
+- Ticket `injection_ts` and `bump_ts` MUST be recorded.
+- Cycle time is `bump_ts - injection_ts`.
+- Average Prep Time MUST be derived from raw cycle-time records at query time,
+  not stored as a precomputed persistent column.
+- Aggregations MUST support shift-level and day-level reporting views.
+
+## Frontend Constitution
+
+### I. Role Determines Interface Composition
+Each role MUST mount only its own navigation, screens, and event handlers.
+Unauthorized role components MUST NOT exist in the render tree.
+
+Rationale: mounting unauthorized UI surfaces leaks complexity and risk.
+
+### II. Floor Plan Is a Live Document
+Waiter and admin floor-plan views MUST subscribe to live event streams and apply
+backend patches immediately. Table status MUST be rendered from backend status
+only, never inferred client-side.
+
+Rationale: inferred state lags under concurrency and creates table confusion.
+
+### III. Notifications Are a Stream
+For waiter and admin sessions, notifications MUST be persistently mounted as a
+stream with separate client and kitchen channels. Events MUST render
+individually at arrival and tap-through MUST navigate directly to context.
+
+Rationale: stream-first behavior preserves temporal clarity in busy service.
+
+### IV. Status Colors Are Design Tokens
+Order-item and table-status colors MUST be defined as semantic design tokens.
+Components MUST NOT hardcode status-color values.
+
+Rationale: semantic tokens keep state meaning consistent and maintainable.
+
+### V. Modifier Modal Is a Critical Input Surface
+Modifier modal MUST open in one tap, focus comment input on open, require guest
+slot selection, and keep confirm disabled until required inputs are valid.
+
+Rationale: modifier errors propagate directly into kitchen mistakes.
+
+### VI. Offline Is an Error State
+There is no offline write mode. On disconnection, UI MUST show a persistent
+error state and block all write actions. After reconnect, clients MUST refresh
+all open-session state before writes are re-enabled.
+
+Rationale: degraded writes against stale state produce unrecoverable conflicts.
+
+### VII. Spatial Editor Is a Separate Route Context
+Spatial editor MUST be a dedicated route context, isolated from live monitoring
+context. Live and edit canvases MUST NOT be mounted simultaneously.
+
+Rationale: separation prevents accidental cross-mode state contamination.
+
+### VIII. Destructive Actions Require Explicit Confirmation
+Void, cancel reservation, and close table MUST present explicit confirmation
+modals naming consequences. Void confirmation MUST require item name, reason
+code, and `is_wasted` before enabling confirm. Close-table confirmation MUST
+show total bill amount and served-item count before confirm.
+
+Rationale: explicit confirmation reduces irreversible operational mistakes.
+
+### IX. Floor Plan Performance Budget Is Mandatory
+At full layout density, floor-plan updates MUST paint within 100ms of WebSocket
+state delivery on a mid-range tablet. Table-icon rendering MUST avoid per-icon
+network calls.
+
+Rationale: delayed paint degrades service response during peak load.
+
+### X. Theme Support Is First-Class
+Customer and staff surfaces MUST support light/dark theme tokens. Staff dark
+mode MUST be validated for high-ambient-light kitchen conditions and switch
+instantly without flash.
+
+Rationale: theme reliability is a usability and readability requirement.
+
+## Backend Constitution
+
+### I. Backend Owns State Transitions
+Canonical state transitions MUST originate from backend processing. Clients MUST
+not authoritatively transition canonical state.
+
+Rationale: server authority prevents split-brain state.
+
+### II. Event Catalog Is Explicit and Versioned
+All live events MUST be in a catalog defining event name, schema,
+`schema_version`, and audience. Schema changes MUST version forward.
+Deprecations MUST span at least one release cycle.
+Previous supported versions MUST continue to be emitted during migration until
+clients have upgraded.
+
+Rationale: catalog discipline protects client compatibility.
+
+### III. Payment Webhook Is the Only Trusted Confirmation
+`unpaid -> paid` transition MUST be exclusively webhook-driven after signature
+validation.
+
+Rationale: one trusted signal prevents paid-state abuse.
+
+### IV. Void Transaction Is Atomic or No-Op
+Void flow MUST execute in a transaction covering order-item state update,
+session running-total decrement, void log write, corrected receipt queueing, and
+kitchen/waiter void event publication intent, with explicit rollback on critical
+downstream failures.
+
+Rationale: void operations affect kitchen flow, receipts, and totals together.
+
+### V. Kitchen Queue Uses Injection-Time Ordering
+Kitchen queue priority MUST use injection timestamp only. Grouped cook views MAY
+cluster by dish type but MUST preserve time ordering within each group.
+
+Rationale: deterministic ordering is required for prep fairness.
+
+### VI. Session Integrity Is Backend Responsibility
+Session open/close rules MUST be explicit and human-controlled for closure.
+Automatic timeout closure is forbidden. Session close MUST be waiter-initiated.
+Close MUST persist immutable analytics snapshot and clear live session state.
+
+Rationale: explicit lifecycle boundaries preserve reporting accuracy.
+
+### VII. Authentication Is Role-Scoped at Token Level
+Issued staff tokens MUST encode role identity. Backend MUST derive permissions
+from canonical role mapping at request time. Role changes MUST invalidate active
+tokens immediately.
+
+Rationale: token-scoped identity blocks privilege spoofing and stale access.
+
+### VIII. Floor Plan Layout Is Versioned and Immutable
+Publishing layout MUST create immutable version records with stable table IDs.
+Active sessions remain valid across versions. Layout updates MUST be delivered
+through backend events.
+
+Rationale: immutable versions avoid breaking active table references.
+
+### IX. Financial Records Are Externally Read-Only
+Public APIs MUST NOT create/update/delete financial records. Writes are limited
+to internal flows: payment confirmation, void handling, and session close.
+
+Rationale: immutable financial writes preserve tamper-evident audits.
+
+### X. Average Prep Time Is Query-Time Derived
+Average Prep Time MUST be computed from raw cycle-time records at query time.
+Metric queries MUST be indexed by restaurant and session timestamp.
+
+Rationale: query-time derivation keeps corrections immediately accurate.
 
 ## Development Workflow
 
-- Mandatory flow: `speckit-specify -> speckit-plan -> speckit-tasks ->
-  speckit-implement` (or manual implementation from `tasks.md`).
-- Spec artifacts MUST include: role access matrix impacts, event catalog/schema
-  changes, replay semantics, authoritative state transitions, and immutable data
-  boundaries where applicable.
-- Plan artifacts MUST include a Constitution Check gate per principle and
-  document any justified exception explicitly.
-- Tasks MUST include verification for:
-  - role-based authorization,
-  - event versioning and replay behavior,
-  - webhook signature validation,
-  - atomic and rollback behavior for payment/void/session flows,
-  - immutable/reporting constraints.
-- CI gates MUST pass before merge: `flake8`, `bandit`, `safety`, and tests.
+- Mandatory workflow:
+  `speckit-specify -> speckit-plan -> speckit-tasks -> speckit-implement`
+  (or manual implementation from `tasks.md`).
+- Plan artifacts MUST include constitution-gate evidence for all impacted
+  principles.
+- Spec artifacts MUST include role access effects, event contract/version
+  impact, state-authority boundaries, and transaction semantics.
+- Tasks artifacts MUST include verification for role enforcement, websocket
+  replay/version handling, webhook signature checks, and atomic data behavior
+  when relevant.
+- Backend baseline MUST remain: Python 3.12, Django 5+, DRF, PostgreSQL, Redis,
+  Channels, JWT auth, and Skinny Views / Fat Services / Selectors.
+- Required quality gates before merge: `flake8`, `bandit`, `safety`, tests.
 
 ## Governance
 
-- This constitution supersedes ad-hoc local conventions.
-- Amendments require pull request discussion, explicit approval, and an updated
-  Sync Impact Report in this file.
-- Semantic versioning policy:
-  - MAJOR: principle redefinition/removal or incompatible governance changes.
+- This constitution supersedes conflicting local conventions.
+- Amendment process requires:
+  - pull request discussion,
+  - explicit approval,
+  - updated Sync Impact Report in this file,
+  - dependent template synchronization in `.specify/templates/*`.
+- Versioning policy follows semantic versioning:
+  - MAJOR: incompatible principle/governance changes.
   - MINOR: new principle or materially expanded mandatory guidance.
-  - PATCH: clarification-only or editorial updates with no normative change.
-- Compliance reviews are mandatory during planning, task generation, code
-  review, and CI validation.
+  - PATCH: wording-only clarification without normative change.
+- Compliance reviews are mandatory at planning, task generation, code review,
+  and CI.
 
-**Version**: 3.0.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-11
+**Version**: 5.0.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12
