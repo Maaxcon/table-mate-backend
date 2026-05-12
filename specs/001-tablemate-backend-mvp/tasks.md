@@ -31,7 +31,7 @@
 
 - [ ] T007 Implement `common/mixins.py` with `UUIDMixin` and `TimestampMixin` and migrate models to use them.
 - [ ] T008 Implement `common/exceptions.py` with base domain exception + `ReservationConflictError` and standard error payload mapping.
-- [ ] T009 Implement role permissions in `common/permissions.py` for canonical staff roles `admin`, `manager`, `waiter`, `cook`.
+- [ ] T009 Implement role permissions in `common/permissions.py` for canonical roles `admin`, `waiter`, `cook`, `customer`.
 - [ ] T010 Configure DRF + JWT in `core/settings/base.py` with `simplejwt` authentication and default permission policy.
 - [ ] T011 Configure Channels + Redis layer in `core/settings/base.py` and websocket entry in `core/asgi.py`.
 - [ ] T012 Update root routing in `core/urls.py` and `core/routing.py` for API includes and websocket routes (`ws/cart/:session_id/`, `ws/hall/`).
@@ -54,7 +54,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Implement `apps/users/models.py` custom `User` model with UUID PK, unique email, profile fields, and staff role enum (`admin/manager/waiter/cook`).
+- [ ] T016 [US1] Implement `apps/users/models.py` custom `User` model with UUID PK, unique email, profile fields, and role enum (`admin/waiter/cook/customer`).
 - [ ] T017 [US1] Implement `apps/users/selectors.py` with `get_user_by_email()` and helper lookup functions.
 - [ ] T018 [US1] Implement `apps/authentication/services.py` Google verification and JWT issuance workflow.
 - [ ] T019 [US1] Implement auth serializers and views in `apps/authentication/api/serializers.py` and `apps/authentication/api/views.py`.
@@ -98,7 +98,7 @@
 ### Tests for User Story 3
 
 - [ ] T030 [P] [US3] Add menu contract tests in `tests/contract/test_menu_api.py` for categories/items with `AllowAny`.
-- [ ] T031 [P] [US3] Add permission matrix tests in `tests/integration/test_permission_matrix.py` for `admin`/`manager`/`waiter`/`cook` endpoint access.
+- [ ] T031 [P] [US3] Add permission matrix tests in `tests/integration/test_permission_matrix.py` for `admin`/`waiter`/`cook`/`customer` endpoint access.
 
 ### Implementation for User Story 3
 
@@ -152,7 +152,7 @@
 - [ ] T047 [US5] Implement restaurants API in `apps/restaurants/api/{serializers.py,views.py,urls.py}` for list/update endpoints.
 - [ ] T048 [US5] Implement table position update service in `apps/editor/services.py` and connect to editor API patch endpoint.
 - [ ] T049 [US5] Implement `apps/editor/consumers.py` and `apps/editor/routing.py` for `ws/hall/` events.
-- [ ] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with `admin`/`manager`/`waiter` access rules.
+- [ ] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with `admin`/`waiter` access rules and explicit denial for `customer`/`cook`.
 
 **Checkpoint**: Staff operations and hall realtime channels are complete.
 

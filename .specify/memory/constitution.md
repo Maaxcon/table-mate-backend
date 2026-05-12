@@ -1,10 +1,11 @@
 <!--
 Sync Impact Report
-- Version change: 1.1.0 -> 1.2.0
+- Version change: 1.2.0 -> 2.0.0
 - Modified principles:
-  - X. Average Prep Time Is Query-Time Derived (index requirements expanded for hot read paths and floor-plan latency budget)
-- Modified sections:
   - None
+- Modified sections:
+  - Foundation Contracts / Canonical Entity Definitions (removed `manager` from staff role model; added canonical `User` role scope including `customer`)
+  - Foundation Contracts / Role Access Matrix (role set aligned to `admin`, `waiter`, `cook`, `customer`)
 - Added sections:
   - None
 - Removed sections:
@@ -83,7 +84,8 @@ The following entities are the source of truth across all surfaces:
   into the kitchen queue.
 - `Session`: one table occupancy window; opens on manual order start or prepaid
   webhook confirmation; closes only by explicit close-table action.
-- `Staff`: `id`, `name`, `email`, role (`cook`, `waiter`, `manager`, `admin`),
+- `User`: `id`, `name`, `email`, role (`customer`, `cook`, `waiter`, `admin`).
+- `Staff`: staff profile for operational users (`cook`, `waiter`, `admin`),
   shift status (`online`, `offline`).
 
 ### Role Access Matrix
@@ -92,8 +94,9 @@ Backend and frontend MUST implement this matrix consistently:
 - `Cook`: kitchen kanban only; no floor plan, order creation, or financials.
 - `Waiter`: floor plan, order creation, notification stream, table overlays;
   cannot approve voids, access financial reports, edit layout, or manage staff.
-- `Manager`: inherits waiter permissions and may approve voids and discounts;
-  cannot access financial reports, spatial editor, or staff management.
+- `Customer`: menu browsing, reservation creation, own-reservation access, and
+  cart/session participation only; no staff operational endpoints, no kitchen,
+  no financial/admin access.
 - `Admin`: full access, including financial reports, spatial editor, staff
   management, and menu control.
 
@@ -319,4 +322,4 @@ Rationale: query-time derivation keeps corrections immediately accurate.
 - Compliance reviews are mandatory at planning, task generation, code review,
   and CI.
 
-**Version**: 1.2.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12
+**Version**: 2.0.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12

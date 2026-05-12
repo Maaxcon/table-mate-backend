@@ -4,7 +4,7 @@
 **Created**: 2026-05-07  
 **Updated**: 2026-05-12  
 **Status**: Finalized  
-**Input**: User description: "Tablemate backend MVP with Constitution v1.2.0 alignment for roles, realtime contracts, webhook authority, immutable boundaries, canonical entities, and hot-path indexing."
+**Input**: User description: "Tablemate backend MVP with Constitution v2.0.0 alignment for roles, realtime contracts, webhook authority, immutable boundaries, canonical entities, and hot-path indexing."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -77,7 +77,7 @@ As reservation participants, users can mutate a shared cart and receive realtime
 
 ### User Story 5 - Staff Operations and Hall Realtime (Priority: P2)
 
-As staff (`admin`, `manager`, `waiter`, `cook`), I can perform only role-allowed operations and receive hall updates relevant to my context.
+As users with roles (`admin`, `waiter`, `cook`, `customer`), I can access only role-allowed operations; customer role is denied staff-only hall and operational actions.
 
 **Why this priority**: Safe staff operations require strict backend role enforcement.
 
@@ -86,7 +86,7 @@ As staff (`admin`, `manager`, `waiter`, `cook`), I can perform only role-allowed
 **Acceptance Scenarios**:
 
 1. **Given** `admin` role, **When** restaurant management endpoints are called, **Then** backend allows admin-level operations.
-2. **Given** `manager` role, **When** waiter-level endpoints are called, **Then** backend allows inherited waiter actions and denies admin-only actions.
+2. **Given** `customer` role, **When** staff operational endpoints are called, **Then** backend denies the action.
 3. **Given** `waiter` role, **When** reservation status update endpoint is called, **Then** backend applies allowed status transitions.
 4. **Given** `cook` role, **When** kitchen workflow endpoints are called, **Then** backend allows kitchen-only order item updates.
 5. **Given** authorized hall subscriber, **When** table/reservation state changes, **Then** backend emits hall events with declared schema version.
@@ -97,7 +97,7 @@ As staff (`admin`, `manager`, `waiter`, `cook`), I can perform only role-allowed
 
 As the operations platform, payment confirmation is accepted only from a verified provider webhook, and paid orders are injected into kitchen flow atomically.
 
-**Why this priority**: Constitution v1.2.0 requires trusted webhook authority for payment state.
+**Why this priority**: Constitution v2.0.0 requires trusted webhook authority for payment state.
 
 **Independent Test**: Verify signature validation, idempotent duplicate webhook handling, and atomic paid+ticket injection behavior.
 
@@ -145,7 +145,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-019**: Only cart participants MAY mutate cart contents.
 - **FR-020**: Cart and hall WebSocket broadcasts MUST be emitted from service layer, not views.
 - **FR-021**: Restaurants API MUST expose list and update endpoints under role policy.
-- **FR-022**: Staff authorization MUST enforce canonical roles only: `admin`, `manager`, `waiter`, `cook`.
+- **FR-022**: Authorization MUST enforce canonical roles only: `admin`, `waiter`, `cook`, `customer`.
 - **FR-023**: WebSocket endpoints MUST include cart session channel and hall channel.
 - **FR-024**: Cart events MUST include item add/remove and participant join/leave event types.
 - **FR-025**: Hall events MUST include table status and reservation creation event types.
@@ -179,12 +179,12 @@ As the operations platform, payment confirmation is accepted only from a verifie
 
 - **admin**: Full operational access including restaurant management, staff management, layout publishing, and financial reporting.
 - **admin restricted**: None inside backend MVP operational scope.
-- **manager**: Waiter capabilities plus void/discount approval and operational oversight.
-- **manager restricted**: No staff management, no spatial editor publish permissions, no financial report administration.
 - **waiter**: Table/hall operations, reservation handling, session close action, and customer order support.
 - **waiter restricted**: No financial administration, no staff management, no kitchen-only item lifecycle operations.
 - **cook**: Kitchen queue and order item preparation lifecycle updates.
 - **cook restricted**: No floor-plan editing, no reservation creation, no financial operations.
+- **customer**: Menu browsing, reservation create/list-own, and cart participation.
+- **customer restricted**: No staff operational endpoints, no hall monitoring, no kitchen lifecycle actions, no financial/staff management operations.
 
 ### Event Catalog (Mandatory)
 
@@ -199,7 +199,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 | `PAYMENT_CONFIRMED` | `1` | Payment webhook service | waiter and kitchen channels | `event_id`, `provider_event_id`, `order_id`, `payment_status`, `amount`, `currency`, `occurred_at` | Replay for subscribers that missed confirmation | Deduplicate by `provider_event_id` |
 | `KITCHEN_TICKET_INJECTED` | `1` | Ticket injection service | Kitchen channel | `event_id`, `ticket_id`, `order_id`, `injected_at`, `priority`, `occurred_at` | Replay for disconnected kitchen clients | Deduplicate by `ticket_id` |
 | `ORDER_ITEM_STATUS_CHANGED` | `1` | Kitchen workflow service | waiter and kitchen channels | `event_id`, `order_item_id`, `previous_status`, `current_status`, `actor_role`, `occurred_at` | Replay after cursor within retention | Deduplicate by `event_id` |
-| `SESSION_CLOSED` | `1` | Session lifecycle service | waiter and manager channels | `event_id`, `session_id`, `table_id`, `closed_by`, `snapshot_id`, `occurred_at` | Replay close notifications for disconnected staff | Deduplicate by `session_id` + `occurred_at` |
+| `SESSION_CLOSED` | `1` | Session lifecycle service | waiter and admin channels | `event_id`, `session_id`, `table_id`, `closed_by`, `snapshot_id`, `occurred_at` | Replay close notifications for disconnected staff | Deduplicate by `session_id` + `occurred_at` |
 
 `PAYMENT_CONFIRMED.currency` source of truth is `RestaurantSettings.currency` for the order's restaurant.
 
@@ -240,7 +240,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 ### Key Entities *(include if feature involves data)*
 
 - **User**: Account identity with role-scoped authorization context.
-- **StaffRoleAssignment**: Canonical mapping of staff account to `admin`/`manager`/`waiter`/`cook` role.
+- **RoleAssignment**: Canonical mapping of account to `admin`/`waiter`/`cook`/`customer` role.
 - **Restaurant**: Venue metadata, active floor-plan reference, and staff membership relation.
 - **RestaurantSettings**: One-to-one restaurant settings entity carrying `timezone`, `currency`, `locale`, `working_hours`, and `default_tax_rate`.
 - **Table**: Hall table identity and occupancy state.
@@ -264,7 +264,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 - **SC-002**: Concurrent reservation conflict tests for same table/time produce exactly one success and one conflict response.
 - **SC-003**: 100% of duplicate payment webhook retries produce no duplicate paid transitions or duplicate kitchen ticket injections.
 - **SC-004**: Reconnect tests confirm missed realtime events are replayed within retention and processed without duplicate side effects.
-- **SC-005**: Role-matrix verification confirms `admin`/`manager`/`waiter`/`cook` boundaries are enforced on all scoped endpoints.
+- **SC-005**: Role-matrix verification confirms `admin`/`waiter`/`cook`/`customer` boundaries are enforced on all scoped endpoints.
 - **SC-006**: Closed sessions, settled orders, payment records, and reporting snapshots remain immutable in all post-settlement test scenarios.
 - **SC-007**: Quality and security validation gates pass before release readiness review.
 - **SC-008**: Hot-path queries for incoming tickets, kitchen batch items, and open table sessions use declared composite/partial indexes in production query plans.

@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Tablemate Backend MVP API (Constitution v3.0.0 Alignment)
+# Specification Quality Checklist: Tablemate Backend MVP API (Constitution v2.0.0 Alignment)
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-05-11  
@@ -31,5 +31,5 @@
 
 ## Notes
 
-- Specification aligned to Constitution v3.0.0 principles for role model, payment webhook authority, realtime contracts, replay semantics, authoritative transitions, and immutable boundaries.
+- Specification aligned to Constitution v2.0.0 principles for role model, payment webhook authority, realtime contracts, replay semantics, authoritative transitions, and immutable boundaries.
 - Minor technical labels remain in requirement wording where needed to preserve continuity with existing project artifacts.
