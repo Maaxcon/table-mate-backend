@@ -1,6 +1,6 @@
 <!--
 Sync Impact Report
-- Version change: 4.0.0 -> 5.0.0
+- Version change: N/A -> 1.0.0 (public repository baseline; prior iteration occurred off-repo)
 - Modified principles:
   - III. Role-Scoped Access Is Structural and Enforced -> III. Role-Scoped Access Is Structural and Enforced (privileged role label standardized to `admin`)
 - Added sections:
@@ -303,4 +303,4 @@ Rationale: query-time derivation keeps corrections immediately accurate.
 - Compliance reviews are mandatory at planning, task generation, code review,
   and CI.
 
-**Version**: 5.0.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12
+**Version**: 1.0.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12
