@@ -8,8 +8,8 @@
 1. Install backend dependencies: `pip install -r requirements/dev.txt`
 2. Speckit is already initialized in this repo. Do not run `specify init .` again.
 3. Use one Speckit execution mode:
-4. IDE mode: use your Speckit-enabled agent integration.
-5. CLI mode: verify command access with `uv tool install specify-cli --from git+https://github.com/github/spec-kit.git`
+- Codex mode (recommended): `$speckit-specify`, `$speckit-plan`, `$speckit-tasks`, `$speckit-implement`
+- CLI mode: verify command access with `uvx --from git+https://github.com/github/spec-kit.git specify --version`
 
 ### 3. Create a Working Branch
 1. `git checkout -b feature/<short-name>`
@@ -22,18 +22,20 @@
 3. `speckit-tasks`
 4. `speckit-implement` or implement manually from `tasks.md`
 
-if you use codex  command - $speckit-specify, $speckit-plan, $speckit-implement
+If you use Codex chat commands, use:
+`$speckit-specify`, `$speckit-plan`, `$speckit-tasks`, `$speckit-implement`
 
-/speckit.specify: Describing exactly what a module should do (e.g., "Create a data processing utility for employee records").
-/speckit.plan: Reviewing the architectural plan before any code is written. This ensures the agent is correctly planning the React hooks or Django DRF endpoints you actually need.
-/speckit.tasks: Breaking the plan down into actionable steps.
-/speckit.implement: Executing the code generation.
+- `speckit-specify`: Describes what the feature should do.
+- `speckit-plan`: Reviews architecture and implementation approach.
+- `speckit-tasks`: Breaks the plan into actionable tasks.
+- `speckit-implement`: Executes implementation from approved tasks.
 
 ### 5. CLI Alternative (If you do not use IDE commands)
-1. `uvx --from git+https://github.com/github/spec-kit.git specify run speckit.specify "feature description"`
-2. `uvx --from git+https://github.com/github/spec-kit.git specify run speckit.plan "feature description"`
-3. `uvx --from git+https://github.com/github/spec-kit.git specify run speckit.tasks "feature description"`
-4. `uvx --from git+https://github.com/github/spec-kit.git specify run speckit.implement "feature description"`
+1. `uvx --from git+https://github.com/github/spec-kit.git specify workflow info speckit`
+2. `uvx --from git+https://github.com/github/spec-kit.git specify workflow run speckit -i spec="feature description" -i integration=codex -i scope=full`
+3. Complete workflow gates when prompted (`review-spec`, `review-plan`).
+4. Continue implementation manually from generated `spec.md`, `plan.md`, and `tasks.md` when needed.
+5. Note: `specify run ...` is not supported in current CLI versions.
 
 ### 6. What Must Be Committed
 - `AGENTS.md` when project-level agent rules are changed
@@ -43,9 +45,9 @@ if you use codex  command - $speckit-specify, $speckit-plan, $speckit-implement
 - Tests and migrations when applicable
 
 ### 7. Quality Gates Before PR
-1. Lint must pass: `flake8`
-2. Security checks must pass: `bandit`, `safety`
-3. Tests must pass
+1. Lint must pass: `flake8 apps core common manage.py`
+2. Security checks must pass: `bandit -r apps core common manage.py` and `safety check`
+3. Tests must pass: `python manage.py test`
 4. Open PR to `dev`
 5. PR requires at least 1 approval and passing CI
 
