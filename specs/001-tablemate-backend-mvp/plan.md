@@ -94,14 +94,15 @@ requirements/
 
 1. Implement `UUIDMixin` and `TimestampMixin`.
 2. Implement domain exceptions and permission classes.
-3. Configure DRF JWT auth defaults.
-4. Configure Channels + Redis routing.
-5. Align core URL and websocket routing.
-6. Enforce CI quality/security pipeline.
+3. Establish enum convention: `models.TextChoices` for role and all status fields (`table`, `order`, `order_item`, `ticket`, `session`).
+4. Configure DRF JWT auth defaults.
+5. Configure Channels + Redis routing.
+6. Align core URL and websocket routing.
+7. Enforce CI quality/security pipeline.
 
 ### Phase 3 - US1 Auth
 
-1. Implement custom user model and selectors.
+1. Implement custom user model (`AbstractBaseUser + PermissionsMixin`, `USERNAME_FIELD = email`) and selectors.
 2. Implement Google auth service and JWT flow.
 3. Implement auth serializers/views/urls.
 4. Add auth contract and integration tests.

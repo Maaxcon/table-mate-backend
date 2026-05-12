@@ -168,6 +168,8 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-042**: Payment and payment-derived event currency (including `PAYMENT_CONFIRMED.currency`) MUST be sourced from `RestaurantSettings.currency`.
 - **FR-043**: Backend hot read paths MUST be indexed with `Ticket(restaurant, status, injected_at)`, `OrderItem(restaurant, status, menu_item)`, and partial index `Session(restaurant, table_id) WHERE status='open'`.
 - **FR-044**: `AUTH_USER_MODEL` MUST be set in `core/settings/base.py` to the actual custom user model path (`<app_label>.User`, for example `authentication.User`) before the first `manage.py migrate`; auth model swapping after initial migration is out of scope and forbidden for MVP rollout.
+- **FR-045**: Custom `User` model MUST use `AbstractBaseUser + PermissionsMixin` with email as `USERNAME_FIELD` (no required username field).
+- **FR-046**: Role/status enums MUST use Django `models.TextChoices` (not plain Python enums) across the codebase, including `table`, `order`, `order_item`, `ticket`, and `session` status fields.
 
 ### Canonical Contract Impact
 

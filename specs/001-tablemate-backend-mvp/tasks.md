@@ -37,6 +37,7 @@
 - [ ] T011 Configure Channels + Redis layer in `core/settings/base.py` and websocket entry in `core/asgi.py`.
 - [ ] T012 Update root routing in `core/urls.py` and `core/routing.py` for API includes and websocket routes (`ws/cart/:session_id/`, `ws/hall/`).
 - [ ] T013 Add backend quality gates to `.github/workflows/main.yml` for lint/security/tests (`flake8`, `bandit`, `safety`, test suite).
+- [ ] T013A Establish project-wide enum convention: use `models.TextChoices` (not plain Python enums) for role and all status fields (`table`, `order`, `order_item`, `ticket`, `session`) to keep DB constraints and generated client types aligned.
 
 **Checkpoint**: Architecture, auth infrastructure, role policy, and routing foundation are ready for feature implementation.
 
@@ -55,7 +56,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Extend bootstrap `apps/users/models.py` custom `User` model with UUID PK, unique email, profile fields, and role enum (`admin/waiter/cook/customer`).
+- [ ] T016 [US1] Extend bootstrap custom `User` model using `AbstractBaseUser + PermissionsMixin` with email as `USERNAME_FIELD` (no username column), profile fields, and `models.TextChoices` role enum (`admin/waiter/cook/customer`).
 - [ ] T017 [US1] Implement `apps/users/selectors.py` with `get_user_by_email()` and helper lookup functions.
 - [ ] T018 [US1] Implement `apps/authentication/services.py` Google verification and JWT issuance workflow.
 - [ ] T019 [US1] Implement auth serializers and views in `apps/authentication/api/serializers.py` and `apps/authentication/api/views.py`.
