@@ -130,7 +130,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-004**: Auth API MUST expose `POST /api/auth/google/`, `POST /api/auth/refresh/`, `GET /api/auth/me/`, and `POST /api/auth/logout/`.
 - **FR-005**: Settings MUST be split into base/local/production configuration files.
 - **FR-006**: ASGI entry MUST be configured for REST + WebSocket runtime.
-- **FR-007**: Domain apps MUST include users, authentication, restaurants, editor, reservations, orders, menu, and shared common layer.
+- **FR-007**: Domain apps MUST include users, authentication, restaurants, editor, reservations, orders, menu, payments, and shared common layer.
 - **FR-008**: Domain models MUST use shared UUID and timestamp mixins.
 - **FR-009**: API views MUST stay orchestration-only; business rules MUST be implemented in services.
 - **FR-010**: Complex read queries MUST be implemented in selectors.
@@ -170,11 +170,13 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-044**: `AUTH_USER_MODEL` MUST be set in `core/settings/base.py` to the actual custom user model path (`<app_label>.User`, for example `authentication.User`) before the first `manage.py migrate`; auth model swapping after initial migration is out of scope and forbidden for MVP rollout.
 - **FR-045**: Custom `User` model MUST use `AbstractBaseUser + PermissionsMixin` with email as `USERNAME_FIELD` (no required username field).
 - **FR-046**: Role/status enums MUST use Django `models.TextChoices` (not plain Python enums) across the codebase, including `table`, `order`, `order_item`, `ticket`, and `session` status fields.
+- **FR-047**: Provider webhook endpoints MUST live in a dedicated `payments` app (signature-authenticated callback surface) and MUST NOT be mixed into customer-facing orders REST endpoints.
+- **FR-048**: Payments persistence MUST use dedicated models in `apps/payments`: `Payment(order, provider, provider_transaction_id UNIQUE, amount, currency, status, raw_payload jsonb)` and `WebhookEvent(provider, event_id UNIQUE, payload, received_at, processed_at)` as required idempotency primitives for FR-032.
 
 ### Canonical Contract Impact
 
-- **Impacted Entities**: Restaurant, RestaurantSettings, Menu, Table, Reservation, Order, OrderItem, Ticket, Session, Staff, PaymentRecord, SessionSnapshot.
-- **Contract Delta**: Adds explicit webhook-confirmed payment transitions, replay cursor semantics for live events, immutable lifecycle boundaries for finalized records, canonical currency source (`RestaurantSettings.currency`), and hot-path indexing requirements.
+- **Impacted Entities**: Restaurant, RestaurantSettings, Menu, Table, Reservation, Order, OrderItem, Ticket, Session, Staff, Payment, WebhookEvent, SessionSnapshot.
+- **Contract Delta**: Adds explicit webhook-confirmed payment transitions, replay cursor semantics for live events, immutable lifecycle boundaries for finalized records, canonical currency source (`RestaurantSettings.currency`), required payment/webhook idempotency primitives (`Payment` + `WebhookEvent` unique keys), and hot-path indexing requirements.
 - **Backward Compatibility**: Existing event fields remain stable within active `schema_version`; new optional fields are additive.
 - **Backend Source of Truth Rule**: Canonical state transitions are accepted only through backend service operations and confirmed by backend event broadcast.
 
@@ -256,7 +258,8 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 - **Order**: Confirmed customer order with payment lifecycle.
 - **OrderItem**: Individual kitchen-trackable line item with lifecycle state.
 - **KitchenTicket**: Kitchen projection created from confirmed paid order.
-- **PaymentRecord**: Immutable payment confirmation record derived from webhook.
+- **Payment**: Provider transaction record with unique `provider_transaction_id`, payment amount/currency/status, and raw payload retention.
+- **WebhookEvent**: Immutable inbound webhook event record with unique provider `event_id`, payload, and processing timestamps.
 - **SessionSnapshot**: Immutable analytics snapshot created at session close.
 
 ## Success Criteria *(mandatory)*

@@ -17,7 +17,7 @@ Implement backend MVP for Tablemate using Django 5 + DRF + JWT + Google OAuth, w
 **Project Type**: Backend web service (REST + WebSocket)  
 **Performance Goals**: Deterministic reservation conflict handling, low-latency cart/hall event delivery  
 **Constraints**: Service-layer business logic only, selector-layer complex queries, role-based permissions, no AI and no multi-restaurant tenancy  
-**Scale/Scope**: MVP domains `users/authentication/restaurants/editor/reservations/orders/menu` plus webhook-confirmed payment transition path
+**Scale/Scope**: MVP domains `users/authentication/restaurants/editor/reservations/orders/menu/payments` plus webhook-confirmed payment transition path
 
 ## Constitution Check
 
@@ -69,6 +69,9 @@ apps/
 │   │   └── cart_item.py
 │   └── api/
 │       └── v1/
+├── payments/
+│   └── api/
+│       └── v1/
 └── menu/
 
 common/
@@ -87,7 +90,7 @@ requirements/
 3. Add bootstrap custom `User` model early in that app so auth model resolution is valid for initial migrations.
 4. Normalize environment variables in `.env.example`.
 5. Add/verify dependencies for JWT, OAuth verification, Redis/Channels.
-6. Create missing app/package skeletons (`users`, `orders/models/*`, `orders/api/v1/*`).
+6. Create missing app/package skeletons (`users`, `payments`, `orders/models/*`, `orders/api/v1/*`).
 7. Create baseline `services.py` and `selectors.py` files per app.
 
 ### Phase 2 - Foundational
@@ -140,11 +143,12 @@ requirements/
 
 ### Phase 8 - US6 Payment Webhook Authority
 
-1. Implement payment webhook endpoint with signature validation.
-2. Implement idempotency using provider event identifiers.
-3. Implement atomic `unpaid -> paid` transition with kitchen ticket injection.
-4. Emit `PAYMENT_CONFIRMED` and `KITCHEN_TICKET_INJECTED` events from service layer.
-5. Add webhook contract + idempotency integration tests.
+1. Implement payment webhook endpoint in `apps/payments` with signature validation.
+2. Implement idempotency using provider event identifiers in payments service layer.
+3. Implement dedicated persistence models: `Payment` (unique `provider_transaction_id`) and `WebhookEvent` (unique provider `event_id`).
+4. Implement atomic `unpaid -> paid` transition with kitchen ticket injection.
+5. Emit `PAYMENT_CONFIRMED` and `KITCHEN_TICKET_INJECTED` events from payments service layer.
+6. Add webhook contract + idempotency integration tests.
 
 ### Phase 9 - Polish
 

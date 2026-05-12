@@ -19,8 +19,9 @@
 - [ ] T003 [P] Update dependency files `requirements/base.txt`, `requirements/dev.txt`, `requirements/prod.txt` with `djangorestframework-simplejwt`, Google token verification dependency, Redis/Channels runtime deps, and webhook signature helpers.
 - [ ] T004 Create missing app skeleton `apps/users/` with `apps.py`, `models.py`, `selectors.py`, and init files.
 - [ ] T004A Add bootstrap custom user model in the app that owns `User` sufficient for initial migrations, and verify configured `AUTH_USER_MODEL` resolves before first migration.
+- [ ] T004B Create `apps/payments/` skeleton with `apps.py`, `models.py`, `services.py`, `api/v1/{views.py,urls.py}`, and init files for provider webhook boundary.
 - [ ] T005 [P] Refactor orders package structure to `apps/orders/models/cart_session.py`, `apps/orders/models/cart_item.py`, `apps/orders/api/v1/{views.py,serializers.py,urls.py}` with `__init__.py` files.
-- [ ] T006 [P] Add missing architecture files across apps: `services.py` and `selectors.py` in `apps/authentication`, `apps/restaurants`, `apps/editor`, `apps/reservations`, `apps/menu`, `apps/orders`.
+- [ ] T006 [P] Add missing architecture files across apps: `services.py` and `selectors.py` in `apps/authentication`, `apps/restaurants`, `apps/editor`, `apps/reservations`, `apps/menu`, `apps/orders`, `apps/payments`.
 
 ---
 
@@ -173,11 +174,11 @@
 
 ### Implementation for User Story 6
 
-- [ ] T053 [US6] Implement webhook endpoint in `apps/orders/api/v1/views.py` with signature verification.
-- [ ] T054 [US6] Implement webhook service in `apps/orders/services.py` for atomic payment confirmation + ticket injection.
-- [ ] T055 [US6] Persist immutable payment records in `apps/orders/models.py` (or dedicated payment model module).
+- [ ] T053 [US6] Implement webhook endpoint in `apps/payments/api/v1/views.py` with signature verification and idempotent callback handling.
+- [ ] T054 [US6] Implement webhook service in `apps/payments/services.py` for atomic payment confirmation + ticket injection.
+- [ ] T055 [US6] Implement dedicated idempotency models in `apps/payments/models.py`: `Payment(order, provider, provider_transaction_id UNIQUE, amount, currency, status, raw_payload)` and `WebhookEvent(provider, event_id UNIQUE, payload, received_at, processed_at)`.
 - [ ] T056 [US6] Emit `PAYMENT_CONFIRMED` and `KITCHEN_TICKET_INJECTED` events with `schema_version` and dedup keys.
-- [ ] T057 [US6] Ensure duplicate provider event id is deduplicated and side effects are not replayed.
+- [ ] T057 [US6] Enforce webhook deduplication by `WebhookEvent(provider, event_id)` and payment deduplication by `Payment(provider, provider_transaction_id)` so duplicate callbacks do not replay side effects.
 - [ ] T062 [US6] Source payment and `PAYMENT_CONFIRMED.currency` from `RestaurantSettings.currency` in webhook processing and event payload mapping.
 
 **Checkpoint**: Webhook authority and idempotent payment transition are complete.
