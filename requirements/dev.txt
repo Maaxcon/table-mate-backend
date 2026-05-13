@@ -1,8 +1,0 @@
--r base.txt
-flake8
-safety
-bandit
-pytest
-pytest-django
-pre-commit
-drf-spectacular
