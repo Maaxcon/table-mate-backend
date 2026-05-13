@@ -9,26 +9,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install uv and set up Python
-      uses: astral-sh/setup-uv@v5
-      with:
-        python-version: '3.12'
-        enable-cache: true
-        cache-dependency-glob: "uv.lock"
+      - name: Install uv and set up Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-    - name: Install dependencies
-      run: uv sync
+      - name: Install dependencies
+        run: uv sync
 
-    - name: Lint with flake8
-      run: uv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Lint with flake8
+        run: uv run flake8 . --exclude=.venv --count --select=E9,F63,F7,F82 --show-source --statistics
 
-    - name: Security check with bandit
-      run: uv run bandit -r . -x ./.venv
+      - name: Security check with bandit
+        run: uv run bandit -r . -x ./.venv
 
-    - name: Check dependencies with safety
-      run: uv run safety scan --non-interactive || uv run safety check
+      - name: Check dependencies with safety
+        run: uv run safety scan --non-interactive || uv run safety check
 
-    - name: Run tests
-      run: uv run python manage.py test
+      - name: Run tests
+        run: uv run python manage.py test
