@@ -2,9 +2,7 @@ name: Python CI
 
 on:
   push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
 
 jobs:
   test:
@@ -33,7 +31,7 @@ jobs:
 
     - name: Check dependencies with safety
       run: |
-        safety check
+        safety scan --non-interactive || safety check
 
     - name: Run tests
       run: |
