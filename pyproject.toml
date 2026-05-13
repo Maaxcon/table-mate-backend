@@ -2,7 +2,7 @@
 name = "table-mate"
 version = "0.1.0"
 dependencies = [
-    "Django>=5.0",
+    "django>=5.0",
     "djangorestframework",
     "django-cors-headers",
     "psycopg2-binary",
@@ -36,4 +36,21 @@ django_settings_module = "core.settings"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build-meta"
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4",
+    "drf-spectacular>=0.29.0",
+    "flake8>=7.3.0",
+    "pre-commit>=4.6.0",
+    "pytest>=9.0.3",
+    "pytest-django>=4.12.0",
+    "safety>=3.7.0",
+]
+prod = [
+    "gunicorn>=26.0.0",
+]
+
+[tool.setuptools]
+packages = ["core", "apps", "common"]
