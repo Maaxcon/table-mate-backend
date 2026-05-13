@@ -1,11 +1,18 @@
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-COPY requirements/ ./requirements/
-RUN pip install --no-cache-dir -r requirements/prod.txt
+COPY pyproject.toml uv.lock ./
+
+RUN uv sync --frozen --no-dev --group prod --no-install-project
 
 COPY . .
+
+RUN uv sync --frozen --no-dev --group prod
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
 
