@@ -1,0 +1,296 @@
+from django.db import models
+
+from common.models import BaseModel, RestaurantScopedModel
+
+
+class TableStatus(models.TextChoices):
+    FREE = "free", "Free"
+    RESERVED = "reserved", "Reserved"
+    OCCUPIED = "occupied", "Occupied"
+
+
+class SessionStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    CLOSED = "closed", "Closed"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class OrderSource(models.TextChoices):
+    WAITER_MANUAL = "waiter_manual", "Waiter manual"
+    CUSTOMER_PREPAID = "customer_prepaid", "Customer prepaid"
+
+
+class OrderStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    SUBMITTED = "submitted", "Submitted"
+    PAID = "paid", "Paid"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class TicketStatus(models.TextChoices):
+    INCOMING = "incoming", "Incoming"
+    ACTIVE = "active", "Active"
+    COMPLETED = "completed", "Completed"
+    BUMPED = "bumped", "Bumped"
+
+
+class OrderItemStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    IN_PROGRESS = "in_progress", "In progress"
+    READY = "ready", "Ready"
+    SERVED = "served", "Served"
+    VOIDED = "voided", "Voided"
+
+
+class CreatedBySource(models.TextChoices):
+    STAFF = "staff", "Staff"
+    CUSTOMER = "customer", "Customer"
+    SYSTEM = "system", "System"
+
+
+class VoidReason(BaseModel):
+    code = models.CharField(max_length=32, unique=True)
+    label = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return self.label
+
+
+class Table(RestaurantScopedModel):
+    table_number = models.CharField(max_length=64)
+    capacity = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=TableStatus.choices, default=TableStatus.FREE)
+    position_x = models.IntegerField(null=True, blank=True)
+    position_y = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["restaurant_id", "table_number", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["restaurant", "table_number"],
+                name="orders_table_restaurant_number_unique",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=TableStatus.values),
+                name="orders_table_status_valid",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.restaurant.name} / {self.table_number}"
+
+
+class Session(RestaurantScopedModel):
+    table = models.ForeignKey(
+        "orders.Table",
+        on_delete=models.PROTECT,
+        related_name="sessions",
+    )
+    reservation = models.ForeignKey(
+        "reservations.Reservation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sessions",
+    )
+    opened_by = models.ForeignKey(
+        "authentication.Staff",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="opened_sessions",
+    )
+    guest_count = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.OPEN)
+    currency = models.CharField(max_length=3)
+    final_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    started_at = models.DateTimeField()
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at", "-id"]
+        indexes = [
+            models.Index(
+                fields=["restaurant", "table"],
+                name="orders_session_restaurant_table_open_idx",
+                condition=models.Q(status=SessionStatus.OPEN),
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=SessionStatus.values),
+                name="orders_session_status_valid",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Session {self.public_id}"
+
+
+class Order(RestaurantScopedModel):
+    session = models.ForeignKey(
+        "orders.Session",
+        on_delete=models.CASCADE,
+        related_name="orders",
+    )
+    created_by = models.ForeignKey(
+        "authentication.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_orders",
+    )
+    created_by_source = models.CharField(
+        max_length=20,
+        choices=CreatedBySource.choices,
+        default=CreatedBySource.STAFF,
+    )
+    source = models.CharField(
+        max_length=32,
+        choices=OrderSource.choices,
+        default=OrderSource.WAITER_MANUAL,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=OrderStatus.choices,
+        default=OrderStatus.DRAFT,
+    )
+    currency = models.CharField(max_length=3)
+    total_amount = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    tax_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    discount_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    tip_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    service_charge = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    notes = models.TextField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(created_by_source__in=CreatedBySource.values),
+                name="orders_order_created_by_source_valid",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(source__in=OrderSource.values),
+                name="orders_order_source_valid",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=OrderStatus.values),
+                name="orders_order_status_valid",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Order {self.public_id}"
+
+
+class Ticket(RestaurantScopedModel):
+    session = models.ForeignKey(
+        "orders.Session",
+        on_delete=models.CASCADE,
+        related_name="tickets",
+    )
+    order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.CASCADE,
+        related_name="tickets",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=TicketStatus.choices,
+        default=TicketStatus.INCOMING,
+    )
+    injected_at = models.DateTimeField()
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["injected_at", "id"]
+        indexes = [
+            models.Index(
+                fields=["restaurant", "status", "injected_at"],
+                name="orders_ticket_restaurant_status_injected_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=TicketStatus.values),
+                name="orders_ticket_status_valid",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Ticket {self.public_id}"
+
+
+class OrderItem(RestaurantScopedModel):
+    order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    ticket = models.ForeignKey(
+        "orders.Ticket",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="items",
+    )
+    menu_item = models.ForeignKey(
+        "menu.MenuItem",
+        on_delete=models.PROTECT,
+        related_name="order_items",
+    )
+    guest_slot = models.PositiveIntegerField()
+    quantity = models.PositiveIntegerField()
+    comment = models.TextField(null=True, blank=True)
+    modifiers = models.JSONField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=OrderItemStatus.choices,
+        default=OrderItemStatus.PENDING,
+    )
+    unit_price = models.DecimalField(max_digits=14, decimal_places=4)
+    total_price = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0)
+    tax_amount = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        "authentication.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="voided_order_items",
+    )
+    void_reason = models.ForeignKey(
+        "orders.VoidReason",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="order_items",
+    )
+    void_reason_note = models.TextField(null=True, blank=True)
+    is_wasted = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["order_id", "guest_slot", "id"]
+        indexes = [
+            models.Index(
+                fields=["restaurant", "status", "menu_item"],
+                name="orders_orderitem_restaurant_status_menu_item_idx",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=OrderItemStatus.values),
+                name="orders_orderitem_status_valid",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Order item {self.public_id}"
+
