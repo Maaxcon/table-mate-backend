@@ -1,11 +1,12 @@
 <!--
 Sync Impact Report
-- Version change: 1.2.0 -> 2.0.0
+- Version change: 2.0.0 -> 2.0.1
 - Modified principles:
   - None
 - Modified sections:
-  - Foundation Contracts / Canonical Entity Definitions (removed `manager` from staff role model; added canonical `User` role scope including `customer`)
-  - Foundation Contracts / Role Access Matrix (role set aligned to `admin`, `waiter`, `cook`, `customer`)
+  - Foundation Contracts / Canonical Entity Definitions: removed zombie `Staff`
+    profile entity (not referenced by spec, plan, tasks, or code). Role remains a
+    direct attribute on `User`. Shift-status tracking is out of MVP scope.
 - Added sections:
   - None
 - Removed sections:
@@ -14,7 +15,6 @@ Sync Impact Report
   - ✅ .specify/templates/plan-template.md (no changes required)
   - ✅ .specify/templates/spec-template.md
   - ✅ .specify/templates/tasks-template.md
-  - ⚠ pending: .specify/templates/commands/*.md (directory not present in this repository)
 - Deferred TODOs:
   - None
 -->
@@ -85,8 +85,8 @@ The following entities are the source of truth across all surfaces:
 - `Session`: one table occupancy window; opens on manual order start or prepaid
   webhook confirmation; closes only by explicit close-table action.
 - `User`: `id`, `name`, `email`, role (`customer`, `cook`, `waiter`, `admin`).
-- `Staff`: staff profile for operational users (`cook`, `waiter`, `admin`),
-  shift status (`online`, `offline`).
+  Role is a direct attribute on `User`; a separate operational `Staff` profile
+  and shift-status tracking are not part of the MVP canonical entity set.
 
 ### Role Access Matrix
 Backend and frontend MUST implement this matrix consistently:
@@ -322,4 +322,4 @@ Rationale: query-time derivation keeps corrections immediately accurate.
 - Compliance reviews are mandatory at planning, task generation, code review,
   and CI.
 
-**Version**: 2.0.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-12
+**Version**: 2.0.1 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-13

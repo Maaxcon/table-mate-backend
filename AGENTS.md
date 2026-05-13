@@ -30,7 +30,7 @@ Build reliable backend features fast, with clear specs and predictable delivery.
 - Architecture rule: Skinny Views, Fat Services, Selectors pattern.
 - Lint: `flake8`
 - Security checks: `bandit`, `safety`
-- Default API access: authenticated endpoints (`IsAuthenticated`).
+- Default API permission class: `IsAuthenticated`. Public-read endpoints (menu categories/items) are documented exceptions per FR-016.
 
 ## Git Rules
 - Base branch: `dev`

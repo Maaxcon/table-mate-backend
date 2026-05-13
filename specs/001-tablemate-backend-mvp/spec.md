@@ -203,12 +203,12 @@ As the operations platform, payment confirmation is accepted only from a verifie
 | `CART_ITEM_REMOVED` | `1` | Cart service | Cart participants | `event_id`, `session_id`, `item_id`, `actor_id`, `occurred_at` | Replay on reconnect within retention | Deduplicate by `event_id` |
 | `CART_PARTICIPANT_JOINED` | `1` | Cart presence service | Cart participants | `event_id`, `session_id`, `user_id`, `occurred_at` | Replay within retention for missed presence transitions | Deduplicate by `event_id` |
 | `CART_PARTICIPANT_LEFT` | `1` | Cart presence service | Cart participants | `event_id`, `session_id`, `user_id`, `occurred_at` | Replay within retention for missed presence transitions | Deduplicate by `event_id` |
-| `HALL_TABLE_STATUS_CHANGED` | `1` | Table state service | Hall subscribers (staff) | `event_id`, `table_id`, `previous_status`, `current_status`, `session_id`, `occurred_at` | Replay if change occurred after cursor | Deduplicate by `event_id` |
-| `HALL_NEW_RESERVATION` | `1` | Reservation service | Hall subscribers (staff) | `event_id`, `reservation_id`, `table_id`, `start_at`, `end_at`, `occurred_at` | Replay within retention to restore hall timeline | Deduplicate by `event_id` |
+| `HALL_TABLE_STATUS_CHANGED` | `1` | Table state service | Hall subscribers (staff) | `event_id`, `table_id`, `previous_status`, `current_status`, `session_id`, `actor_id`, `actor_role`, `occurred_at` | Replay if change occurred after cursor | Deduplicate by `event_id` |
+| `HALL_NEW_RESERVATION` | `1` | Reservation service | Hall subscribers (staff) | `event_id`, `reservation_id`, `table_id`, `start_at`, `end_at`, `actor_id`, `occurred_at` | Replay within retention to restore hall timeline | Deduplicate by `event_id` |
 | `PAYMENT_CONFIRMED` | `1` | Payment webhook service | waiter and kitchen channels | `event_id`, `provider_event_id`, `order_id`, `payment_status`, `amount`, `currency`, `occurred_at` | Replay for subscribers that missed confirmation | Deduplicate by `provider_event_id` |
-| `KITCHEN_TICKET_INJECTED` | `1` | Ticket injection service | Kitchen channel | `event_id`, `ticket_id`, `order_id`, `injected_at`, `priority`, `occurred_at` | Replay for disconnected kitchen clients | Deduplicate by `ticket_id` |
-| `ORDER_ITEM_STATUS_CHANGED` | `1` | Kitchen workflow service | waiter and kitchen channels | `event_id`, `order_item_id`, `previous_status`, `current_status`, `actor_role`, `occurred_at` | Replay after cursor within retention | Deduplicate by `event_id` |
-| `SESSION_CLOSED` | `1` | Session lifecycle service | waiter and admin channels | `event_id`, `session_id`, `table_id`, `closed_by`, `snapshot_id`, `occurred_at` | Replay close notifications for disconnected staff | Deduplicate by `session_id` + `occurred_at` |
+| `KITCHEN_TICKET_INJECTED` | `1` | Ticket injection service | Kitchen channel | `event_id`, `ticket_id`, `order_id`, `injected_at`, `priority`, `occurred_at` | Replay for disconnected kitchen clients | Deduplicate by `event_id` |
+| `ORDER_ITEM_STATUS_CHANGED` | `1` | Kitchen workflow service | waiter and kitchen channels | `event_id`, `order_item_id`, `previous_status`, `current_status`, `actor_id`, `actor_role`, `occurred_at` | Replay after cursor within retention | Deduplicate by `event_id` |
+| `SESSION_CLOSED` | `1` | Session lifecycle service | waiter and admin channels | `event_id`, `session_id`, `table_id`, `closed_by`, `snapshot_id`, `occurred_at` | Replay close notifications for disconnected staff | Deduplicate by `event_id` |
 
 `PAYMENT_CONFIRMED.currency` source of truth is `RestaurantSettings.currency` for the order's restaurant.
 
@@ -248,8 +248,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 
 ### Key Entities *(include if feature involves data)*
 
-- **User**: Account identity with role-scoped authorization context.
-- **RoleAssignment**: Canonical mapping of account to `admin`/`waiter`/`cook`/`customer` role.
+- **User**: Account identity with role-scoped authorization context. Role (`admin`/`waiter`/`cook`/`customer`) is a direct attribute on `User`; a separate `RoleAssignment` entity is not used in MVP.
 - **Restaurant**: Venue metadata, active floor-plan reference, and staff membership relation.
 - **RestaurantSettings**: One-to-one restaurant settings entity carrying `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, and `default_service_charge`.
 - **Table**: Hall table identity and occupancy state.
