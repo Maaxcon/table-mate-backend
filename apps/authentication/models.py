@@ -1,8 +1,10 @@
+from typing import ClassVar
+
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 
-from common.models import BaseModel
+from common.models import BaseModel, RestaurantScopedModel
 
 
 class RoleCode(models.TextChoices):
@@ -18,10 +20,15 @@ class ShiftStatus(models.TextChoices):
     BREAK = "break", "Break"
 
 
-class UserManager(BaseUserManager):
+class UserManager(BaseUserManager["User"]):
     use_in_migrations = True
 
-    def create_user(self, email: str, password: str | None = None, **extra_fields):
+    def create_user(
+        self,
+        email: str,
+        password: str | None = None,
+        **extra_fields: object,
+    ) -> "User":
         if not email:
             raise ValueError("Email must be set")
         email = self.normalize_email(email)
@@ -30,7 +37,12 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email: str, password: str, **extra_fields):
+    def create_superuser(
+        self,
+        email: str,
+        password: str,
+        **extra_fields: object,
+    ) -> "User":
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
@@ -79,8 +91,8 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
 
     objects = UserManager()
 
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS: list[str] = []
+    USERNAME_FIELD: ClassVar[str] = "email"
+    REQUIRED_FIELDS: ClassVar[list[str]] = []
 
     class Meta:
         ordering = ["id"]
@@ -89,15 +101,10 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         return self.email
 
 
-class Staff(BaseModel):
+class Staff(RestaurantScopedModel):
     user = models.ForeignKey(
         "authentication.User",
         on_delete=models.CASCADE,
-        related_name="staff_memberships",
-    )
-    restaurant = models.ForeignKey(
-        "restaurants.Restaurant",
-        on_delete=models.PROTECT,
         related_name="staff_memberships",
     )
     shift_status = models.CharField(
