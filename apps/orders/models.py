@@ -1,6 +1,6 @@
 from django.db import models
 
-from common.models import BaseModel, RestaurantScopedModel
+from common.models import RestaurantScopedModel
 
 
 class TableStatus(models.TextChoices):
@@ -51,22 +51,17 @@ class OrderItemStatus(models.TextChoices):
     VOIDED = "voided", "Voided"
 
 
+class VoidReasonCode(models.TextChoices):
+    MISPICK = "mispick", "Mispick"
+    GUEST_CHANGED_MIND = "guest_changed_mind", "Guest changed mind"
+    QUALITY_ISSUE = "quality_issue", "Quality issue"
+    OUT_OF_STOCK = "out_of_stock", "Out of stock"
+
+
 class CreatedBySource(models.TextChoices):
     STAFF = "staff", "Staff"
     CUSTOMER = "customer", "Customer"
     SYSTEM = "system", "System"
-
-
-class VoidReason(BaseModel):
-    code = models.CharField(max_length=32, unique=True)
-    label = models.CharField(max_length=100)
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ["id"]
-
-    def __str__(self) -> str:
-        return self.label
 
 
 class Table(RestaurantScopedModel):
@@ -288,12 +283,11 @@ class OrderItem(RestaurantScopedModel):
         blank=True,
         related_name="voided_order_items",
     )
-    void_reason = models.ForeignKey(
-        "orders.VoidReason",
-        on_delete=models.PROTECT,
+    void_reason = models.CharField(
+        max_length=32,
+        choices=VoidReasonCode.choices,
         null=True,
         blank=True,
-        related_name="order_items",
     )
     void_reason_note = models.TextField(null=True, blank=True)
     is_wasted = models.BooleanField(default=False)
@@ -310,6 +304,11 @@ class OrderItem(RestaurantScopedModel):
             models.CheckConstraint(
                 condition=models.Q(status__in=OrderItemStatus.values),
                 name="orders_orderitem_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(void_reason__isnull=True)
+                | models.Q(void_reason__in=VoidReasonCode.values),
+                name="orders_orderitem_void_reason_valid",
             ),
         ]
 
