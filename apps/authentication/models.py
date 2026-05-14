@@ -61,6 +61,7 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
+    phone = models.CharField(max_length=32, null=True, blank=True)
     role = models.CharField(
         max_length=20,
         choices=RoleCode.choices,
@@ -115,18 +116,3 @@ class Staff(RestaurantScopedModel):
 
     def __str__(self) -> str:
         return f"{self.user.email} @ {self.restaurant.name}"
-
-
-class Customer(BaseModel):
-    user = models.OneToOneField(
-        "authentication.User",
-        on_delete=models.CASCADE,
-        related_name="customer_profile",
-    )
-    phone = models.CharField(max_length=32, null=True, blank=True)
-
-    class Meta:
-        ordering = ["id"]
-
-    def __str__(self) -> str:
-        return self.user.email

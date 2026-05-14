@@ -1,5 +1,6 @@
 from django.db import models
 
+from apps.authentication.models import RoleCode
 from common.models import RestaurantScopedModel
 
 
@@ -12,11 +13,12 @@ class ReservationStatus(models.TextChoices):
 
 class Reservation(RestaurantScopedModel):
     customer = models.ForeignKey(
-        "authentication.Customer",
+        "authentication.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="reservations",
+        limit_choices_to={"role": RoleCode.CUSTOMER},
     )
     table = models.ForeignKey(
         "orders.Table",
