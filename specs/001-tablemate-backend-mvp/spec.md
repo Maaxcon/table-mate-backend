@@ -1,9 +1,9 @@
 # Feature Specification: Tablemate Backend MVP API
 
-**Feature Branch**: `001-tablemate-backend-mvp`  
-**Created**: 2026-05-07  
-**Updated**: 2026-05-12  
-**Status**: Finalized  
+**Feature Branch**: `001-tablemate-backend-mvp`
+**Created**: 2026-05-07
+**Updated**: 2026-05-12
+**Status**: Finalized
 **Input**: User description: "Tablemate backend MVP with Constitution v2.0.0 alignment for roles, realtime contracts, webhook authority, immutable boundaries, canonical entities, and hot-path indexing."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -229,7 +229,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 | Table status | Table state service | `free <-> reserved <-> occupied` only through backend validation | Clients MAY request; clients MUST NOT set canonical table status directly |
 | Session lifecycle | Session lifecycle service | Open on waiter manual flow or prepaid confirmation; close only on explicit waiter close action | No client-side auto-close or timeout-driven canonical close |
 | Order lifecycle | Order orchestration service | `draft -> submitted -> unpaid -> paid -> settled` with policy checks | Clients cannot mark paid/settled directly |
-| Order item lifecycle | Kitchen workflow service | `pending -> in_progress -> ready -> completed` and void branch by policy | Frontend cannot bypass kitchen policy or set terminal status directly |
+| Order item lifecycle | Kitchen workflow service | `pending -> in_progress -> ready -> served` and void branch by policy | Frontend cannot bypass kitchen policy or set terminal status directly |
 | Kitchen ticket creation | Ticket injection service | Ticket created only from successful paid order transition | No direct client endpoint for ticket injection |
 | Payment status | Payment webhook service | `unpaid -> paid` only after signature-validated provider webhook | Client/staff endpoints cannot confirm payment |
 | Void/refund | Void and refund service | Transactional void/refund with audit trail and correction records | No direct client-side mutation of finalized financial state |

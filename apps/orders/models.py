@@ -23,7 +23,16 @@ class OrderSource(models.TextChoices):
 class OrderStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     SUBMITTED = "submitted", "Submitted"
+    COMPLETED = "completed", "Completed"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class OrderPaymentStatus(models.TextChoices):
+    UNPAID = "unpaid", "Unpaid"
+    AUTHORIZED = "authorized", "Authorized"
     PAID = "paid", "Paid"
+    SETTLED = "settled", "Settled"
+    REFUNDED = "refunded", "Refunded"
     CANCELLED = "cancelled", "Cancelled"
 
 
@@ -163,6 +172,11 @@ class Order(RestaurantScopedModel):
         choices=OrderStatus.choices,
         default=OrderStatus.DRAFT,
     )
+    payment_status = models.CharField(
+        max_length=20,
+        choices=OrderPaymentStatus.choices,
+        default=OrderPaymentStatus.UNPAID,
+    )
     currency = models.CharField(max_length=3)
     total_amount = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     tax_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
@@ -185,6 +199,10 @@ class Order(RestaurantScopedModel):
             models.CheckConstraint(
                 condition=models.Q(status__in=OrderStatus.values),
                 name="orders_order_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(payment_status__in=OrderPaymentStatus.values),
+                name="orders_order_payment_status_valid",
             ),
         ]
 
