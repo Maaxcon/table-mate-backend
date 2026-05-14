@@ -1,11 +1,18 @@
 import os
 from importlib import import_module
 
-ENV = os.getenv("DJANGO_ENV", "local").lower()
-TARGET_MODULE = "core.settings.production" if ENV == "production" else "core.settings.local"
+settings_module = os.getenv("DJANGO_SETTINGS_MODULE", "")
 
-module = import_module(TARGET_MODULE)
+# Only hydrate settings dynamically when this package itself is used
+# as DJANGO_SETTINGS_MODULE (e.g. "core.settings").
+if settings_module in {"", "core.settings"}:
+    env = os.getenv("DJANGO_ENV", "local").lower()
+    target_module = (
+        "core.settings.production" if env == "production" else "core.settings.local"
+    )
 
-for setting_name in dir(module):
-    if setting_name.isupper():
-        globals()[setting_name] = getattr(module, setting_name)
+    module = import_module(target_module)
+
+    for setting_name in dir(module):
+        if setting_name.isupper():
+            globals()[setting_name] = getattr(module, setting_name)

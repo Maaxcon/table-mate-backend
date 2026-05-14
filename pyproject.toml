@@ -33,9 +33,11 @@ python_version = "3.11"
 strict = true
 ignore_missing_imports = true
 plugins = ["mypy_django_plugin.main"]
+explicit_package_bases = true
+namespace_packages = true
 
 [tool.django-stubs]
-django_settings_module = "core.settings"
+django_settings_module = "core.settings.mypy"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
