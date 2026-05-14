@@ -52,38 +52,19 @@ class UserManager(BaseUserManager["User"]):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
 
-        role = Role.objects.filter(code=RoleCode.ADMIN).first()
-        if role is not None:
-            extra_fields.setdefault("role", role)
+        extra_fields.setdefault("role", RoleCode.ADMIN)
 
         return self.create_user(email, password, **extra_fields)
-
-
-class Role(BaseModel):
-    code = models.CharField(max_length=32, unique=True, choices=RoleCode.choices)
-    name = models.CharField(max_length=100, unique=True)
-
-    class Meta:
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(code__in=RoleCode.values),
-                name="authentication_role_code_valid",
-            )
-        ]
-        ordering = ["id"]
-
-    def __str__(self) -> str:
-        return self.name
 
 
 class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
-    role = models.ForeignKey(
-        "authentication.Role",
-        on_delete=models.PROTECT,
-        related_name="users",
+    role = models.CharField(
+        max_length=20,
+        choices=RoleCode.choices,
+        default=RoleCode.CUSTOMER,
     )
     token_version = models.PositiveIntegerField(default=0)
     is_staff = models.BooleanField(default=False)
@@ -95,6 +76,12 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS: ClassVar[list[str]] = []
 
     class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(role__in=RoleCode.values),
+                name="authentication_user_role_valid",
+            )
+        ]
         ordering = ["id"]
 
     def __str__(self) -> str:
