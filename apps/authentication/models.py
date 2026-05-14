@@ -4,7 +4,7 @@ from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 
-from common.models import BaseModel, RestaurantScopedModel
+from common.models import BaseModel
 
 
 class RoleCode(models.TextChoices):
@@ -12,12 +12,6 @@ class RoleCode(models.TextChoices):
     WAITER = "waiter", "Waiter"
     COOK = "cook", "Cook"
     CUSTOMER = "customer", "Customer"
-
-
-class ShiftStatus(models.TextChoices):
-    OFFLINE = "offline", "Offline"
-    ON_SHIFT = "on_shift", "On shift"
-    BREAK = "break", "Break"
 
 
 class UserManager(BaseUserManager["User"]):
@@ -87,32 +81,3 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
 
     def __str__(self) -> str:
         return self.email
-
-
-class Staff(RestaurantScopedModel):
-    user = models.ForeignKey(
-        "authentication.User",
-        on_delete=models.CASCADE,
-        related_name="staff_memberships",
-    )
-    shift_status = models.CharField(
-        max_length=20,
-        choices=ShiftStatus.choices,
-        default=ShiftStatus.OFFLINE,
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "restaurant"],
-                name="authentication_staff_user_restaurant_unique",
-            ),
-            models.CheckConstraint(
-                condition=models.Q(shift_status__in=ShiftStatus.values),
-                name="authentication_staff_shift_status_valid",
-            ),
-        ]
-        ordering = ["id"]
-
-    def __str__(self) -> str:
-        return f"{self.user.email} @ {self.restaurant.name}"

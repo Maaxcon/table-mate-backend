@@ -63,7 +63,9 @@ class VoidReason(BaseModel):
 class Table(RestaurantScopedModel):
     table_number = models.CharField(max_length=64)
     capacity = models.PositiveIntegerField()
-    status = models.CharField(max_length=20, choices=TableStatus.choices, default=TableStatus.FREE)
+    status = models.CharField(
+        max_length=20, choices=TableStatus.choices, default=TableStatus.FREE
+    )
     position_x = models.IntegerField(null=True, blank=True)
     position_y = models.IntegerField(null=True, blank=True)
 
@@ -98,14 +100,16 @@ class Session(RestaurantScopedModel):
         related_name="sessions",
     )
     opened_by = models.ForeignKey(
-        "authentication.Staff",
+        "authentication.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="opened_sessions",
     )
     guest_count = models.PositiveIntegerField()
-    status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.OPEN)
+    status = models.CharField(
+        max_length=20, choices=SessionStatus.choices, default=SessionStatus.OPEN
+    )
     currency = models.CharField(max_length=3)
     final_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     started_at = models.DateTimeField()
@@ -293,4 +297,3 @@ class OrderItem(RestaurantScopedModel):
 
     def __str__(self) -> str:
         return f"Order item {self.public_id}"
-
