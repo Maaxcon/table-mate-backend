@@ -1,13 +1,30 @@
 import os
+from datetime import timedelta
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-change-in-production")
 
-DEBUG = os.getenv("DEBUG", "True") == "True"
+def _require_env(name: str) -> str:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        raise ValueError(f"Required environment variable is missing: {name}")
+    return value
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+SECRET_KEY = _require_env("SECRET_KEY")
+DEBUG = _env_bool("DEBUG", default=False)
+ALLOWED_HOSTS = [
+    host.strip() for host in _require_env("ALLOWED_HOSTS").split(",") if host.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -18,6 +35,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt",
     "corsheaders",
     "channels",
     "apps.authentication",
@@ -41,21 +59,28 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "core.urls"
-
 ASGI_APPLICATION = "core.routing.application"
-
 WSGI_APPLICATION = "core.wsgi.application"
 
-DATABASES = {
-    "default": {
+
+def _database_config_from_url(database_url: str) -> dict[str, str]:
+    parsed = urlparse(database_url)
+    scheme = parsed.scheme.lower()
+
+    if scheme not in {"postgres", "postgresql"}:
+        raise ValueError(f"Unsupported DATABASE_URL scheme: {parsed.scheme}")
+
+    return {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME", "mira"),
-        "USER": os.getenv("DB_USER", "mira_user"),
-        "PASSWORD": os.getenv("DB_PASSWORD", "mira_pass"),
-        "HOST": os.getenv("DB_HOST", "localhost"),
-        "PORT": os.getenv("DB_PORT", "5432"),
+        "NAME": unquote(parsed.path.lstrip("/")),
+        "USER": unquote(parsed.username or ""),
+        "PASSWORD": unquote(parsed.password or ""),
+        "HOST": parsed.hostname or "",
+        "PORT": str(parsed.port or ""),
     }
-}
+
+
+DATABASES = {"default": _database_config_from_url(_require_env("DATABASE_URL"))}
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
@@ -86,6 +111,7 @@ AUTH_USER_MODEL = "authentication.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -93,13 +119,21 @@ REST_FRAMEWORK = {
     ],
 }
 
-CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "True") == "True"
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}
+
+CORS_ALLOW_ALL_ORIGINS = _env_bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 CORS_ALLOWED_ORIGINS = [
     origin for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin
 ]
 
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [_require_env("REDIS_URL")],
+        },
     }
 }

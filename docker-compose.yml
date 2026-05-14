@@ -4,13 +4,18 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_DB: mira
-      POSTGRES_USER: mira_user
-      POSTGRES_PASSWORD: mira_pass
+      POSTGRES_DB: table_mate
+      POSTGRES_USER: table_mate_user
+      POSTGRES_PASSWORD: table_mate_pass
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
 
   web:
     build: .
@@ -19,15 +24,16 @@ services:
       - .:/app
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      DB_HOST: db
-      DB_NAME: mira
-      DB_USER: mira_user
-      DB_PASSWORD: mira_pass
-      DB_PORT: 5432
-      DEBUG: "True"
+      DJANGO_SETTINGS_MODULE: core.settings.local
+      # override localhost → docker service name
+      DATABASE_URL: postgresql://table_mate_user:table_mate_pass@db:5432/table_mate
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - db
+      - redis
 
 volumes:
   postgres_data:

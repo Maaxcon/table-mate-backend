@@ -28,3 +28,6 @@ repos:
           - psycopg2-binary
           - types-requests
           - pydantic
+          - djangorestframework-simplejwt
+          - channels-redis
+          
