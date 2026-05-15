@@ -3,8 +3,7 @@ from importlib import import_module
 
 settings_module = os.getenv("DJANGO_SETTINGS_MODULE", "")
 
-# Only hydrate settings dynamically when this package itself is used
-# as DJANGO_SETTINGS_MODULE (e.g. "core.settings").
+
 if settings_module in {"", "core.settings"}:
     env = os.getenv("DJANGO_ENV", "local").lower()
     target_module = (

@@ -1,7 +1,4 @@
 import os
-
-# Mypy imports Django settings through django-stubs plugin.
-# These defaults are test-only and prevent env-related crashes in CI/hooks.
 os.environ.setdefault("SECRET_KEY", "mypy-secret-key")
 os.environ.setdefault("ALLOWED_HOSTS", "localhost,127.0.0.1")
 os.environ.setdefault(
