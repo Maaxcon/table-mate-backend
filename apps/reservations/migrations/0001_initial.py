@@ -109,9 +109,7 @@ class Migration(migrations.Migration):
                                 models.Func(
                                     models.F("start_at"),
                                     models.F("end_at"),
-                                    models.Value(
-                                        django.contrib.postgres.fields.ranges.RangeBoundary()
-                                    ),
+                                    django.contrib.postgres.fields.ranges.RangeBoundary(),
                                     function="TSTZRANGE",
                                     output_field=django.contrib.postgres.fields.ranges.DateTimeRangeField(),
                                 ),
