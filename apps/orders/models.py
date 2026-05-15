@@ -93,7 +93,7 @@ class Session(RestaurantScopedModel):
         indexes = [
             models.Index(
                 fields=["restaurant", "table"],
-                name="orders_session_restaurant_table_open_idx",
+                name="ord_sess_rest_tbl_open_idx",
                 condition=models.Q(status=SessionStatus.OPEN),
             ),
         ]
@@ -203,7 +203,7 @@ class Ticket(RestaurantScopedModel):
         indexes = [
             models.Index(
                 fields=["restaurant", "status", "injected_at"],
-                name="orders_ticket_restaurant_status_injected_idx",
+                name="ord_tkt_rest_stat_inj_idx",
             ),
         ]
         constraints = [
@@ -270,7 +270,7 @@ class OrderItem(RestaurantScopedModel):
         indexes = [
             models.Index(
                 fields=["restaurant", "status", "menu_item"],
-                name="orders_orderitem_restaurant_status_menu_item_idx",
+                name="ord_item_rest_stat_menu_idx",
             ),
         ]
         constraints = [

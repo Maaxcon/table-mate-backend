@@ -60,7 +60,7 @@ class MenuItem(RestaurantScopedModel):
         indexes = [
             models.Index(
                 fields=["restaurant", "is_available"],
-                name="menu_item_restaurant_available_idx",
+                name="menu_item_rest_avail_idx",
             ),
         ]
         constraints = [

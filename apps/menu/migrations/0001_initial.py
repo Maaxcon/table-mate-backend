@@ -148,7 +148,7 @@ class Migration(migrations.Migration):
             model_name="menuitem",
             index=models.Index(
                 fields=["restaurant", "is_available"],
-                name="menu_item_restaurant_available_idx",
+                name="menu_item_rest_avail_idx",
             ),
         ),
         migrations.AddConstraint(

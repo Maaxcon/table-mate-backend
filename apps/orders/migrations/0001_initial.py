@@ -410,7 +410,7 @@ class Migration(migrations.Migration):
             index=models.Index(
                 condition=models.Q(("status", "open")),
                 fields=["restaurant", "table"],
-                name="orders_session_restaurant_table_open_idx",
+                name="ord_sess_rest_tbl_open_idx",
             ),
         ),
         migrations.AddConstraint(
@@ -470,7 +470,7 @@ class Migration(migrations.Migration):
             model_name="ticket",
             index=models.Index(
                 fields=["restaurant", "status", "injected_at"],
-                name="orders_ticket_restaurant_status_injected_idx",
+                name="ord_tkt_rest_stat_inj_idx",
             ),
         ),
         migrations.AddConstraint(
@@ -486,7 +486,7 @@ class Migration(migrations.Migration):
             model_name="orderitem",
             index=models.Index(
                 fields=["restaurant", "status", "menu_item"],
-                name="orders_orderitem_restaurant_status_menu_item_idx",
+                name="ord_item_rest_stat_menu_idx",
             ),
         ),
         migrations.AddConstraint(
