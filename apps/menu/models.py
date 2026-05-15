@@ -58,13 +58,20 @@ class MenuItem(RestaurantScopedModel):
     class Meta:
         ordering = ["menu_id", "sort_order", "id"]
         indexes = [
-            models.Index(fields=["restaurant", "is_available"], name="menu_item_restaurant_available_idx"),
+            models.Index(
+                fields=["restaurant", "is_available"],
+                name="menu_item_restaurant_available_idx",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["menu", "name"],
                 name="menu_item_menu_name_unique",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["restaurant", "id"],
+                name="menu_menuitem_rest_uniq",
+            ),
         ]
 
     def __str__(self) -> str:

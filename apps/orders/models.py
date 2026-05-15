@@ -168,6 +168,10 @@ class Order(RestaurantScopedModel):
                 condition=models.Q(payment_status__in=OrderPaymentStatus.values),
                 name="orders_order_payment_status_valid",
             ),
+            models.UniqueConstraint(
+                fields=["restaurant", "id"],
+                name="orders_order_rest_uniq",
+            ),
         ]
 
     def __str__(self) -> str:
