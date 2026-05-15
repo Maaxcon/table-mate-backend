@@ -1,4 +1,8 @@
+from django.contrib.postgres.constraints import ExclusionConstraint
+from django.contrib.postgres.fields import DateTimeRangeField, RangeOperators
+from django.contrib.postgres.fields.ranges import RangeBoundary
 from django.db import models
+from django.db.models import F, Func, Q, Value
 
 from apps.authentication.models import RoleCode
 from common.models import RestaurantScopedModel
@@ -28,7 +32,8 @@ class Reservation(RestaurantScopedModel):
         related_name="reservations",
     )
     guest_count = models.PositiveIntegerField()
-    reserved_for = models.DateTimeField()
+    start_at = models.DateTimeField()
+    end_at = models.DateTimeField()
     status = models.CharField(
         max_length=20,
         choices=ReservationStatus.choices,
@@ -37,12 +42,33 @@ class Reservation(RestaurantScopedModel):
     notes = models.TextField(null=True, blank=True)
 
     class Meta:
-        ordering = ["reserved_for", "id"]
+        ordering = ["start_at", "id"]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(status__in=ReservationStatus.values),
+                condition=Q(status__in=ReservationStatus.values),
                 name="reservations_reservation_status_valid",
-            )
+            ),
+            models.CheckConstraint(
+                condition=Q(end_at__gt=F("start_at")),
+                name="reservations_reservation_end_after_start",
+            ),
+            ExclusionConstraint(
+                name="reservations_no_overlap_per_table",
+                expressions=[
+                    (
+                        Func(
+                            F("start_at"),
+                            F("end_at"),
+                            Value(RangeBoundary()),
+                            function="TSTZRANGE",
+                            output_field=DateTimeRangeField(),
+                        ),
+                        RangeOperators.OVERLAPS,
+                    ),
+                    ("table", RangeOperators.EQUAL),
+                ],
+                condition=Q(status=ReservationStatus.CONFIRMED),
+            ),
         ]
 
     def __str__(self) -> str:
