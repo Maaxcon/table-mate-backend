@@ -2,10 +2,15 @@ from django.contrib.postgres.constraints import ExclusionConstraint
 from django.contrib.postgres.fields import DateTimeRangeField, RangeOperators
 from django.contrib.postgres.fields.ranges import RangeBoundary
 from django.db import models
-from django.db.models import F, Func, Q, Value
+from django.db.models import F, Func, Q
 
 from apps.authentication.models import RoleCode
 from common.models import RestaurantScopedModel
+
+
+class TsTzRange(Func):
+    function = "TSTZRANGE"
+    output_field = DateTimeRangeField()
 
 
 class ReservationStatus(models.TextChoices):
@@ -56,12 +61,10 @@ class Reservation(RestaurantScopedModel):
                 name="reservations_no_overlap_per_table",
                 expressions=[
                     (
-                        Func(
+                        TsTzRange(
                             F("start_at"),
                             F("end_at"),
-                            Value(RangeBoundary()),
-                            function="TSTZRANGE",
-                            output_field=DateTimeRangeField(),
+                            RangeBoundary(),
                         ),
                         RangeOperators.OVERLAPS,
                     ),
