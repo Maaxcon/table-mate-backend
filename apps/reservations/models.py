@@ -21,7 +21,7 @@ class Reservation(RestaurantScopedModel):
         limit_choices_to={"role": RoleCode.CUSTOMER},
     )
     table = models.ForeignKey(
-        "orders.Table",
+        "restaurants.Table",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
