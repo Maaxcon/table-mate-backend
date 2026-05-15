@@ -83,6 +83,7 @@ class Session(RestaurantScopedModel):
         max_length=20, choices=SessionStatus.choices, default=SessionStatus.OPEN
     )
     currency = models.CharField(max_length=3)
+    running_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     final_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     started_at = models.DateTimeField()
     closed_at = models.DateTimeField(null=True, blank=True)
