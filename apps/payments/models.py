@@ -15,14 +15,16 @@ class PaymentStatus(models.TextChoices):
 class Payment(RestaurantScopedModel):
     order = models.ForeignKey(
         "orders.Order",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="payments",
     )
     provider = models.CharField(max_length=64)
     provider_transaction_id = models.CharField(max_length=255, unique=True)
     amount = models.DecimalField(max_digits=14, decimal_places=4)
     currency = models.CharField(max_length=3)
-    status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
+    status = models.CharField(
+        max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING
+    )
     raw_payload = models.JSONField(null=True, blank=True)
 
     class Meta:
