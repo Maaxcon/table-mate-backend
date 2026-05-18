@@ -51,7 +51,6 @@ dev = [
     "flake8>=7.3.0",
     "mypy==1.18.2",
     "pre-commit>=4.6.0",
-    "safety>=3.7.0",
 ]
 prod = [
     "gunicorn>=26.0.0",

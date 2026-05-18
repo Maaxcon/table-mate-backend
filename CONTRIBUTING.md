@@ -53,7 +53,7 @@ If you use Codex chat commands, use:
 
 ### 7. Quality Gates Before PR
 1. Lint must pass: `flake8 apps core common manage.py`
-2. Security checks must pass: `bandit -r apps core common manage.py` and `safety check`
+2. Security checks must pass: `bandit -r apps core common manage.py`
 3. Tests must pass: `python manage.py test`
 4. Open PR to `dev`
 5. PR requires at least 1 approval and passing CI

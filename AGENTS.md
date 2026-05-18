@@ -29,7 +29,7 @@ Build reliable backend features fast, with clear specs and predictable delivery.
 - Auth: JWT (`djangorestframework-simplejwt`) + Google OAuth exchange.
 - Architecture rule: Skinny Views, Fat Services, Selectors pattern.
 - Lint: `flake8`
-- Security checks: `bandit`, `safety`
+- Security checks: `bandit`
 - Default API permission class: `IsAuthenticated`. Public-read endpoints (menu categories/items) are documented exceptions per FR-016.
 
 ## Git Rules

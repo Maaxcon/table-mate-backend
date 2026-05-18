@@ -23,7 +23,7 @@ uv sync --all-groups
 ```
 
 **2. Install Git Hooks**
-Required for linting and safety checks before committing:
+Required for linting and security checks before committing:
 
 ```bash
 uv run pre-commit install

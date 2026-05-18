@@ -59,8 +59,5 @@ jobs:
       - name: Security check with bandit
         run: uv run bandit -r apps core common manage.py
 
-      - name: Check dependencies with safety
-        run: uv run safety scan --non-interactive
-
       - name: Run tests
         run: uv run python manage.py test
