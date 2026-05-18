@@ -12,10 +12,16 @@ if env.bool("DJANGO_READ_DOT_ENV_FILE", default=True):
 
 # nosec B105: explicit local-only fallback secret.
 # Production overrides are required.
-LOCAL_DEV_SECRET_KEY = "django-insecure-local-dev-key-not-for-production"  # nosec B105
+LOCAL_DEV_SECRET_KEY = (
+    "django-insecure-local-dev-key-not-for-"  # nosec B105
+    "production"
+)
 SECRET_KEY = env.str("SECRET_KEY", default=LOCAL_DEV_SECRET_KEY)
 DEBUG = env.bool("DEBUG", default=False)
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+ALLOWED_HOSTS = env.list(
+    "ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1"],
+)
 
 INSTALLED_APPS = [
     "daphne",
@@ -58,7 +64,8 @@ DATABASES = {
     "default": env.db(
         "DATABASE_URL",
         default=(
-            "postgresql://table_mate_user:table_mate_pass@localhost:5432/table_mate"
+            "postgresql://table_mate_user:table_mate_pass@"
+            "localhost:5432/table_mate"
         ),
     ),
 }
@@ -116,7 +123,9 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [env.str("REDIS_URL", default="redis://localhost:6379/0")],
+            "hosts": [
+                env.str("REDIS_URL", default="redis://localhost:6379/0"),
+            ],
         },
     }
 }
