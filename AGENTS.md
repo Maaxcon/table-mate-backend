@@ -34,7 +34,15 @@ Build reliable backend features fast, with clear specs and predictable delivery.
 
 ## Git Rules
 - Base branch: `dev`
-- Work branches: `feature/*`, `fix/*`, `chore/*`
+- Work branches must use scope prefixes:
+- `foundation/*`
+- `auth/*`
+- `menu/*`
+- `reservations/*`
+- `cart/*`
+- `staff-ops/*`
+- `payment/*`
+- `polish/*`
 - If a feature branch already exists for the same scope, continue work there (do not create duplicate branch lines).
 - Use Conventional Commits: `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`
 - Open PR to `dev` with passing CI.

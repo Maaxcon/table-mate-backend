@@ -12,9 +12,16 @@
 - CLI mode: verify command access with `uvx --from git+https://github.com/github/spec-kit.git specify --version`
 
 ### 3. Create a Working Branch
-1. `git checkout -b feature/<short-name>`
-2. For bugfixes use `fix/<short-name>`
-3. For maintenance/docs use `chore/<short-name>`
+1. Use one of the approved scope prefixes:
+- `foundation/<short-name>`
+- `auth/<short-name>`
+- `menu/<short-name>`
+- `reservations/<short-name>`
+- `cart/<short-name>`
+- `staff-ops/<short-name>`
+- `payment/<short-name>`
+- `polish/<short-name>`
+2. Example: `git checkout -b foundation/backend-settings-fix`
 
 ### 4. Feature Delivery Flow (Mandatory)
 1. `speckit-specify "feature description"`
