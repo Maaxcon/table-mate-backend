@@ -2,30 +2,19 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-import dj_database_url
+import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+env = environ.Env()
 
-def _require_env(name: str) -> str:
-    value = os.getenv(name)
-    if value is None or value.strip() == "":
-        raise ValueError(f"Required environment variable is missing: {name}")
-    return value
+if env.bool("DJANGO_READ_DOT_ENV_FILE", default=True):
+    environ.Env.read_env(BASE_DIR / ".env")
 
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-SECRET_KEY = _require_env("SECRET_KEY")
-DEBUG = _env_bool("DEBUG", default=False)
-ALLOWED_HOSTS = [
-    host.strip() for host in _require_env("ALLOWED_HOSTS").split(",") if host.strip()
-]
+LOCAL_DEV_SECRET_KEY = "django-insecure-local-dev-key-not-for-production"
+SECRET_KEY = env.str("SECRET_KEY", default=LOCAL_DEV_SECRET_KEY)
+DEBUG = env.bool("DEBUG", default=False)
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -64,8 +53,12 @@ ASGI_APPLICATION = "core.routing.application"
 WSGI_APPLICATION = "core.wsgi.application"
 
 DATABASES = {
-    "default": dj_database_url.parse(_require_env("DATABASE_URL"), conn_max_age=60),
+    "default": env.db(
+        "DATABASE_URL",
+        default="postgresql://table_mate_user:table_mate_pass@localhost:5432/table_mate",
+    ),
 }
+DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
@@ -109,16 +102,17 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
-CORS_ALLOW_ALL_ORIGINS = _env_bool("CORS_ALLOW_ALL_ORIGINS", default=False)
-CORS_ALLOWED_ORIGINS = [
-    origin for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin
-]
+CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS",
+    default=["http://localhost:3000", "http://127.0.0.1:3000"],
+)
 
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [_require_env("REDIS_URL")],
+            "hosts": [env.str("REDIS_URL", default="redis://localhost:6379/0")],
         },
     }
 }

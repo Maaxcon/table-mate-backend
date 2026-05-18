@@ -5,11 +5,10 @@ dependencies = [
     "django>=5.0",
     "djangorestframework",
     "djangorestframework-simplejwt",
-    "dj-database-url",
+    "django-environ",
     "google-auth",
     "django-cors-headers",
     "psycopg2-binary",
-    "python-dotenv",
     "channels",
     "channels-redis",
     "daphne",
@@ -38,7 +37,7 @@ explicit_package_bases = true
 namespace_packages = true
 
 [tool.django-stubs]
-django_settings_module = "core.settings.mypy"
+django_settings_module = "core.settings.local"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
