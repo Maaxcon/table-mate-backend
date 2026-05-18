@@ -58,7 +58,7 @@ uv run python manage.py runserver
 **Run Tests**
 
 ```bash
-uv run pytest
+uv run python manage.py test
 
 ```
 
