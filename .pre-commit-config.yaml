@@ -18,8 +18,13 @@ repos:
     rev: v1.9.0
     hooks:
       - id: mypy
-        additional_dependencies: [
-            "django-stubs",
-            "types-requests",
-            "pydantic"
-        ]
+        additional_dependencies:
+          - django>=5.0
+          - django-stubs
+          - djangorestframework
+          - django-cors-headers
+          - channels
+          - drf-spectacular
+          - psycopg2-binary
+          - types-requests
+          - pydantic

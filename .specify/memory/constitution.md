@@ -79,7 +79,7 @@ The following entities are the source of truth across all surfaces:
   (`unpaid`, `paid`, `settled`), and `OrderItem[]`.
 - `OrderItem`: `id`, menu item reference, quantity, modifier text, guest slot
   index, lifecycle status (`pending`, `in_progress`, `ready`, `voided`,
-  `completed`).
+  `served`).
 - `Ticket`: kitchen-facing projection of an order, created by backend injection
   into the kitchen queue.
 - `Session`: one table occupancy window; opens on manual order start or prepaid
