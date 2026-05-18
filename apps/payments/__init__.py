@@ -1,1 +1,1 @@
-
+"""Payments app package."""
