@@ -12,9 +12,16 @@
 - CLI mode: verify command access with `uvx --from git+https://github.com/github/spec-kit.git specify --version`
 
 ### 3. Create a Working Branch
-1. `git checkout -b feature/<short-name>`
-2. For bugfixes use `fix/<short-name>`
-3. For maintenance/docs use `chore/<short-name>`
+1. Use one of the approved scope prefixes:
+- `foundation/<short-name>`
+- `auth/<short-name>`
+- `menu/<short-name>`
+- `reservations/<short-name>`
+- `cart/<short-name>`
+- `staff-ops/<short-name>`
+- `payment/<short-name>`
+- `polish/<short-name>`
+2. Example: `git checkout -b foundation/backend-settings-fix`
 
 ### 4. Feature Delivery Flow (Mandatory)
 1. `speckit-specify "feature description"`
@@ -45,8 +52,8 @@ If you use Codex chat commands, use:
 - Tests and migrations when applicable
 
 ### 7. Quality Gates Before PR
-1. Lint must pass: `flake8 apps core common manage.py`
-2. Security checks must pass: `bandit -r apps core common manage.py` and `safety check`
+1. Lint must pass: `ruff check apps core common manage.py`
+2. Security checks must pass: `bandit -r apps core common manage.py`
 3. Tests must pass: `python manage.py test`
 4. Open PR to `dev`
 5. PR requires at least 1 approval and passing CI

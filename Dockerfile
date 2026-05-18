@@ -13,6 +13,7 @@ COPY . .
 RUN uv sync --frozen --no-dev --group prod
 
 ENV PATH="/app/.venv/bin:$PATH"
+ENV DJANGO_SETTINGS_MODULE="core.settings.production"
 
 EXPOSE 8000
 

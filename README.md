@@ -23,7 +23,7 @@ uv sync --all-groups
 ```
 
 **2. Install Git Hooks**
-Required for linting and safety checks before committing:
+Required for linting and security checks before committing:
 
 ```bash
 uv run pre-commit install
@@ -58,7 +58,7 @@ uv run python manage.py runserver
 **Run Tests**
 
 ```bash
-uv run pytest
+uv run python manage.py test
 
 ```
 

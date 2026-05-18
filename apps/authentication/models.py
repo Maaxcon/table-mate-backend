@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
@@ -21,7 +21,7 @@ class UserManager(BaseUserManager["User"]):
         self,
         email: str,
         password: str | None = None,
-        **extra_fields: object,
+        **extra_fields: Any,
     ) -> "User":
         if not email:
             raise ValueError("Email must be set")
@@ -35,7 +35,7 @@ class UserManager(BaseUserManager["User"]):
         self,
         email: str,
         password: str,
-        **extra_fields: object,
+        **extra_fields: Any,
     ) -> "User":
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
