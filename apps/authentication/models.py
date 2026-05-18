@@ -6,6 +6,7 @@ from django.db import models
 
 from common.models import BaseModel
 
+
 class RoleCode(models.TextChoices):
     ADMIN = "admin", "Admin"
     WAITER = "waiter", "Waiter"

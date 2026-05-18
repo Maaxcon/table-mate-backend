@@ -10,7 +10,9 @@ env = environ.Env()
 if env.bool("DJANGO_READ_DOT_ENV_FILE", default=True):
     environ.Env.read_env(BASE_DIR / ".env")
 
-LOCAL_DEV_SECRET_KEY = "django-insecure-local-dev-key-not-for-production"  # nosec B105
+# nosec B105: explicit local-only fallback secret.
+# Production overrides are required.
+LOCAL_DEV_SECRET_KEY = "django-insecure-local-dev-key-not-for-production"
 SECRET_KEY = env.str("SECRET_KEY", default=LOCAL_DEV_SECRET_KEY)
 DEBUG = env.bool("DEBUG", default=False)
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
@@ -55,7 +57,9 @@ WSGI_APPLICATION = "core.wsgi.application"
 DATABASES = {
     "default": env.db(
         "DATABASE_URL",
-        default="postgresql://table_mate_user:table_mate_pass@localhost:5432/table_mate",
+        default=(
+            "postgresql://table_mate_user:table_mate_pass@localhost:5432/table_mate"
+        ),
     ),
 }
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)
