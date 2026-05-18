@@ -50,8 +50,8 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Lint with flake8
-        run: uv run flake8 apps core common manage.py
+      - name: Lint with ruff
+        run: uv run ruff check apps core common manage.py
 
       - name: Type check with mypy
         run: uv run mypy apps core common manage.py

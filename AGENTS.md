@@ -28,7 +28,7 @@ Build reliable backend features fast, with clear specs and predictable delivery.
 - Stack: Python 3.12, Django 5+, DRF, PostgreSQL, Redis, Channels.
 - Auth: JWT (`djangorestframework-simplejwt`) + Google OAuth exchange.
 - Architecture rule: Skinny Views, Fat Services, Selectors pattern.
-- Lint: `flake8`
+- Lint: `ruff`
 - Security checks: `bandit`
 - Default API permission class: `IsAuthenticated`. Public-read endpoints (menu categories/items) are documented exceptions per FR-016.
 
