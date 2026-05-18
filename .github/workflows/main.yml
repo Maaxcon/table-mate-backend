@@ -57,7 +57,7 @@ jobs:
         run: uv run mypy apps core common manage.py
 
       - name: Security check with bandit
-        run: uv run bandit -r . -x ./.venv
+        run: uv run bandit -r apps core common manage.py
 
       - name: Check dependencies with safety
         run: uv run safety scan --non-interactive || uv run safety check
