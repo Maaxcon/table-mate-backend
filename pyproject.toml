@@ -52,5 +52,9 @@ prod = [
     "gunicorn>=26.0.0",
 ]
 
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "core.settings"
+testpaths = ["tests"]
+
 [tool.setuptools]
 packages = ["core", "apps", "common"]

@@ -22,9 +22,11 @@ repos:
           - django>=5.0
           - django-stubs
           - djangorestframework
+          - djangorestframework-stubs
           - django-cors-headers
           - channels
           - drf-spectacular
           - psycopg2-binary
+          - pytest
           - types-requests
           - pydantic
