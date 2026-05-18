@@ -4,7 +4,7 @@ from apps.authentication.models import User
 
 
 @admin.register(User)
-class CustomUserAdmin(admin.ModelAdmin):
+class CustomUserAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = (
         'id',
         'email',
