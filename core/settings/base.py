@@ -1,7 +1,8 @@
 import os
 from datetime import timedelta
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -62,25 +63,9 @@ ROOT_URLCONF = "core.urls"
 ASGI_APPLICATION = "core.routing.application"
 WSGI_APPLICATION = "core.wsgi.application"
 
-
-def _database_config_from_url(database_url: str) -> dict[str, str]:
-    parsed = urlparse(database_url)
-    scheme = parsed.scheme.lower()
-
-    if scheme not in {"postgres", "postgresql"}:
-        raise ValueError(f"Unsupported DATABASE_URL scheme: {parsed.scheme}")
-
-    return {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": unquote(parsed.path.lstrip("/")),
-        "USER": unquote(parsed.username or ""),
-        "PASSWORD": unquote(parsed.password or ""),
-        "HOST": parsed.hostname or "",
-        "PORT": str(parsed.port or ""),
-    }
-
-
-DATABASES = {"default": _database_config_from_url(_require_env("DATABASE_URL"))}
+DATABASES = {
+    "default": dj_database_url.parse(_require_env("DATABASE_URL"), conn_max_age=60),
+}
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
