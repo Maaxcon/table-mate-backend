@@ -176,6 +176,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-050**: Void reason master data MUST be seeded with exactly: `mispick`, `guest_changed_mind`, `quality_issue`, `out_of_stock`.
 - **FR-051**: `Order` and `OrderItem` MUST include tax/discount/tip columns with default `0`, including per-line tax support for receipt-grade breakdowns.
 - **FR-052**: Foreign-key `on_delete` policies MUST be explicit; minimum protections: `OrderItem.menu_item -> PROTECT` and all `*.restaurant -> PROTECT`.
+- **FR-053**: Dependency manifest MUST include `djangorestframework-simplejwt`, Google token verification dependency, and `drf-spectacular`; for this repository, `pyproject.toml`/`uv.lock` are the authoritative equivalent of `requirements/base.txt`.
 
 ### Canonical Contract Impact
 

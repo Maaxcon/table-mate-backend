@@ -23,8 +23,11 @@ repos:
           - django-stubs
           - djangorestframework
           - djangorestframework-stubs
+          - djangorestframework-simplejwt
+          - google-auth
           - django-cors-headers
           - channels
+          - channels-redis
           - drf-spectacular
           - psycopg2-binary
           - pytest

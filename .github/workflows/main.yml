@@ -7,6 +7,35 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: table_mate_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d table_mate_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SECRET_KEY: ci-test-secret-key
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/table_mate_test
+      REDIS_URL: redis://localhost:6379/0
 
     steps:
       - uses: actions/checkout@v4
@@ -21,14 +50,14 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Lint with flake8
-        run: uv run flake8 . --exclude=.venv --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Lint with ruff
+        run: uv run ruff check apps core common manage.py
+
+      - name: Type check with mypy
+        run: uv run mypy apps core common manage.py
 
       - name: Security check with bandit
-        run: uv run bandit -r . -x ./.venv
-
-      - name: Check dependencies with safety
-        run: uv run safety scan --non-interactive || uv run safety check
+        run: uv run bandit -r apps core common manage.py
 
       - name: Run tests
         run: uv run python manage.py test

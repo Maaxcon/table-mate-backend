@@ -16,7 +16,7 @@
 
 - [ ] T001 Create settings package split by adding `core/settings/__init__.py`, `core/settings/base.py`, `core/settings/local.py`, `core/settings/production.py` and move logic from `core/settings.py`; set `AUTH_USER_MODEL` to the actual custom user model path (`<app_label>.User`, for example `authentication.User`) in `core/settings/base.py` before any `manage.py migrate` run.
 - [ ] T002 [P] Add environment template updates in `.env.example` for `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_HOSTS`, `PAYMENT_WEBHOOK_SECRET`.
-- [ ] T003 [P] Update dependency files `requirements/base.txt`, `requirements/dev.txt`, `requirements/prod.txt` with `djangorestframework-simplejwt`, Google token verification dependency, Redis/Channels runtime deps, and webhook signature helpers.
+- [ ] T003 [P] Update dependency manifest with `djangorestframework-simplejwt`, Google token verification dependency, Redis/Channels runtime deps, and webhook signature helpers (`pyproject.toml` + `uv.lock` in this repository; `requirements/*` only if used).
 - [ ] T004 Create missing app skeleton `apps/users/` with `apps.py`, `models.py`, `selectors.py`, and init files.
 - [ ] T004A Add bootstrap custom user model in the app that owns `User` sufficient for initial migrations, and verify configured `AUTH_USER_MODEL` resolves before first migration.
 - [ ] T004B Create `apps/payments/` skeleton with `apps.py`, `models.py`, `services.py`, `api/v1/{views.py,urls.py}`, and init files for provider webhook boundary.

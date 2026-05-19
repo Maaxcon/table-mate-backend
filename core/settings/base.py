@@ -1,15 +1,30 @@
-import os
+from datetime import timedelta
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+import environ
 
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-change-in-production")
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-DEBUG = os.getenv("DEBUG", "True") == "True"
+env = environ.Env()
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
+if env.bool("DJANGO_READ_DOT_ENV_FILE", default=True):
+    environ.Env.read_env(BASE_DIR / ".env")
+
+# nosec B105: explicit local-only fallback secret.
+# Production overrides are required.
+LOCAL_DEV_SECRET_KEY = (
+    "django-insecure-local-dev-key-not-for-"  # nosec B105
+    "production"
+)
+SECRET_KEY = env.str("SECRET_KEY", default=LOCAL_DEV_SECRET_KEY)
+DEBUG = env.bool("DEBUG", default=False)
+ALLOWED_HOSTS = env.list(
+    "ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1"],
+)
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -18,6 +33,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt",
     "corsheaders",
     "channels",
     "apps.authentication",
@@ -41,21 +57,19 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "core.urls"
-
 ASGI_APPLICATION = "core.routing.application"
-
 WSGI_APPLICATION = "core.wsgi.application"
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME", "mira"),
-        "USER": os.getenv("DB_USER", "mira_user"),
-        "PASSWORD": os.getenv("DB_PASSWORD", "mira_pass"),
-        "HOST": os.getenv("DB_HOST", "localhost"),
-        "PORT": os.getenv("DB_PORT", "5432"),
-    }
+    "default": env.db(
+        "DATABASE_URL",
+        default=(
+            "postgresql://table_mate_user:table_mate_pass@"
+            "localhost:5432/table_mate"
+        ),
+    ),
 }
+DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
@@ -86,6 +100,7 @@ AUTH_USER_MODEL = "authentication.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -93,13 +108,24 @@ REST_FRAMEWORK = {
     ],
 }
 
-CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "True") == "True"
-CORS_ALLOWED_ORIGINS = [
-    origin for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin
-]
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}
+
+CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS",
+    default=["http://localhost:3000", "http://127.0.0.1:3000"],
+)
 
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [
+                env.str("REDIS_URL", default="redis://localhost:6379/0"),
+            ],
+        },
     }
 }

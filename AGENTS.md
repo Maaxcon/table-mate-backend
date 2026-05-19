@@ -28,13 +28,21 @@ Build reliable backend features fast, with clear specs and predictable delivery.
 - Stack: Python 3.12, Django 5+, DRF, PostgreSQL, Redis, Channels.
 - Auth: JWT (`djangorestframework-simplejwt`) + Google OAuth exchange.
 - Architecture rule: Skinny Views, Fat Services, Selectors pattern.
-- Lint: `flake8`
-- Security checks: `bandit`, `safety`
+- Lint: `ruff`
+- Security checks: `bandit`
 - Default API permission class: `IsAuthenticated`. Public-read endpoints (menu categories/items) are documented exceptions per FR-016.
 
 ## Git Rules
 - Base branch: `dev`
-- Work branches: `feature/*`, `fix/*`, `chore/*`
+- Work branches must use scope prefixes:
+- `foundation/*`
+- `auth/*`
+- `menu/*`
+- `reservations/*`
+- `cart/*`
+- `staff-ops/*`
+- `payment/*`
+- `polish/*`
 - If a feature branch already exists for the same scope, continue work there (do not create duplicate branch lines).
 - Use Conventional Commits: `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`
 - Open PR to `dev` with passing CI.
