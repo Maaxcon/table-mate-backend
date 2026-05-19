@@ -64,9 +64,7 @@ WSGI_APPLICATION = "core.wsgi.application"
 DATABASES = {
     "default": env.db(
         "DATABASE_URL",
-        default=(
-            "postgresql://table_mate_user:table_mate_pass@" "localhost:5432/table_mate"
-        ),
+        default=("postgresql://table_mate_user:table_mate_pass@" "localhost:5432/table_mate"),
     ),
 }
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)
@@ -129,4 +127,11 @@ CHANNEL_LAYERS = {
             ],
         },
     }
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Table Mate API",
+    "DESCRIPTION": "Table Mate backend API",
+    "VERSION": "0.1.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }
