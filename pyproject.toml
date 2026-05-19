@@ -52,9 +52,6 @@ prod = [
     "gunicorn>=26.0.0",
 ]
 
-[tool.bandit]
-exclude_dirs = ["tests"]
-
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "core.settings"
 testpaths = ["tests"]
