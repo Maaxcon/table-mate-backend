@@ -25,7 +25,6 @@ class PaymentSerializer(serializers.ModelSerializer[Payment]):
             "amount",
             "currency",
             "status",
-            "raw_payload",
             "created_at",
             "updated_at",
         ]
