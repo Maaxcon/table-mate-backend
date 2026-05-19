@@ -6,7 +6,7 @@ from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
 from apps.authentication.models import RoleCode
-from common.permissions import IsAdmin, IsCook, IsCustomer, IsWaiter
+from apps.authentication.permissions import IsAdmin, IsCook, IsCustomer, IsWaiter
 
 
 @pytest.fixture
