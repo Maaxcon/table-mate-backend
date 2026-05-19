@@ -58,7 +58,7 @@ prod = [
 ]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "core.settings"
+DJANGO_SETTINGS_MODULE = "core.settings.local"
 testpaths = ["tests"]
 
 [tool.setuptools]
