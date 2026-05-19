@@ -32,7 +32,7 @@ indent-style = "space"
 python_version = "3.11"
 strict = true
 ignore_missing_imports = true
-plugins = ["mypy_django_plugin.main"]
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
 explicit_package_bases = true
 namespace_packages = true
 
