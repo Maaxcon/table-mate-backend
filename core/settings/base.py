@@ -64,8 +64,7 @@ DATABASES = {
     "default": env.db(
         "DATABASE_URL",
         default=(
-            "postgresql://table_mate_user:table_mate_pass@"
-            "localhost:5432/table_mate"
+            "postgresql://table_mate_user:table_mate_pass@" "localhost:5432/table_mate"
         ),
     ),
 }
@@ -106,6 +105,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "EXCEPTION_HANDLER": "common.api.exception_handler.custom_api_exception_handler",
 }
 
 SIMPLE_JWT = {
