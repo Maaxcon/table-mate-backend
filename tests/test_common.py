@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from common.api.exception_handler import custom_exception_handler
-from common.api.exceptions import DomainAPIException, error_payload
+from common.api.exceptions import DomainAPIException
 from common.exceptions import DomainError, ReservationConflictError
 
 
@@ -46,20 +46,6 @@ class TestDomainAPIException:
     def test_detail_from_reservation_conflict(self) -> None:
         exc = DomainAPIException(ReservationConflictError())
         assert exc.detail == "Reservation conflicts with an existing booking."
-
-
-class TestErrorPayload:
-    def test_minimal(self) -> None:
-        result = error_payload("something broke", "err_code")
-        assert result == {"detail": "something broke", "code": "err_code"}
-
-    def test_with_status(self) -> None:
-        result = error_payload("not found", "not_found", status_code=404)
-        assert result == {
-            "detail": "not found",
-            "code": "not_found",
-            "status": 404,
-        }
 
 
 class TestCustomExceptionHandler:
