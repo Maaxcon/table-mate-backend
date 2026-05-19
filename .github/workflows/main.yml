@@ -58,6 +58,17 @@ jobs:
 
       - name: Security check with bandit
         run: uv run bandit -r apps core common manage.py
+
+      - name: Safety scan
+        env:
+          SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
+        run: |
+          if [ -n "$SAFETY_API_KEY" ]; then
+            uv run safety scan --non-interactive
+          else
+            echo "SAFETY_API_KEY not set — skipping safety scan"
+          fi
+
       - name: Schema drift gate
         run: |
           uv run python manage.py spectacular --validate --file /tmp/schema.yaml
