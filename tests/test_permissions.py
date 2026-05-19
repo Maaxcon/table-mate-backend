@@ -2,7 +2,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from rest_framework.request import Request
+from django.http import HttpRequest
 from rest_framework.test import APIRequestFactory
 
 from apps.authentication.models import RoleCode
@@ -14,7 +14,7 @@ def dummy_view() -> Any:
     return MagicMock()
 
 
-def _build_request(user_mock: MagicMock) -> Request:
+def _build_request(user_mock: MagicMock) -> HttpRequest:
     request = APIRequestFactory().get("/")
     request.user = user_mock
     return request
@@ -27,11 +27,11 @@ def _mock_user(role: str | None = None, is_authenticated: bool = True) -> Any:
     return user
 
 
-def _assert_granted(perm: Any, request: Request, view: Any) -> None:
+def _assert_granted(perm: Any, request: HttpRequest, view: Any) -> None:
     assert perm.has_permission(request, view) is True
 
 
-def _assert_denied(perm: Any, request: Request, view: Any) -> None:
+def _assert_denied(perm: Any, request: HttpRequest, view: Any) -> None:
     assert perm.has_permission(request, view) is False
 
 
@@ -56,6 +56,11 @@ class TestIsAdmin:
         user = _mock_user(role=RoleCode.CUSTOMER, is_authenticated=False)
         _assert_denied(IsAdmin(), _build_request(user), dummy_view)
 
+    def test_denied_when_user_is_none(self, dummy_view: Any) -> None:
+        request = APIRequestFactory().get("/")
+        request.user = None  # type: ignore[assignment]
+        _assert_denied(IsAdmin(), request, dummy_view)
+
 
 class TestIsWaiter:
     def test_granted_for_waiter(self, dummy_view: Any) -> None:
@@ -77,6 +82,11 @@ class TestIsWaiter:
     def test_denied_for_unauthenticated(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.CUSTOMER, is_authenticated=False)
         _assert_denied(IsWaiter(), _build_request(user), dummy_view)
+
+    def test_denied_when_user_is_none(self, dummy_view: Any) -> None:
+        request = APIRequestFactory().get("/")
+        request.user = None  # type: ignore[assignment]
+        _assert_denied(IsWaiter(), request, dummy_view)
 
 
 class TestIsCook:
@@ -100,6 +110,11 @@ class TestIsCook:
         user = _mock_user(role=RoleCode.CUSTOMER, is_authenticated=False)
         _assert_denied(IsCook(), _build_request(user), dummy_view)
 
+    def test_denied_when_user_is_none(self, dummy_view: Any) -> None:
+        request = APIRequestFactory().get("/")
+        request.user = None  # type: ignore[assignment]
+        _assert_denied(IsCook(), request, dummy_view)
+
 
 class TestIsCustomer:
     def test_granted_for_customer(self, dummy_view: Any) -> None:
@@ -121,3 +136,8 @@ class TestIsCustomer:
     def test_denied_for_unauthenticated(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.CUSTOMER, is_authenticated=False)
         _assert_denied(IsCustomer(), _build_request(user), dummy_view)
+
+    def test_denied_when_user_is_none(self, dummy_view: Any) -> None:
+        request = APIRequestFactory().get("/")
+        request.user = None  # type: ignore[assignment]
+        _assert_denied(IsCustomer(), request, dummy_view)
