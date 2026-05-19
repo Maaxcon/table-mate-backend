@@ -21,15 +21,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/User'
           description: ''
-  /api/auth/users/{id}/:
+  /api/auth/users/{public_id}/:
     get:
       operationId: auth_users_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this user.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Authentication
@@ -60,15 +60,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Layout'
           description: ''
-  /api/editor/layouts/{id}/:
+  /api/editor/layouts/{public_id}/:
     get:
       operationId: editor_layouts_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this layout.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Editor
@@ -99,15 +99,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/MenuCategory'
           description: ''
-  /api/menu/menu-categories/{id}/:
+  /api/menu/menu-categories/{public_id}/:
     get:
       operationId: menu_menu_categories_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this menu category.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Menu
@@ -138,15 +138,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/MenuItem'
           description: ''
-  /api/menu/menu-items/{id}/:
+  /api/menu/menu-items/{public_id}/:
     get:
       operationId: menu_menu_items_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this menu item.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Menu
@@ -177,15 +177,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Menu'
           description: ''
-  /api/menu/menus/{id}/:
+  /api/menu/menus/{public_id}/:
     get:
       operationId: menu_menus_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this menu.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Menu
@@ -216,15 +216,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/OrderItem'
           description: ''
-  /api/orders/order-items/{id}/:
+  /api/orders/order-items/{public_id}/:
     get:
       operationId: orders_order_items_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this order item.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Orders
@@ -255,15 +255,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Order'
           description: ''
-  /api/orders/orders/{id}/:
+  /api/orders/orders/{public_id}/:
     get:
       operationId: orders_orders_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this order.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Orders
@@ -294,15 +294,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Session'
           description: ''
-  /api/orders/sessions/{id}/:
+  /api/orders/sessions/{public_id}/:
     get:
       operationId: orders_sessions_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this session.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Orders
@@ -333,15 +333,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Ticket'
           description: ''
-  /api/orders/tickets/{id}/:
+  /api/orders/tickets/{public_id}/:
     get:
       operationId: orders_tickets_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this ticket.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Orders
@@ -372,15 +372,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Payment'
           description: ''
-  /api/payments/payments/{id}/:
+  /api/payments/payments/{public_id}/:
     get:
       operationId: payments_payments_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this payment.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Payments
@@ -393,45 +393,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Payment'
-          description: ''
-  /api/payments/webhook-events/:
-    get:
-      operationId: payments_webhook_events_list
-      tags:
-      - Payments
-      security:
-      - jwtAuth: []
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/WebhookEvent'
-          description: ''
-  /api/payments/webhook-events/{id}/:
-    get:
-      operationId: payments_webhook_events_retrieve
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this webhook event.
-        required: true
-      tags:
-      - Payments
-      security:
-      - jwtAuth: []
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WebhookEvent'
           description: ''
   /api/reservations/reservations/:
     get:
@@ -450,15 +411,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Reservation'
           description: ''
-  /api/reservations/reservations/{id}/:
+  /api/reservations/reservations/{public_id}/:
     get:
       operationId: reservations_reservations_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this reservation.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Reservations
@@ -489,15 +450,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/RestaurantSettings'
           description: ''
-  /api/restaurants/restaurant-settings/{id}/:
+  /api/restaurants/restaurant-settings/{public_id}/:
     get:
       operationId: restaurants_restaurant_settings_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this restaurant settings.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Restaurants
@@ -528,15 +489,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Restaurant'
           description: ''
-  /api/restaurants/restaurants/{id}/:
+  /api/restaurants/restaurants/{public_id}/:
     get:
       operationId: restaurants_restaurants_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this restaurant.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Restaurants
@@ -567,15 +528,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Table'
           description: ''
-  /api/restaurants/tables/{id}/:
+  /api/restaurants/tables/{public_id}/:
     get:
       operationId: restaurants_tables_retrieve
       parameters:
       - in: path
-        name: id
+        name: public_id
         schema:
-          type: integer
-        description: A unique integer value identifying this table.
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
         required: true
       tags:
       - Restaurants
@@ -963,8 +924,6 @@ components:
           maxLength: 3
         status:
           $ref: '#/components/schemas/PaymentStatusEnum'
-        raw_payload:
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -1351,8 +1310,6 @@ components:
           maxLength: 32
         role:
           $ref: '#/components/schemas/RoleEnum'
-        is_staff:
-          type: boolean
         is_active:
           type: boolean
         created_at:
@@ -1380,43 +1337,6 @@ components:
         * `guest_changed_mind` - Guest changed mind
         * `quality_issue` - Quality issue
         * `out_of_stock` - Out of stock
-    WebhookEvent:
-      type: object
-      properties:
-        public_id:
-          type: string
-          format: uuid
-          readOnly: true
-        provider:
-          type: string
-          maxLength: 64
-        event_id:
-          type: string
-          maxLength: 255
-        payload: {}
-        received_at:
-          type: string
-          format: date-time
-        processed_at:
-          type: string
-          format: date-time
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - created_at
-      - event_id
-      - payload
-      - provider
-      - public_id
-      - received_at
-      - updated_at
   securitySchemes:
     cookieAuth:
       type: apiKey
