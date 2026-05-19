@@ -13,7 +13,6 @@ class UserSerializer(serializers.ModelSerializer[User]):
             "last_name",
             "phone",
             "role",
-            "is_staff",
             "is_active",
             "created_at",
             "updated_at",
