@@ -32,7 +32,7 @@ indent-style = "space"
 python_version = "3.11"
 strict = true
 ignore_missing_imports = true
-plugins = ["mypy_django_plugin.main"]
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
 explicit_package_bases = true
 namespace_packages = true
 
@@ -47,8 +47,9 @@ build-backend = "setuptools.build_meta"
 dev = [
     "bandit>=1.9.4",
     "django-stubs>=6.0.4",
+    "djangorestframework-stubs>=3.17.0",
     "drf-spectacular>=0.29.0",
-    "mypy==1.18.2",
+    "mypy==1.9.0",
     "pre-commit>=4.6.0",
     "ruff>=0.15.13",
 ]
