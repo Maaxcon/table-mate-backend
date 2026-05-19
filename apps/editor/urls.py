@@ -1,3 +1,11 @@
-from django.urls import URLPattern
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
-urlpatterns: list[URLPattern] = []
+from .views import LayoutViewSet
+
+router = DefaultRouter()
+router.register("layouts", LayoutViewSet, basename="layout")
+
+urlpatterns = [
+    path("", include(router.urls)),
+]
