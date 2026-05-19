@@ -66,7 +66,7 @@ jobs:
           if [ -n "$SAFETY_API_KEY" ]; then
             uv run safety scan --non-interactive
           else
-            echo "SAFETY_API_KEY not set — skipping safety scan"
+            uv run safety check
           fi
 
       - name: Schema drift gate
