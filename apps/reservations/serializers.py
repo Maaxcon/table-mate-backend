@@ -1,14 +1,16 @@
-from django.db import models
 from rest_framework import serializers
+
+from apps.authentication.models import User
+from apps.restaurants.models import Table
 
 from .models import Reservation
 
 
 class ReservationSerializer(serializers.ModelSerializer[Reservation]):
-    customer: serializers.PrimaryKeyRelatedField[models.Model] = (
+    customer: serializers.PrimaryKeyRelatedField[User] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
-    table: serializers.PrimaryKeyRelatedField[models.Model] = (
+    table: serializers.PrimaryKeyRelatedField[Table] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
 

@@ -1,17 +1,21 @@
-from django.db import models
 from rest_framework import serializers
+
+from apps.authentication.models import User
+from apps.menu.models import MenuItem
+from apps.reservations.models import Reservation
+from apps.restaurants.models import Table
 
 from .models import Order, OrderItem, Session, Ticket
 
 
 class SessionSerializer(serializers.ModelSerializer[Session]):
-    table: serializers.PrimaryKeyRelatedField[models.Model] = (
+    table: serializers.PrimaryKeyRelatedField[Table] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
-    reservation: serializers.PrimaryKeyRelatedField[models.Model] = (
+    reservation: serializers.PrimaryKeyRelatedField[Reservation] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
-    opened_by: serializers.PrimaryKeyRelatedField[models.Model] = (
+    opened_by: serializers.PrimaryKeyRelatedField[User] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
 
@@ -40,7 +44,7 @@ class OrderSerializer(serializers.ModelSerializer[Order]):
     session: serializers.PrimaryKeyRelatedField[Session] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
-    created_by: serializers.PrimaryKeyRelatedField[models.Model] = (
+    created_by: serializers.PrimaryKeyRelatedField[User] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
 
@@ -100,10 +104,10 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
     ticket: serializers.PrimaryKeyRelatedField[Ticket] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
-    menu_item: serializers.PrimaryKeyRelatedField[models.Model] = (
+    menu_item: serializers.PrimaryKeyRelatedField[MenuItem] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
-    voided_by: serializers.PrimaryKeyRelatedField[models.Model] = (
+    voided_by: serializers.PrimaryKeyRelatedField[User] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
 

@@ -1,13 +1,13 @@
-from django.db import models
 from rest_framework import serializers
 
 from apps.orders.models import Order
+from apps.restaurants.models import Restaurant
 
 from .models import Payment, WebhookEvent
 
 
 class PaymentSerializer(serializers.ModelSerializer[Payment]):
-    restaurant: serializers.PrimaryKeyRelatedField[models.Model] = (
+    restaurant: serializers.PrimaryKeyRelatedField[Restaurant] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
     order: serializers.PrimaryKeyRelatedField[Order] = (

@@ -1,14 +1,16 @@
-from django.db import models
 from rest_framework import serializers
+
+from apps.authentication.models import User
+from apps.restaurants.models import Restaurant
 
 from .models import Layout
 
 
 class LayoutSerializer(serializers.ModelSerializer[Layout]):
-    restaurant: serializers.PrimaryKeyRelatedField[models.Model] = (
+    restaurant: serializers.PrimaryKeyRelatedField[Restaurant] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
-    published_by: serializers.PrimaryKeyRelatedField[models.Model] = (
+    published_by: serializers.PrimaryKeyRelatedField[User] = (
         serializers.PrimaryKeyRelatedField(read_only=True)
     )
 
