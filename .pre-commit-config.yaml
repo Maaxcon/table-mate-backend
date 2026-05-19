@@ -24,6 +24,8 @@ repos:
           - djangorestframework
           - djangorestframework-stubs
           - djangorestframework-simplejwt
+          - django-environ
+          - daphne
           - google-auth
           - django-cors-headers
           - channels
