@@ -47,9 +47,9 @@ build-backend = "setuptools.build_meta"
 dev = [
     "bandit>=1.9.4",
     "django-stubs>=6.0.4",
-    "djangorestframework-stubs>=3.17.0",
+    "djangorestframework-stubs[compatible-mypy]>=3.17.0",
     "drf-spectacular>=0.29.0",
-    "mypy==1.9.0",
+    "mypy==1.18.2",
     "pre-commit>=4.6.0",
     "ruff>=0.15.13",
 ]
