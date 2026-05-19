@@ -1,0 +1,1428 @@
+openapi: 3.0.3
+info:
+  title: TableMate Platform API
+  version: 1.0.0
+  description: Real-time multi-tenant restaurant operational ecosystem backend.
+paths:
+  /api/auth/users/:
+    get:
+      operationId: auth_users_list
+      tags:
+      - Authentication
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+          description: ''
+  /api/auth/users/{id}/:
+    get:
+      operationId: auth_users_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - Authentication
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/editor/layouts/:
+    get:
+      operationId: editor_layouts_list
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Layout'
+          description: ''
+  /api/editor/layouts/{id}/:
+    get:
+      operationId: editor_layouts_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this layout.
+        required: true
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Layout'
+          description: ''
+  /api/menu/menu-categories/:
+    get:
+      operationId: menu_menu_categories_list
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MenuCategory'
+          description: ''
+  /api/menu/menu-categories/{id}/:
+    get:
+      operationId: menu_menu_categories_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this menu category.
+        required: true
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuCategory'
+          description: ''
+  /api/menu/menu-items/:
+    get:
+      operationId: menu_menu_items_list
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MenuItem'
+          description: ''
+  /api/menu/menu-items/{id}/:
+    get:
+      operationId: menu_menu_items_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this menu item.
+        required: true
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+          description: ''
+  /api/menu/menus/:
+    get:
+      operationId: menu_menus_list
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Menu'
+          description: ''
+  /api/menu/menus/{id}/:
+    get:
+      operationId: menu_menus_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this menu.
+        required: true
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Menu'
+          description: ''
+  /api/orders/order-items/:
+    get:
+      operationId: orders_order_items_list
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderItem'
+          description: ''
+  /api/orders/order-items/{id}/:
+    get:
+      operationId: orders_order_items_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this order item.
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+          description: ''
+  /api/orders/orders/:
+    get:
+      operationId: orders_orders_list
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+          description: ''
+  /api/orders/orders/{id}/:
+    get:
+      operationId: orders_orders_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this order.
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+  /api/orders/sessions/:
+    get:
+      operationId: orders_sessions_list
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+          description: ''
+  /api/orders/sessions/{id}/:
+    get:
+      operationId: orders_sessions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this session.
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
+  /api/orders/tickets/:
+    get:
+      operationId: orders_tickets_list
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/orders/tickets/{id}/:
+    get:
+      operationId: orders_tickets_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this ticket.
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+  /api/payments/payments/:
+    get:
+      operationId: payments_payments_list
+      tags:
+      - Payments
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Payment'
+          description: ''
+  /api/payments/payments/{id}/:
+    get:
+      operationId: payments_payments_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payment.
+        required: true
+      tags:
+      - Payments
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+          description: ''
+  /api/payments/webhook-events/:
+    get:
+      operationId: payments_webhook_events_list
+      tags:
+      - Payments
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WebhookEvent'
+          description: ''
+  /api/payments/webhook-events/{id}/:
+    get:
+      operationId: payments_webhook_events_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this webhook event.
+        required: true
+      tags:
+      - Payments
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEvent'
+          description: ''
+  /api/reservations/reservations/:
+    get:
+      operationId: reservations_reservations_list
+      tags:
+      - Reservations
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/reservations/reservations/{id}/:
+    get:
+      operationId: reservations_reservations_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this reservation.
+        required: true
+      tags:
+      - Reservations
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/restaurants/restaurant-settings/:
+    get:
+      operationId: restaurants_restaurant_settings_list
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RestaurantSettings'
+          description: ''
+  /api/restaurants/restaurant-settings/{id}/:
+    get:
+      operationId: restaurants_restaurant_settings_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this restaurant settings.
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestaurantSettings'
+          description: ''
+  /api/restaurants/restaurants/:
+    get:
+      operationId: restaurants_restaurants_list
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Restaurant'
+          description: ''
+  /api/restaurants/restaurants/{id}/:
+    get:
+      operationId: restaurants_restaurants_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this restaurant.
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+          description: ''
+  /api/restaurants/tables/:
+    get:
+      operationId: restaurants_tables_list
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Table'
+          description: ''
+  /api/restaurants/tables/{id}/:
+    get:
+      operationId: restaurants_tables_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this table.
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Table'
+          description: ''
+components:
+  schemas:
+    BlankEnum:
+      enum:
+      - ''
+    CreatedBySourceEnum:
+      enum:
+      - staff
+      - customer
+      - system
+      type: string
+      description: |-
+        * `staff` - Staff
+        * `customer` - Customer
+        * `system` - System
+    Layout:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+          readOnly: true
+        version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        payload: {}
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        published_by:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - public_id
+      - published_by
+      - restaurant
+      - updated_at
+      - version
+    Menu:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+        name:
+          type: string
+          maxLength: 255
+        is_active:
+          type: boolean
+        items:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+        categories:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - categories
+      - created_at
+      - items
+      - name
+      - public_id
+      - restaurant
+      - updated_at
+    MenuCategory:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        menu:
+          type: integer
+        name:
+          type: string
+          maxLength: 255
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - menu
+      - name
+      - public_id
+      - updated_at
+    MenuItem:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+        menu:
+          type: integer
+          readOnly: true
+        category:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        is_available:
+          type: boolean
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - category
+      - created_at
+      - menu
+      - name
+      - price
+      - public_id
+      - restaurant
+      - updated_at
+    NullEnum:
+      enum:
+      - null
+    Order:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+        session:
+          type: integer
+          readOnly: true
+        created_by:
+          type: integer
+          readOnly: true
+        created_by_source:
+          $ref: '#/components/schemas/CreatedBySourceEnum'
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        status:
+          $ref: '#/components/schemas/OrderStatusEnum'
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatusEnum'
+        currency:
+          type: string
+          maxLength: 3
+        total_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tax_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        discount_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tip_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        service_charge:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - created_by
+      - currency
+      - public_id
+      - restaurant
+      - session
+      - updated_at
+    OrderItem:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+        order:
+          type: integer
+          readOnly: true
+        ticket:
+          type: integer
+          readOnly: true
+        menu_item:
+          type: integer
+          readOnly: true
+        guest_slot:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        comment:
+          type: string
+          nullable: true
+        modifiers:
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OrderItemStatusEnum'
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        total_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tax_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
+        tax_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        voided_at:
+          type: string
+          format: date-time
+          nullable: true
+        voided_by:
+          type: integer
+          readOnly: true
+        void_reason:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/VoidReasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - guest_slot
+      - menu_item
+      - order
+      - public_id
+      - quantity
+      - restaurant
+      - ticket
+      - unit_price
+      - updated_at
+      - voided_by
+    OrderItemStatusEnum:
+      enum:
+      - pending
+      - in_progress
+      - ready
+      - served
+      - voided
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `in_progress` - In progress
+        * `ready` - Ready
+        * `served` - Served
+        * `voided` - Voided
+    OrderStatusEnum:
+      enum:
+      - draft
+      - submitted
+      - completed
+      - cancelled
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `submitted` - Submitted
+        * `completed` - Completed
+        * `cancelled` - Cancelled
+    Payment:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+          readOnly: true
+        order:
+          type: integer
+          readOnly: true
+        provider:
+          type: string
+          maxLength: 64
+        provider_transaction_id:
+          type: string
+          maxLength: 255
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        currency:
+          type: string
+          maxLength: 3
+        status:
+          $ref: '#/components/schemas/PaymentStatusEnum'
+        raw_payload:
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount
+      - created_at
+      - currency
+      - order
+      - provider
+      - provider_transaction_id
+      - public_id
+      - restaurant
+      - updated_at
+    PaymentStatusEnum:
+      enum:
+      - unpaid
+      - authorized
+      - paid
+      - settled
+      - refunded
+      - cancelled
+      type: string
+      description: |-
+        * `unpaid` - Unpaid
+        * `authorized` - Authorized
+        * `paid` - Paid
+        * `settled` - Settled
+        * `refunded` - Refunded
+        * `cancelled` - Cancelled
+    Reservation:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+        customer:
+          type: integer
+          readOnly: true
+        table:
+          type: integer
+          readOnly: true
+        guest_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/ReservationStatusEnum'
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - customer
+      - end_at
+      - guest_count
+      - public_id
+      - restaurant
+      - start_at
+      - table
+      - updated_at
+    ReservationStatusEnum:
+      enum:
+      - pending
+      - confirmed
+      - cancelled
+      - completed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `confirmed` - Confirmed
+        * `cancelled` - Cancelled
+        * `completed` - Completed
+    Restaurant:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        address:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - address
+      - created_at
+      - name
+      - public_id
+      - updated_at
+    RestaurantSettings:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+          readOnly: true
+        timezone:
+          type: string
+          maxLength: 64
+        currency:
+          type: string
+          maxLength: 3
+        locale:
+          type: string
+          maxLength: 16
+        default_tax_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
+        default_service_charge:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
+        working_hours: {}
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - currency
+      - public_id
+      - restaurant
+      - updated_at
+    RoleEnum:
+      enum:
+      - admin
+      - waiter
+      - cook
+      - customer
+      type: string
+      description: |-
+        * `admin` - Admin
+        * `waiter` - Waiter
+        * `cook` - Cook
+        * `customer` - Customer
+    Session:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+        table:
+          type: integer
+          readOnly: true
+        reservation:
+          type: integer
+          readOnly: true
+        opened_by:
+          type: integer
+          readOnly: true
+        guest_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        status:
+          $ref: '#/components/schemas/SessionStatusEnum'
+        currency:
+          type: string
+          maxLength: 3
+        running_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        final_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        started_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - currency
+      - guest_count
+      - opened_by
+      - public_id
+      - reservation
+      - restaurant
+      - started_at
+      - table
+      - updated_at
+    SessionStatusEnum:
+      enum:
+      - open
+      - closed
+      - cancelled
+      type: string
+      description: |-
+        * `open` - Open
+        * `closed` - Closed
+        * `cancelled` - Cancelled
+    SourceEnum:
+      enum:
+      - waiter_manual
+      - customer_prepaid
+      type: string
+      description: |-
+        * `waiter_manual` - Waiter manual
+        * `customer_prepaid` - Customer prepaid
+    Table:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+          readOnly: true
+        table_number:
+          type: string
+          maxLength: 64
+        capacity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        status:
+          $ref: '#/components/schemas/TableStatusEnum'
+        position_x:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        position_y:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - capacity
+      - created_at
+      - public_id
+      - restaurant
+      - table_number
+      - updated_at
+    TableStatusEnum:
+      enum:
+      - free
+      - reserved
+      - occupied
+      type: string
+      description: |-
+        * `free` - Free
+        * `reserved` - Reserved
+        * `occupied` - Occupied
+    Ticket:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: integer
+        session:
+          type: integer
+          readOnly: true
+        order:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/TicketStatusEnum'
+        injected_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - injected_at
+      - order
+      - public_id
+      - restaurant
+      - session
+      - updated_at
+    TicketStatusEnum:
+      enum:
+      - incoming
+      - active
+      - completed
+      - bumped
+      type: string
+      description: |-
+        * `incoming` - Incoming
+        * `active` - Active
+        * `completed` - Completed
+        * `bumped` - Bumped
+    User:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_staff:
+          type: boolean
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - public_id
+      - updated_at
+    VoidReasonEnum:
+      enum:
+      - mispick
+      - guest_changed_mind
+      - quality_issue
+      - out_of_stock
+      type: string
+      description: |-
+        * `mispick` - Mispick
+        * `guest_changed_mind` - Guest changed mind
+        * `quality_issue` - Quality issue
+        * `out_of_stock` - Out of stock
+    WebhookEvent:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        provider:
+          type: string
+          maxLength: 64
+        event_id:
+          type: string
+          maxLength: 255
+        payload: {}
+        received_at:
+          type: string
+          format: date-time
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - event_id
+      - payload
+      - provider
+      - public_id
+      - received_at
+      - updated_at
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
