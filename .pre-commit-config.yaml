@@ -20,8 +20,11 @@ repos:
       - id: mypy
         additional_dependencies:
           - django>=5.0
+          - django-environ
+          - daphne
           - django-stubs
           - djangorestframework
+          - djangorestframework-stubs
           - djangorestframework-simplejwt
           - google-auth
           - django-cors-headers

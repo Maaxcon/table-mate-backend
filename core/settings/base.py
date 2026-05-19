@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework_simplejwt",
+    "drf_spectacular",
     "corsheaders",
     "channels",
     "apps.authentication",
@@ -64,8 +65,7 @@ DATABASES = {
     "default": env.db(
         "DATABASE_URL",
         default=(
-            "postgresql://table_mate_user:table_mate_pass@"
-            "localhost:5432/table_mate"
+            "postgresql://table_mate_user:table_mate_pass@" "localhost:5432/table_mate"
         ),
     ),
 }
@@ -106,6 +106,15 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "TableMate Platform API",
+    "DESCRIPTION": "Real-time multi-tenant restaurant operational ecosystem backend.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "OAS_VERSION": "3.0.3",
 }
 
 SIMPLE_JWT = {
