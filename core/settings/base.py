@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "corsheaders",
     "channels",
+    "drf_spectacular",
     "apps.authentication",
     "apps.restaurants",
     "apps.editor",
@@ -64,8 +65,7 @@ DATABASES = {
     "default": env.db(
         "DATABASE_URL",
         default=(
-            "postgresql://table_mate_user:table_mate_pass@"
-            "localhost:5432/table_mate"
+            "postgresql://table_mate_user:table_mate_pass@" "localhost:5432/table_mate"
         ),
     ),
 }
@@ -106,6 +106,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 SIMPLE_JWT = {

@@ -39,6 +39,12 @@ namespace_packages = true
 [tool.django-stubs]
 django_settings_module = "core.settings.local"
 
+[tool.drf-spectacular]
+TITLE = "Table Mate API"
+DESCRIPTION = "Table Mate backend API"
+VERSION = "0.1.0"
+SERVE_INCLUDE_SCHEMA = false
+
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"

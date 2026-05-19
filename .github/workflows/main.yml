@@ -58,6 +58,10 @@ jobs:
 
       - name: Security check with bandit
         run: uv run bandit -r apps core common manage.py
+      - name: Schema drift gate
+        run: |
+          uv run python manage.py spectacular --validate --file /tmp/schema.yaml
+          diff /tmp/schema.yaml schema.yaml
 
       - name: Run tests
         run: uv run python manage.py test
