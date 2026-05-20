@@ -3,7 +3,7 @@ from rest_framework import serializers
 from apps.orders.models import Order
 from apps.restaurants.models import Restaurant
 
-from .models import Payment, WebhookEvent
+from .models import Payment
 
 
 class PaymentSerializer(serializers.ModelSerializer[Payment]):
@@ -27,22 +27,6 @@ class PaymentSerializer(serializers.ModelSerializer[Payment]):
             "amount",
             "currency",
             "status",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
-
-
-class WebhookEventSerializer(serializers.ModelSerializer[WebhookEvent]):
-    class Meta:
-        model = WebhookEvent
-        fields = [
-            "public_id",
-            "provider",
-            "event_id",
-            "payload",
-            "received_at",
-            "processed_at",
             "created_at",
             "updated_at",
         ]
