@@ -2,19 +2,14 @@ from rest_framework import serializers
 
 from apps.orders.models import Order
 from apps.restaurants.models import Restaurant
+from common.api import PublicIdRelatedField
 
 from .models import Payment
 
 
 class PaymentSerializer(serializers.ModelSerializer[Payment]):
-    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
-        slug_field="public_id",
-        read_only=True,
-    )
-    order: serializers.SlugRelatedField[Order] = serializers.SlugRelatedField(
-        slug_field="public_id",
-        read_only=True,
-    )
+    restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
+    order: PublicIdRelatedField[Order] = PublicIdRelatedField(read_only=True)
 
     class Meta:
         model = Payment

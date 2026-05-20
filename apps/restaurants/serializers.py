@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from common.api import PublicIdRelatedField
+
 from .models import Restaurant, RestaurantSettings, Table
 
 
@@ -17,10 +19,7 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
 
 
 class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
-    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
-        slug_field="public_id",
-        read_only=True,
-    )
+    restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
 
     class Meta:
         model = RestaurantSettings
@@ -40,10 +39,7 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
 
 
 class TableSerializer(serializers.ModelSerializer[Table]):
-    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
-        slug_field="public_id",
-        read_only=True,
-    )
+    restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
 
     class Meta:
         model = Table

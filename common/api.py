@@ -1,7 +1,9 @@
 from contextvars import ContextVar, Token
 from typing import ClassVar, Generic, Protocol, TypeVar, cast
 
-from django.db.models import Model, QuerySet
+from django.db.models import Manager, Model, QuerySet
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.request import Request
 
@@ -16,6 +18,27 @@ class PublicLookupMixin:
     lookup_field: ClassVar[str] = "public_id"
     lookup_url_kwarg: ClassVar[str | None] = "public_id"
     lookup_value_regex: ClassVar[str] = "[0-9a-fA-F-]{36}"
+
+
+@extend_schema_field(OpenApiTypes.UUID)
+class PublicIdRelatedField(serializers.SlugRelatedField[_ModelT]):
+    def __init__(
+        self,
+        *,
+        read_only: bool = False,
+        many: bool = False,
+        queryset: QuerySet[_ModelT] | Manager[_ModelT] | None = None,
+        required: bool | None = None,
+        allow_null: bool = False,
+    ) -> None:
+        super().__init__(
+            slug_field="public_id",
+            read_only=read_only,
+            many=many,
+            queryset=queryset,
+            required=required,
+            allow_null=allow_null,
+        )
 
 
 _current_restaurant_id: ContextVar[int | None] = ContextVar(
