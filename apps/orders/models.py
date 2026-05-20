@@ -52,6 +52,17 @@ class VoidReasonCode(models.TextChoices):
     OUT_OF_STOCK = "out_of_stock", "Out of stock"
 
 
+class VoidReason(models.Model):
+    code = models.CharField(max_length=32, primary_key=True)
+    label = models.CharField(max_length=128)
+
+    class Meta:
+        ordering = ["code"]
+
+    def __str__(self) -> str:
+        return self.label
+
+
 class CreatedBySource(models.TextChoices):
     STAFF = "staff", "Staff"
     CUSTOMER = "customer", "Customer"
