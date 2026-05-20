@@ -22,7 +22,7 @@ def _make_cart_event(event_name: str, payload: dict) -> dict:  # type: ignore[ty
     }
 
 
-class CartConsumer(AsyncWebsocketConsumer):
+class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
         session_id: uuid.UUID = self.scope["url_route"]["kwargs"]["session_id"]
 
@@ -42,10 +42,10 @@ class CartConsumer(AsyncWebsocketConsumer):
         self.user = user
         self.group_name = cart_group_name(session_id)
 
-        await self.channel_layer.group_add(self.group_name, self.channel_name)  # type: ignore[union-attr]
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
-        await self.channel_layer.group_send(  # type: ignore[union-attr]
+        await self.channel_layer.group_send(
             self.group_name,
             {
                 "type": "cart.event",
@@ -64,7 +64,7 @@ class CartConsumer(AsyncWebsocketConsumer):
             return
 
         if hasattr(self, "user"):
-            await self.channel_layer.group_send(  # type: ignore[union-attr]
+            await self.channel_layer.group_send(
                 self.group_name,
                 {
                     "type": "cart.event",
@@ -78,13 +78,13 @@ class CartConsumer(AsyncWebsocketConsumer):
                 },
             )
 
-        await self.channel_layer.group_discard(self.group_name, self.channel_name)  # type: ignore[union-attr]
+        await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def cart_event(self, message: dict) -> None:  # type: ignore[type-arg]
         await self.send(text_data=json.dumps(message["event"]))
 
 
-@database_sync_to_async
+@database_sync_to_async  # type: ignore[misc]
 def _fetch_session(session_id: uuid.UUID, restaurant_id: int) -> Session | None:
     try:
         return Session.objects.get(public_id=session_id, restaurant_id=restaurant_id)

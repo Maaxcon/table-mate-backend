@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
@@ -12,10 +12,10 @@ if TYPE_CHECKING:
     from apps.authentication.models import User
 
 
-@database_sync_to_async
+@database_sync_to_async  # type: ignore[misc]
 def _resolve_user(jwt_auth: JWTAuthentication, validated_token: object) -> User | None:
     try:
-        return jwt_auth.get_user(validated_token)  # type: ignore[arg-type]
+        return cast("User", jwt_auth.get_user(validated_token))  # type: ignore[arg-type]
     except Exception:
         return None
 

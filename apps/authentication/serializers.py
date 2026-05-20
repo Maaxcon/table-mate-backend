@@ -1,3 +1,5 @@
+from typing import Any
+
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -27,10 +29,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         required=False, allow_null=True, default=None
     )
 
-    def validate(self, attrs: dict) -> dict:  # type: ignore[override]
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         restaurant_id: int | None = attrs.pop("restaurant_id", None)
         data = super().validate(attrs)
 
+        assert self.user is not None
         refresh: RefreshToken = RefreshToken.for_user(self.user)
         refresh["role"] = self.user.role
         if restaurant_id is not None:

@@ -8,7 +8,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
 
-class MeView(generics.RetrieveAPIView):
+class MeView(generics.RetrieveAPIView):  # type: ignore[type-arg]
     serializer_class = UserSerializer
 
     def get_object(self) -> object:

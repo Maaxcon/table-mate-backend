@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.db import migrations, models
 
 _VOID_REASONS = [
@@ -8,7 +10,7 @@ _VOID_REASONS = [
 ]
 
 
-def seed_void_reasons(apps, schema_editor):
+def seed_void_reasons(apps: Any, schema_editor: Any) -> None:
     VoidReason = apps.get_model("orders", "VoidReason")
     VoidReason.objects.bulk_create(
         [VoidReason(code=code, label=label) for code, label in _VOID_REASONS],
@@ -16,7 +18,7 @@ def seed_void_reasons(apps, schema_editor):
     )
 
 
-def unseed_void_reasons(apps, schema_editor):
+def unseed_void_reasons(apps: Any, schema_editor: Any) -> None:
     VoidReason = apps.get_model("orders", "VoidReason")
     VoidReason.objects.filter(code__in=[c for c, _ in _VOID_REASONS]).delete()
 
