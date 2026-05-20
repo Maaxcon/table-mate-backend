@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 
-from common.api import PublicLookupMixin
+from common.api import RestaurantScopedViewSetMixin
 
 from .models import Restaurant, RestaurantSettings, Table
 from .serializers import (
@@ -12,20 +12,28 @@ from .serializers import (
 
 
 @extend_schema(tags=["Restaurants"])
-class RestaurantViewSet(PublicLookupMixin, viewsets.ReadOnlyModelViewSet[Restaurant]):
+class RestaurantViewSet(
+    RestaurantScopedViewSetMixin[Restaurant],
+    viewsets.ReadOnlyModelViewSet[Restaurant],
+):
     queryset = Restaurant.objects.all()
     serializer_class = RestaurantSerializer
+    restaurant_lookup = "id"
 
 
 @extend_schema(tags=["Restaurants"])
 class RestaurantSettingsViewSet(
-    PublicLookupMixin, viewsets.ReadOnlyModelViewSet[RestaurantSettings]
+    RestaurantScopedViewSetMixin[RestaurantSettings],
+    viewsets.ReadOnlyModelViewSet[RestaurantSettings],
 ):
     queryset = RestaurantSettings.objects.all()
     serializer_class = RestaurantSettingsSerializer
 
 
 @extend_schema(tags=["Restaurants"])
-class TableViewSet(PublicLookupMixin, viewsets.ReadOnlyModelViewSet[Table]):
+class TableViewSet(
+    RestaurantScopedViewSetMixin[Table],
+    viewsets.ReadOnlyModelViewSet[Table],
+):
     queryset = Table.objects.all()
     serializer_class = TableSerializer

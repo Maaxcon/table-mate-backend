@@ -1,27 +1,35 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 
-from common.api import PublicLookupMixin
+from common.api import RestaurantScopedViewSetMixin
 
 from .models import Menu, MenuCategory, MenuItem
 from .serializers import MenuCategorySerializer, MenuItemSerializer, MenuSerializer
 
 
 @extend_schema(tags=["Menu"])
-class MenuViewSet(PublicLookupMixin, viewsets.ReadOnlyModelViewSet[Menu]):
+class MenuViewSet(
+    RestaurantScopedViewSetMixin[Menu],
+    viewsets.ReadOnlyModelViewSet[Menu],
+):
     queryset = Menu.objects.all()
     serializer_class = MenuSerializer
 
 
 @extend_schema(tags=["Menu"])
 class MenuCategoryViewSet(
-    PublicLookupMixin, viewsets.ReadOnlyModelViewSet[MenuCategory]
+    RestaurantScopedViewSetMixin[MenuCategory],
+    viewsets.ReadOnlyModelViewSet[MenuCategory],
 ):
     queryset = MenuCategory.objects.all()
     serializer_class = MenuCategorySerializer
+    restaurant_lookup = "menu__restaurant_id"
 
 
 @extend_schema(tags=["Menu"])
-class MenuItemViewSet(PublicLookupMixin, viewsets.ReadOnlyModelViewSet[MenuItem]):
+class MenuItemViewSet(
+    RestaurantScopedViewSetMixin[MenuItem],
+    viewsets.ReadOnlyModelViewSet[MenuItem],
+):
     queryset = MenuItem.objects.all()
     serializer_class = MenuItemSerializer
