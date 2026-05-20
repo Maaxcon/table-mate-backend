@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -33,9 +33,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         restaurant_id: int | None = attrs.pop("restaurant_id", None)
         data = super().validate(attrs)
 
-        assert self.user is not None
-        refresh: RefreshToken = RefreshToken.for_user(self.user)
-        refresh["role"] = self.user.role
+        user = cast(User, self.user)
+        refresh: RefreshToken = RefreshToken.for_user(user)
+        refresh["role"] = user.role
         if restaurant_id is not None:
             refresh["restaurant_id"] = restaurant_id
 
