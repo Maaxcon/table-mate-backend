@@ -116,6 +116,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "voided_at",
             "voided_by",
             "void_reason",
+            "is_wasted",
             "created_at",
             "updated_at",
         ]
