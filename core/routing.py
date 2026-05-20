@@ -8,8 +8,12 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings.production")
 
 django_asgi_app = get_asgi_application()
 
-from apps.editor.routing import websocket_urlpatterns as editor_ws_patterns  # noqa: E402
-from apps.orders.routing import websocket_urlpatterns as orders_ws_patterns  # noqa: E402
+from apps.editor.routing import (  # noqa: E402
+    websocket_urlpatterns as editor_ws_patterns,
+)
+from apps.orders.routing import (  # noqa: E402
+    websocket_urlpatterns as orders_ws_patterns,
+)
 
 websocket_urlpatterns: list[URLPattern | URLResolver] = [
     *orders_ws_patterns,

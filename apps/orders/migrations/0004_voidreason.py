@@ -1,6 +1,5 @@
 from django.db import migrations, models
 
-
 _VOID_REASONS = [
     ("mispick", "Mispick"),
     ("guest_changed_mind", "Guest changed mind"),
@@ -31,7 +30,10 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="VoidReason",
             fields=[
-                ("code", models.CharField(max_length=32, primary_key=True, serialize=False)),
+                (
+                    "code",
+                    models.CharField(max_length=32, primary_key=True, serialize=False),
+                ),
                 ("label", models.CharField(max_length=128)),
             ],
             options={

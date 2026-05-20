@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -17,7 +17,7 @@ def _make_cart_event(event_name: str, payload: dict) -> dict:  # type: ignore[ty
         "event_id": str(uuid.uuid4()),
         "schema_version": "1",
         "event_name": event_name,
-        "occurred_at": datetime.now(timezone.utc).isoformat(),
+        "occurred_at": datetime.now(UTC).isoformat(),
         **payload,
     }
 
