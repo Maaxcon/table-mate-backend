@@ -13,3 +13,5 @@ class LayoutViewSet(
 ):
     queryset = Layout.objects.all()
     serializer_class = LayoutSerializer
+    filterset_fields = ["version", "published_at", "published_by"]
+    ordering_fields = ["created_at", "updated_at", "version", "published_at"]

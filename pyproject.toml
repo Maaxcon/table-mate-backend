@@ -3,6 +3,7 @@ name = "table-mate"
 version = "0.1.0"
 dependencies = [
     "django>=5.0",
+    "django-filter",
     "djangorestframework",
     "djangorestframework-simplejwt",
     "django-environ",

@@ -14,3 +14,5 @@ class PaymentViewSet(
 ):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
+    filterset_fields = ["order", "provider", "status", "currency"]
+    ordering_fields = ["created_at", "updated_at", "amount", "status"]

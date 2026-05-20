@@ -22,6 +22,7 @@ repos:
           - django>=5.0
           - django-environ
           - daphne
+          - django-filter
           - django-stubs
           - djangorestframework
           - djangorestframework-stubs

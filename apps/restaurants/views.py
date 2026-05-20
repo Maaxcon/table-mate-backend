@@ -19,6 +19,7 @@ class RestaurantViewSet(
     queryset = Restaurant.objects.all()
     serializer_class = RestaurantSerializer
     restaurant_lookup = "id"
+    ordering_fields = ["created_at", "updated_at", "name"]
 
 
 @extend_schema(tags=["Restaurants"])
@@ -28,6 +29,8 @@ class RestaurantSettingsViewSet(
 ):
     queryset = RestaurantSettings.objects.all()
     serializer_class = RestaurantSettingsSerializer
+    filterset_fields = ["restaurant", "timezone", "currency", "locale"]
+    ordering_fields = ["created_at", "updated_at", "timezone", "currency", "locale"]
 
 
 @extend_schema(tags=["Restaurants"])
@@ -37,3 +40,5 @@ class TableViewSet(
 ):
     queryset = Table.objects.all()
     serializer_class = TableSerializer
+    filterset_fields = ["status", "capacity"]
+    ordering_fields = ["created_at", "updated_at", "table_number", "capacity", "status"]
