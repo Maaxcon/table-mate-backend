@@ -7,11 +7,13 @@ from .models import Payment, WebhookEvent
 
 
 class PaymentSerializer(serializers.ModelSerializer[Payment]):
-    restaurant: serializers.PrimaryKeyRelatedField[Restaurant] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    order: serializers.PrimaryKeyRelatedField[Order] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    order: serializers.SlugRelatedField[Order] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
 
     class Meta:

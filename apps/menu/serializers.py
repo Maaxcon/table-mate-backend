@@ -1,9 +1,16 @@
 from rest_framework import serializers
 
+from apps.restaurants.models import Restaurant
+
 from .models import Menu, MenuCategory, MenuItem
 
 
 class MenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
+    menu: serializers.SlugRelatedField[Menu] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
+    )
+
     class Meta:
         model = MenuCategory
         fields = [
@@ -18,11 +25,17 @@ class MenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
 
 
 class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
-    menu: serializers.PrimaryKeyRelatedField[Menu] = serializers.PrimaryKeyRelatedField(
-        read_only=True
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    category: serializers.PrimaryKeyRelatedField[MenuCategory] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    menu: serializers.SlugRelatedField[Menu] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
+    )
+    category: serializers.SlugRelatedField[MenuCategory] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
 
     class Meta:
@@ -44,11 +57,21 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
 
 
 class MenuSerializer(serializers.ModelSerializer[Menu]):
-    items: serializers.PrimaryKeyRelatedField[MenuItem] = (
-        serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    categories: serializers.PrimaryKeyRelatedField[MenuCategory] = (
-        serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    items: serializers.SlugRelatedField[MenuItem] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        many=True,
+        read_only=True,
+    )
+    categories: serializers.SlugRelatedField[MenuCategory] = (
+        serializers.SlugRelatedField(
+            slug_field="public_id",
+            many=True,
+            read_only=True,
+        )
     )
 
     class Meta:

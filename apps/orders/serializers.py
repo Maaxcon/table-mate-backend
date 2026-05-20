@@ -3,20 +3,29 @@ from rest_framework import serializers
 from apps.authentication.models import User
 from apps.menu.models import MenuItem
 from apps.reservations.models import Reservation
-from apps.restaurants.models import Table
+from apps.restaurants.models import Restaurant, Table
 
 from .models import Order, OrderItem, Session, Ticket
 
 
 class SessionSerializer(serializers.ModelSerializer[Session]):
-    table: serializers.PrimaryKeyRelatedField[Table] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    reservation: serializers.PrimaryKeyRelatedField[Reservation] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    table: serializers.SlugRelatedField[Table] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    opened_by: serializers.PrimaryKeyRelatedField[User] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    reservation: serializers.SlugRelatedField[Reservation] = (
+        serializers.SlugRelatedField(
+            slug_field="public_id",
+            read_only=True,
+        )
+    )
+    opened_by: serializers.SlugRelatedField[User] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
 
     class Meta:
@@ -41,11 +50,17 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
 
 
 class OrderSerializer(serializers.ModelSerializer[Order]):
-    session: serializers.PrimaryKeyRelatedField[Session] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    created_by: serializers.PrimaryKeyRelatedField[User] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    session: serializers.SlugRelatedField[Session] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
+    )
+    created_by: serializers.SlugRelatedField[User] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
 
     class Meta:
@@ -73,11 +88,17 @@ class OrderSerializer(serializers.ModelSerializer[Order]):
 
 
 class TicketSerializer(serializers.ModelSerializer[Ticket]):
-    session: serializers.PrimaryKeyRelatedField[Session] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    order: serializers.PrimaryKeyRelatedField[Order] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    session: serializers.SlugRelatedField[Session] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
+    )
+    order: serializers.SlugRelatedField[Order] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
 
     class Meta:
@@ -98,17 +119,25 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
 
 
 class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
-    order: serializers.PrimaryKeyRelatedField[Order] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    ticket: serializers.PrimaryKeyRelatedField[Ticket] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    order: serializers.SlugRelatedField[Order] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    menu_item: serializers.PrimaryKeyRelatedField[MenuItem] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    ticket: serializers.SlugRelatedField[Ticket] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    voided_by: serializers.PrimaryKeyRelatedField[User] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    menu_item: serializers.SlugRelatedField[MenuItem] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
+    )
+    voided_by: serializers.SlugRelatedField[User] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
 
     class Meta:

@@ -17,8 +17,9 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
 
 
 class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
-    restaurant: serializers.PrimaryKeyRelatedField[Restaurant] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
 
     class Meta:
@@ -39,8 +40,9 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
 
 
 class TableSerializer(serializers.ModelSerializer[Table]):
-    restaurant: serializers.PrimaryKeyRelatedField[Restaurant] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
 
     class Meta:

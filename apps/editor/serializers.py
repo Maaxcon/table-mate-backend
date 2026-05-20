@@ -7,11 +7,13 @@ from .models import Layout
 
 
 class LayoutSerializer(serializers.ModelSerializer[Layout]):
-    restaurant: serializers.PrimaryKeyRelatedField[Restaurant] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    restaurant: serializers.SlugRelatedField[Restaurant] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
-    published_by: serializers.PrimaryKeyRelatedField[User] = (
-        serializers.PrimaryKeyRelatedField(read_only=True)
+    published_by: serializers.SlugRelatedField[User] = serializers.SlugRelatedField(
+        slug_field="public_id",
+        read_only=True,
     )
 
     class Meta:
