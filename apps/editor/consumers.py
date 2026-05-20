@@ -16,10 +16,12 @@ class HallConsumer(AsyncWebsocketConsumer):
     async def connect(self) -> None:
         user, restaurant_id = await authenticate_websocket(self.scope)
         if user is None or restaurant_id is None:
+            await self.accept()
             await self.close(code=4001)
             return
 
         if user.role not in _HALL_ALLOWED_ROLES:
+            await self.accept()
             await self.close(code=4003)
             return
 

@@ -28,11 +28,13 @@ class CartConsumer(AsyncWebsocketConsumer):
 
         user, restaurant_id = await authenticate_websocket(self.scope)
         if user is None or restaurant_id is None:
+            await self.accept()
             await self.close(code=4001)
             return
 
         session = await _fetch_session(session_id, restaurant_id)
         if session is None:
+            await self.accept()
             await self.close(code=4004)
             return
 
