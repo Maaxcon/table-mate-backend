@@ -4,45 +4,6 @@ info:
   version: 1.0.0
   description: Real-time multi-tenant restaurant operational ecosystem backend.
 paths:
-  /api/auth/users/:
-    get:
-      operationId: auth_users_list
-      tags:
-      - Authentication
-      security:
-      - jwtAuth: []
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/User'
-          description: ''
-  /api/auth/users/{public_id}/:
-    get:
-      operationId: auth_users_retrieve
-      parameters:
-      - in: path
-        name: public_id
-        schema:
-          type: string
-          pattern: ^[0-9a-fA-F-]{36}$
-        required: true
-      tags:
-      - Authentication
-      security:
-      - jwtAuth: []
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-          description: ''
   /api/editor/layouts/:
     get:
       operationId: editor_layouts_list
@@ -573,7 +534,8 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         version:
           type: integer
@@ -585,7 +547,8 @@ components:
           format: date-time
           nullable: true
         published_by:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         created_at:
           type: string
@@ -610,7 +573,9 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
         name:
           type: string
           maxLength: 255
@@ -619,12 +584,14 @@ components:
         items:
           type: array
           items:
-            type: integer
+            type: string
+            format: uuid
           readOnly: true
         categories:
           type: array
           items:
-            type: integer
+            type: string
+            format: uuid
           readOnly: true
         created_at:
           type: string
@@ -650,7 +617,9 @@ components:
           format: uuid
           readOnly: true
         menu:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
         name:
           type: string
           maxLength: 255
@@ -680,12 +649,16 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
         menu:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         category:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         name:
           type: string
@@ -731,12 +704,16 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
         session:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         created_by:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         created_by_source:
           $ref: '#/components/schemas/CreatedBySourceEnum'
@@ -796,15 +773,20 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
         order:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         ticket:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         menu_item:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         guest_slot:
           type: integer
@@ -842,7 +824,8 @@ components:
           format: date-time
           nullable: true
         voided_by:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         void_reason:
           nullable: true
@@ -850,6 +833,8 @@ components:
           - $ref: '#/components/schemas/VoidReasonEnum'
           - $ref: '#/components/schemas/BlankEnum'
           - $ref: '#/components/schemas/NullEnum'
+        is_wasted:
+          type: boolean
         created_at:
           type: string
           format: date-time
@@ -904,10 +889,12 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         order:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         provider:
           type: string
@@ -966,12 +953,16 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
         customer:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         table:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         guest_count:
           type: integer
@@ -1052,7 +1043,8 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         timezone:
           type: string
@@ -1086,18 +1078,6 @@ components:
       - public_id
       - restaurant
       - updated_at
-    RoleEnum:
-      enum:
-      - admin
-      - waiter
-      - cook
-      - customer
-      type: string
-      description: |-
-        * `admin` - Admin
-        * `waiter` - Waiter
-        * `cook` - Cook
-        * `customer` - Customer
     Session:
       type: object
       properties:
@@ -1106,15 +1086,20 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
         table:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         reservation:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         opened_by:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         guest_count:
           type: integer
@@ -1185,7 +1170,8 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         table_number:
           type: string
@@ -1239,12 +1225,16 @@ components:
           format: uuid
           readOnly: true
         restaurant:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
         session:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         order:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
         status:
           $ref: '#/components/schemas/TicketStatusEnum'
@@ -1287,44 +1277,6 @@ components:
         * `active` - Active
         * `completed` - Completed
         * `bumped` - Bumped
-    User:
-      type: object
-      properties:
-        public_id:
-          type: string
-          format: uuid
-          readOnly: true
-        email:
-          type: string
-          format: email
-          maxLength: 254
-        first_name:
-          type: string
-          maxLength: 150
-        last_name:
-          type: string
-          maxLength: 150
-        phone:
-          type: string
-          nullable: true
-          maxLength: 32
-        role:
-          $ref: '#/components/schemas/RoleEnum'
-        is_active:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - created_at
-      - email
-      - public_id
-      - updated_at
     VoidReasonEnum:
       enum:
       - mispick

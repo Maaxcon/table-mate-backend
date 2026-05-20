@@ -61,3 +61,8 @@ jobs:
 
       - name: Run tests
         run: uv run python manage.py test
+
+      - name: Check schema drift
+        run: |
+          uv run python manage.py spectacular --validate --file /tmp/schema.yaml
+          diff -u schema.yaml /tmp/schema.yaml
