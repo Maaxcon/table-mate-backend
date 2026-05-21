@@ -1,12 +1,92 @@
 openapi: 3.0.3
 info:
-  title: TableMate Platform API
-  version: 1.0.0
-  description: Real-time multi-tenant restaurant operational ecosystem backend.
+  title: Table Mate API
+  version: 0.1.0
+  description: Table Mate backend API
 paths:
+  /api/auth/token/:
+    post:
+      operationId: auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
   /api/editor/layouts/:
     get:
       operationId: editor_layouts_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: published_at
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: published_by
+        schema:
+          type: integer
+      - in: query
+        name: version
+        schema:
+          type: integer
       tags:
       - Editor
       security:
@@ -17,9 +97,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Layout'
+                $ref: '#/components/schemas/PaginatedLayoutList'
           description: ''
   /api/editor/layouts/{public_id}/:
     get:
@@ -46,6 +124,23 @@ paths:
   /api/menu/menu-categories/:
     get:
       operationId: menu_menu_categories_list
+      parameters:
+      - in: query
+        name: menu
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
       tags:
       - Menu
       security:
@@ -56,9 +151,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MenuCategory'
+                $ref: '#/components/schemas/PaginatedMenuCategoryList'
           description: ''
   /api/menu/menu-categories/{public_id}/:
     get:
@@ -85,6 +178,31 @@ paths:
   /api/menu/menu-items/:
     get:
       operationId: menu_menu_items_list
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: integer
+      - in: query
+        name: is_available
+        schema:
+          type: boolean
+      - in: query
+        name: menu
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
       tags:
       - Menu
       security:
@@ -95,9 +213,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MenuItem'
+                $ref: '#/components/schemas/PaginatedMenuItemList'
           description: ''
   /api/menu/menu-items/{public_id}/:
     get:
@@ -124,6 +240,23 @@ paths:
   /api/menu/menus/:
     get:
       operationId: menu_menus_list
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
       tags:
       - Menu
       security:
@@ -134,9 +267,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Menu'
+                $ref: '#/components/schemas/PaginatedMenuList'
           description: ''
   /api/menu/menus/{public_id}/:
     get:
@@ -163,6 +294,70 @@ paths:
   /api/orders/order-items/:
     get:
       operationId: orders_order_items_list
+      parameters:
+      - in: query
+        name: is_wasted
+        schema:
+          type: boolean
+      - in: query
+        name: menu_item
+        schema:
+          type: integer
+      - in: query
+        name: order
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - in_progress
+          - pending
+          - ready
+          - served
+          - voided
+        description: |-
+          * `pending` - Pending
+          * `in_progress` - In progress
+          * `ready` - Ready
+          * `served` - Served
+          * `voided` - Voided
+      - in: query
+        name: ticket
+        schema:
+          type: integer
+      - in: query
+        name: void_reason
+        schema:
+          type: string
+          nullable: true
+          enum:
+          - guest_changed_mind
+          - mispick
+          - out_of_stock
+          - quality_issue
+        description: |-
+          * `mispick` - Mispick
+          * `guest_changed_mind` - Guest changed mind
+          * `quality_issue` - Quality issue
+          * `out_of_stock` - Out of stock
+      - in: query
+        name: voided_by
+        schema:
+          type: integer
       tags:
       - Orders
       security:
@@ -173,9 +368,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/OrderItem'
+                $ref: '#/components/schemas/PaginatedOrderItemList'
           description: ''
   /api/orders/order-items/{public_id}/:
     get:
@@ -202,6 +395,85 @@ paths:
   /api/orders/orders/:
     get:
       operationId: orders_orders_list
+      parameters:
+      - in: query
+        name: created_by
+        schema:
+          type: integer
+      - in: query
+        name: created_by_source
+        schema:
+          type: string
+          enum:
+          - customer
+          - staff
+          - system
+        description: |-
+          * `staff` - Staff
+          * `customer` - Customer
+          * `system` - System
+      - in: query
+        name: currency
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: payment_status
+        schema:
+          type: string
+          enum:
+          - authorized
+          - cancelled
+          - paid
+          - refunded
+          - settled
+          - unpaid
+        description: |-
+          * `unpaid` - Unpaid
+          * `authorized` - Authorized
+          * `paid` - Paid
+          * `settled` - Settled
+          * `refunded` - Refunded
+          * `cancelled` - Cancelled
+      - in: query
+        name: session
+        schema:
+          type: integer
+      - in: query
+        name: source
+        schema:
+          type: string
+          enum:
+          - customer_prepaid
+          - waiter_manual
+        description: |-
+          * `waiter_manual` - Waiter manual
+          * `customer_prepaid` - Customer prepaid
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - cancelled
+          - completed
+          - draft
+          - submitted
+        description: |-
+          * `draft` - Draft
+          * `submitted` - Submitted
+          * `completed` - Completed
+          * `cancelled` - Cancelled
       tags:
       - Orders
       security:
@@ -212,9 +484,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Order'
+                $ref: '#/components/schemas/PaginatedOrderList'
           description: ''
   /api/orders/orders/{public_id}/:
     get:
@@ -241,6 +511,47 @@ paths:
   /api/orders/sessions/:
     get:
       operationId: orders_sessions_list
+      parameters:
+      - in: query
+        name: currency
+        schema:
+          type: string
+      - in: query
+        name: opened_by
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: reservation
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - cancelled
+          - closed
+          - open
+        description: |-
+          * `open` - Open
+          * `closed` - Closed
+          * `cancelled` - Cancelled
+      - in: query
+        name: table
+        schema:
+          type: integer
       tags:
       - Orders
       security:
@@ -251,9 +562,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Session'
+                $ref: '#/components/schemas/PaginatedSessionList'
           description: ''
   /api/orders/sessions/{public_id}/:
     get:
@@ -280,6 +589,41 @@ paths:
   /api/orders/tickets/:
     get:
       operationId: orders_tickets_list
+      parameters:
+      - in: query
+        name: order
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: session
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - active
+          - bumped
+          - completed
+          - incoming
+        description: |-
+          * `incoming` - Incoming
+          * `active` - Active
+          * `completed` - Completed
+          * `bumped` - Bumped
       tags:
       - Orders
       security:
@@ -290,9 +634,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Ticket'
+                $ref: '#/components/schemas/PaginatedTicketList'
           description: ''
   /api/orders/tickets/{public_id}/:
     get:
@@ -319,6 +661,49 @@ paths:
   /api/payments/payments/:
     get:
       operationId: payments_payments_list
+      parameters:
+      - in: query
+        name: currency
+        schema:
+          type: string
+      - in: query
+        name: order
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: provider
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - authorized
+          - cancelled
+          - failed
+          - paid
+          - pending
+          - refunded
+        description: |-
+          * `pending` - Pending
+          * `authorized` - Authorized
+          * `paid` - Paid
+          * `failed` - Failed
+          * `refunded` - Refunded
+          * `cancelled` - Cancelled
       tags:
       - Payments
       security:
@@ -329,9 +714,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Payment'
+                $ref: '#/components/schemas/PaginatedPaymentList'
           description: ''
   /api/payments/payments/{public_id}/:
     get:
@@ -358,6 +741,41 @@ paths:
   /api/reservations/reservations/:
     get:
       operationId: reservations_reservations_list
+      parameters:
+      - in: query
+        name: customer
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - cancelled
+          - completed
+          - confirmed
+          - pending
+        description: |-
+          * `pending` - Pending
+          * `confirmed` - Confirmed
+          * `cancelled` - Cancelled
+          * `completed` - Completed
+      - in: query
+        name: table
+        schema:
+          type: integer
       tags:
       - Reservations
       security:
@@ -368,9 +786,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Reservation'
+                $ref: '#/components/schemas/PaginatedReservationList'
           description: ''
   /api/reservations/reservations/{public_id}/:
     get:
@@ -397,6 +813,35 @@ paths:
   /api/restaurants/restaurant-settings/:
     get:
       operationId: restaurants_restaurant_settings_list
+      parameters:
+      - in: query
+        name: currency
+        schema:
+          type: string
+      - in: query
+        name: locale
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: restaurant
+        schema:
+          type: integer
+      - in: query
+        name: timezone
+        schema:
+          type: string
       tags:
       - Restaurants
       security:
@@ -407,9 +852,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RestaurantSettings'
+                $ref: '#/components/schemas/PaginatedRestaurantSettingsList'
           description: ''
   /api/restaurants/restaurant-settings/{public_id}/:
     get:
@@ -436,6 +879,19 @@ paths:
   /api/restaurants/restaurants/:
     get:
       operationId: restaurants_restaurants_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
       tags:
       - Restaurants
       security:
@@ -446,9 +902,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Restaurant'
+                $ref: '#/components/schemas/PaginatedRestaurantList'
           description: ''
   /api/restaurants/restaurants/{public_id}/:
     get:
@@ -475,6 +929,35 @@ paths:
   /api/restaurants/tables/:
     get:
       operationId: restaurants_tables_list
+      parameters:
+      - in: query
+        name: capacity
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - free
+          - occupied
+          - reserved
+        description: |-
+          * `free` - Free
+          * `reserved` - Reserved
+          * `occupied` - Occupied
       tags:
       - Restaurants
       security:
@@ -485,9 +968,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Table'
+                $ref: '#/components/schemas/PaginatedTableList'
           description: ''
   /api/restaurants/tables/{public_id}/:
     get:
@@ -881,6 +1362,305 @@ components:
         * `submitted` - Submitted
         * `completed` - Completed
         * `cancelled` - Cancelled
+    PaginatedLayoutList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Layout'
+    PaginatedMenuCategoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuCategory'
+    PaginatedMenuItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuItem'
+    PaginatedMenuList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Menu'
+    PaginatedOrderItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+    PaginatedOrderList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+    PaginatedPaymentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
+    PaginatedReservationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reservation'
+    PaginatedRestaurantList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Restaurant'
+    PaginatedRestaurantSettingsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RestaurantSettings'
+    PaginatedSessionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+    PaginatedTableList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Table'
+    PaginatedTicketList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
     Payment:
       type: object
       properties:
@@ -1277,6 +2057,38 @@ components:
         * `active` - Active
         * `completed` - Completed
         * `bumped` - Bumped
+    TokenObtainPair:
+      type: object
+      properties:
+        email:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - email
+      - password
+      - refresh
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - refresh
     VoidReasonEnum:
       enum:
       - mispick
