@@ -6,7 +6,7 @@ from django.http import HttpRequest
 from rest_framework.test import APIRequestFactory
 
 from apps.authentication.models import RoleCode
-from apps.authentication.permissions import IsAdmin, IsCook, IsCustomer, IsWaiter
+from apps.authentication.permissions import IsAdmin, IsCustomer, IsFloor, IsKitchen
 
 
 @pytest.fixture
@@ -62,58 +62,58 @@ class TestIsAdmin:
         _assert_denied(IsAdmin(), request, dummy_view)
 
 
-class TestIsWaiter:
+class TestIsFloor:
+    def test_granted_for_admin(self, dummy_view: Any) -> None:
+        user = _mock_user(role=RoleCode.ADMIN)
+        _assert_granted(IsFloor(), _build_request(user), dummy_view)
+
     def test_granted_for_waiter(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.WAITER)
-        _assert_granted(IsWaiter(), _build_request(user), dummy_view)
-
-    def test_denied_for_admin(self, dummy_view: Any) -> None:
-        user = _mock_user(role=RoleCode.ADMIN)
-        _assert_denied(IsWaiter(), _build_request(user), dummy_view)
+        _assert_granted(IsFloor(), _build_request(user), dummy_view)
 
     def test_denied_for_cook(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.COOK)
-        _assert_denied(IsWaiter(), _build_request(user), dummy_view)
+        _assert_denied(IsFloor(), _build_request(user), dummy_view)
 
     def test_denied_for_customer(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.CUSTOMER)
-        _assert_denied(IsWaiter(), _build_request(user), dummy_view)
+        _assert_denied(IsFloor(), _build_request(user), dummy_view)
 
     def test_denied_for_unauthenticated(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.CUSTOMER, is_authenticated=False)
-        _assert_denied(IsWaiter(), _build_request(user), dummy_view)
+        _assert_denied(IsFloor(), _build_request(user), dummy_view)
 
     def test_denied_when_user_is_none(self, dummy_view: Any) -> None:
         request = APIRequestFactory().get("/")
         request.user = None  # type: ignore[assignment]
-        _assert_denied(IsWaiter(), request, dummy_view)
+        _assert_denied(IsFloor(), request, dummy_view)
 
 
-class TestIsCook:
+class TestIsKitchen:
+    def test_granted_for_admin(self, dummy_view: Any) -> None:
+        user = _mock_user(role=RoleCode.ADMIN)
+        _assert_granted(IsKitchen(), _build_request(user), dummy_view)
+
     def test_granted_for_cook(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.COOK)
-        _assert_granted(IsCook(), _build_request(user), dummy_view)
-
-    def test_denied_for_admin(self, dummy_view: Any) -> None:
-        user = _mock_user(role=RoleCode.ADMIN)
-        _assert_denied(IsCook(), _build_request(user), dummy_view)
+        _assert_granted(IsKitchen(), _build_request(user), dummy_view)
 
     def test_denied_for_waiter(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.WAITER)
-        _assert_denied(IsCook(), _build_request(user), dummy_view)
+        _assert_denied(IsKitchen(), _build_request(user), dummy_view)
 
     def test_denied_for_customer(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.CUSTOMER)
-        _assert_denied(IsCook(), _build_request(user), dummy_view)
+        _assert_denied(IsKitchen(), _build_request(user), dummy_view)
 
     def test_denied_for_unauthenticated(self, dummy_view: Any) -> None:
         user = _mock_user(role=RoleCode.CUSTOMER, is_authenticated=False)
-        _assert_denied(IsCook(), _build_request(user), dummy_view)
+        _assert_denied(IsKitchen(), _build_request(user), dummy_view)
 
     def test_denied_when_user_is_none(self, dummy_view: Any) -> None:
         request = APIRequestFactory().get("/")
         request.user = None  # type: ignore[assignment]
-        _assert_denied(IsCook(), request, dummy_view)
+        _assert_denied(IsKitchen(), request, dummy_view)
 
 
 class TestIsCustomer:

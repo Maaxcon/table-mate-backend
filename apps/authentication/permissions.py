@@ -1,18 +1,22 @@
 from apps.authentication.models import RoleCode
-from common.permissions import HasRole
+from common.permissions import HasAnyRole
 
 
-class IsAdmin(HasRole):
-    role = RoleCode.ADMIN
+class IsAdmin(HasAnyRole):
+    roles = frozenset({RoleCode.ADMIN})
 
 
-class IsWaiter(HasRole):
-    role = RoleCode.WAITER
+class IsStaff(HasAnyRole):
+    roles = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 
 
-class IsCook(HasRole):
-    role = RoleCode.COOK
+class IsKitchen(HasAnyRole):
+    roles = frozenset({RoleCode.ADMIN, RoleCode.COOK})
 
 
-class IsCustomer(HasRole):
-    role = RoleCode.CUSTOMER
+class IsFloor(HasAnyRole):
+    roles = frozenset({RoleCode.ADMIN, RoleCode.WAITER})
+
+
+class IsCustomer(HasAnyRole):
+    roles = frozenset({RoleCode.CUSTOMER})
