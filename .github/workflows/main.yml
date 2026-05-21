@@ -59,15 +59,10 @@ jobs:
       - name: Security check with bandit
         run: uv run bandit -r apps core common manage.py
 
-      - name: Safety scan
-        env:
-          SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
-        run: |
-          if [ -n "$SAFETY_API_KEY" ]; then
-            uv run safety scan --non-interactive
-          else
-            uv run safety check
-          fi
+      - name: Vulnerability scan
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: pyproject.toml
 
       - name: Schema drift gate
         run: |
