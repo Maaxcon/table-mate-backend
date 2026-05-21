@@ -14,6 +14,7 @@ dependencies = [
     "channels-redis",
     "daphne",
     "drf-spectacular",
+
 ]
 requires-python = ">=3.11"
 
@@ -52,11 +53,17 @@ dev = [
     "drf-spectacular>=0.29.0",
     "mypy==1.18.2",
     "pre-commit>=4.6.0",
+    "pytest>=9.0.3",
+    "pytest-django>=4.12.0",
     "ruff>=0.15.13",
 ]
 prod = [
     "gunicorn>=26.0.0",
 ]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "core.settings.local"
+testpaths = ["tests"]
 
 [tool.setuptools]
 packages = ["core", "apps", "common"]

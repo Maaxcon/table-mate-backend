@@ -27,11 +27,14 @@ repos:
           - djangorestframework
           - djangorestframework-stubs
           - djangorestframework-simplejwt
+          - django-environ
+          - daphne
           - google-auth
           - django-cors-headers
           - channels
           - channels-redis
           - drf-spectacular
           - psycopg2-binary
+          - pytest
           - types-requests
           - pydantic

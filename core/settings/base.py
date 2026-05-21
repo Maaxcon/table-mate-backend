@@ -107,6 +107,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+<<<<<<< foundation/002/api-contract-spectacular-setup
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
@@ -116,6 +117,9 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "OAS_VERSION": "3.0.3",
+=======
+    "EXCEPTION_HANDLER": "common.api.exception_handler.custom_exception_handler",
+>>>>>>> dev
 }
 
 SIMPLE_JWT = {

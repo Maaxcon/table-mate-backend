@@ -48,7 +48,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --group dev
 
       - name: Lint with ruff
         run: uv run ruff check apps core common manage.py
@@ -60,9 +60,13 @@ jobs:
         run: uv run bandit -r apps core common manage.py
 
       - name: Run tests
+<<<<<<< foundation/002/api-contract-spectacular-setup
         run: uv run python manage.py test
 
       - name: Check schema drift
         run: |
           uv run python manage.py spectacular --validate --file /tmp/schema.yaml
           diff -u schema.yaml /tmp/schema.yaml
+=======
+        run: uv run pytest
+>>>>>>> dev
