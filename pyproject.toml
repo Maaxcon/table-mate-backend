@@ -48,10 +48,10 @@ build-backend = "setuptools.build_meta"
 [dependency-groups]
 dev = [
     "bandit>=1.9.4",
-    "django-stubs>=6.0.4",
+    "django-stubs[compatible-mypy]>=6.0.4",
     "djangorestframework-stubs[compatible-mypy]>=3.17.0",
     "drf-spectacular>=0.29.0",
-    "mypy==2.1.0",
+
     "pre-commit>=4.6.0",
     "pytest>=9.0.3",
     "pytest-django>=4.12.0",
