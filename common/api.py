@@ -87,18 +87,3 @@ class RestaurantScopedViewSetMixin(PublicLookupMixin, Generic[_ModelT]):
 
     def safely_get_queryset(self, qs: QuerySet[_ModelT]) -> QuerySet[_ModelT]:
         return qs
-
-
-class RestaurantScopedPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField[Model]):
-    restaurant_lookup: ClassVar[str] = "restaurant_id"
-
-    def get_queryset(self) -> QuerySet[Model] | None:
-        queryset = super().get_queryset()
-        restaurant_id = get_current_restaurant_id()
-
-        if queryset is None:
-            return None
-        if restaurant_id is None:
-            return queryset.none()
-
-        return queryset.filter(**{self.restaurant_lookup: restaurant_id})
