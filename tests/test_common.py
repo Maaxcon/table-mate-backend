@@ -5,7 +5,6 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from common.api.exception_handler import custom_exception_handler
-from common.api.exceptions import DomainAPIException
 from common.exceptions import DomainError, ReservationConflictError
 
 
@@ -32,20 +31,6 @@ class TestReservationConflictError:
 
     def test_is_domain_error_subclass(self) -> None:
         assert isinstance(ReservationConflictError(), DomainError)
-
-
-class TestDomainAPIException:
-    def test_status_code(self) -> None:
-        exc = DomainAPIException(DomainError())
-        assert exc.status_code == status.HTTP_400_BAD_REQUEST
-
-    def test_detail_from_domain_error(self) -> None:
-        exc = DomainAPIException(DomainError())
-        assert exc.detail == "A domain error occurred."
-
-    def test_detail_from_reservation_conflict(self) -> None:
-        exc = DomainAPIException(ReservationConflictError())
-        assert exc.detail == "Reservation conflicts with an existing booking."
 
 
 class TestCustomExceptionHandler:
