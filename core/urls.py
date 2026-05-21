@@ -5,6 +5,7 @@ from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
 )
+from rest_framework.permissions import IsAdminUser
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -16,8 +17,11 @@ urlpatterns = [
     path("api/menu/", include("apps.menu.urls")),
 ]
 
+urlpatterns += [
+    path("api/schema/", SpectacularAPIView.as_view(permission_classes=[IsAdminUser]), name="schema"),
+]
+
 if settings.DEBUG:
     urlpatterns += [
-        path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
         path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     ]
