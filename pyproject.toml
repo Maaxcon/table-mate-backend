@@ -20,7 +20,7 @@ requires-python = ">=3.11"
 
 [tool.ruff]
 target-version = "py311"
-line-length = 88
+line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B"]
@@ -51,11 +51,12 @@ dev = [
     "django-stubs>=6.0.4",
     "djangorestframework-stubs[compatible-mypy]>=3.17.0",
     "drf-spectacular>=0.29.0",
-    "mypy==1.18.2",
+    "mypy==2.1.0",
     "pre-commit>=4.6.0",
     "pytest>=9.0.3",
     "pytest-django>=4.12.0",
     "ruff>=0.15.13",
+    "safety>=3.0.0",
 ]
 prod = [
     "gunicorn>=26.0.0",

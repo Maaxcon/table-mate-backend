@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
       - id: end-of-file-fixer
@@ -8,14 +8,14 @@ repos:
       - id: check-added-large-files
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.0
+    rev: v0.15.13
     hooks:
       - id: ruff
         args: [ --fix ]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+    rev: v2.1.0
     hooks:
       - id: mypy
         additional_dependencies:
@@ -24,6 +24,8 @@ repos:
           - daphne
           - django-filter
           - django-stubs
+          - django-environ
+          - daphne
           - djangorestframework
           - djangorestframework-stubs
           - djangorestframework-simplejwt
