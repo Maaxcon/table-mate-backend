@@ -50,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Seed pip into virtual environment
+        run: uv pip install pip
+
       - name: Lint with ruff
         run: uv run ruff check apps core common manage.py
 
