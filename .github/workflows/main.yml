@@ -59,13 +59,16 @@ jobs:
       - name: Type check with mypy
         run: uv run mypy apps core common manage.py
 
+      - name: Export requirements for auditing
+        run: uv pip compile pyproject.toml -o requirements-audit.txt
+
       - name: Security check with bandit
         run: uv run bandit -r apps core common manage.py
 
       - name: Vulnerability scan
         uses: pypa/gh-action-pip-audit@v1.1.0
         with:
-          inputs: pyproject.toml
+          inputs: requirements-audit.txt
 
       - name: Schema drift gate
         run: |
