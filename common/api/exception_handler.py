@@ -1,6 +1,5 @@
 from typing import Any
 
-from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
@@ -13,6 +12,6 @@ def custom_exception_handler(
     if isinstance(exc, DomainError):
         return Response(
             {"detail": exc.default_detail, "code": exc.default_code},
-            status=status.HTTP_400_BAD_REQUEST,
+            status=exc.default_status_code,
         )
     return exception_handler(exc, context)

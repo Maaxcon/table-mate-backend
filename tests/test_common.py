@@ -75,7 +75,7 @@ class TestCustomExceptionHandler:
         response = custom_exception_handler(ReservationConflictError(), context)
 
         assert response is not None
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.status_code == status.HTTP_409_CONFLICT
         assert response.data == {
             "detail": "Reservation conflicts with an existing booking.",
             "code": "reservation_conflict",
