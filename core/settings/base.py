@@ -105,6 +105,7 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "common.api.exception_handler.custom_exception_handler",
 }
 
 SIMPLE_JWT = {

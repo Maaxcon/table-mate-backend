@@ -48,7 +48,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --group dev
 
       - name: Seed pip into virtual environment
         run: uv pip install pip
@@ -77,4 +77,4 @@ jobs:
           diff /tmp/schema.yaml schema.yaml
 
       - name: Run tests
-        run: uv run python manage.py test
+        run: uv run pytest
