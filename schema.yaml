@@ -1,0 +1,7 @@
+openapi: 3.0.3
+info:
+  title: Table Mate API
+  version: 0.1.0
+  description: Table Mate backend API
+paths: {}
+components: {}

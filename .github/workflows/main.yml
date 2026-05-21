@@ -50,14 +50,31 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
+      - name: Seed pip into virtual environment
+        run: uv pip install pip
+
       - name: Lint with ruff
         run: uv run ruff check apps core common manage.py
 
       - name: Type check with mypy
         run: uv run mypy apps core common manage.py
 
+      - name: Export requirements for auditing
+        run: uv pip compile pyproject.toml -o requirements-audit.txt
+
       - name: Security check with bandit
         run: uv run bandit -r apps core common manage.py
+
+      - name: Vulnerability scan
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: requirements-audit.txt
+          ignore-vulns: PYSEC-2025-183
+
+      - name: Schema drift gate
+        run: |
+          uv run python manage.py spectacular --validate --file /tmp/schema.yaml
+          diff /tmp/schema.yaml schema.yaml
 
       - name: Run tests
         run: uv run pytest

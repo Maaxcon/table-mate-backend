@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "corsheaders",
     "channels",
+    "drf_spectacular",
     "apps.authentication",
     "apps.restaurants",
     "apps.editor",
@@ -63,9 +64,7 @@ WSGI_APPLICATION = "core.wsgi.application"
 DATABASES = {
     "default": env.db(
         "DATABASE_URL",
-        default=(
-            "postgresql://table_mate_user:table_mate_pass@" "localhost:5432/table_mate"
-        ),
+        default=("postgresql://table_mate_user:table_mate_pass@" "localhost:5432/table_mate"),
     ),
 }
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)
@@ -105,6 +104,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "common.api.exception_handler.custom_exception_handler",
 }
 
@@ -128,4 +128,11 @@ CHANNEL_LAYERS = {
             ],
         },
     }
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Table Mate API",
+    "DESCRIPTION": "Table Mate backend API",
+    "VERSION": "0.1.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }
