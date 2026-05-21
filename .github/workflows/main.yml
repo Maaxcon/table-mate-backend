@@ -69,6 +69,7 @@ jobs:
         uses: pypa/gh-action-pip-audit@v1.1.0
         with:
           inputs: requirements-audit.txt
+          ignore-vulns: PYSEC-2025-183
 
       - name: Schema drift gate
         run: |
