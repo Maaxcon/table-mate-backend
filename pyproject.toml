@@ -48,7 +48,7 @@ dev = [
     "bandit>=1.9.4",
     "django-stubs>=6.0.4",
     "drf-spectacular>=0.29.0",
-    "mypy==1.18.2",
+    "mypy==2.1.0",
     "pre-commit>=4.6.0",
     "ruff>=0.15.13",
     "safety>=3.0.0",
