@@ -37,7 +37,6 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "corsheaders",
     "channels",
-    "drf_spectacular",
     "apps.authentication",
     "apps.restaurants",
     "apps.editor",
