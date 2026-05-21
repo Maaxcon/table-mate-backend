@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from apps.authentication.models import User
 
 
-@database_sync_to_async  # type: ignore[misc]
+@database_sync_to_async  # type: ignore[untyped-decorator]
 def _resolve_user(jwt_auth: JWTAuthentication, validated_token: object) -> User | None:
     try:
         return cast("User", jwt_auth.get_user(validated_token))  # type: ignore[arg-type]

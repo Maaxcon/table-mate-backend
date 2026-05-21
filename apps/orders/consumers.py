@@ -84,7 +84,7 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         await self.send(text_data=json.dumps(message["event"]))
 
 
-@database_sync_to_async  # type: ignore[misc]
+@database_sync_to_async  # type: ignore[untyped-decorator]
 def _fetch_session(session_id: uuid.UUID, restaurant_id: int) -> Session | None:
     try:
         return Session.objects.get(public_id=session_id, restaurant_id=restaurant_id)

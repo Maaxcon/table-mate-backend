@@ -90,9 +90,7 @@ class Session(RestaurantScopedModel):
         related_name="opened_sessions",
     )
     guest_count = models.PositiveIntegerField()
-    status = models.CharField(
-        max_length=20, choices=SessionStatus.choices, default=SessionStatus.OPEN
-    )
+    status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.OPEN)
     currency = models.CharField(max_length=3)
     running_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     final_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
@@ -290,8 +288,7 @@ class OrderItem(RestaurantScopedModel):
                 name="orders_orderitem_status_valid",
             ),
             models.CheckConstraint(
-                condition=models.Q(void_reason__isnull=True)
-                | models.Q(void_reason__in=VoidReasonCode.values),
+                condition=models.Q(void_reason__isnull=True) | models.Q(void_reason__in=VoidReasonCode.values),
                 name="orders_orderitem_void_reason_valid",
             ),
         ]

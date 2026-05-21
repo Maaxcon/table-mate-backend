@@ -7,9 +7,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from apps.authentication.models import RoleCode
 from common.channels import authenticate_websocket, hall_group_name
 
-_HALL_ALLOWED_ROLES: frozenset[str] = frozenset(
-    {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK}
-)
+_HALL_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 
 
 class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]

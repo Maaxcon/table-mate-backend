@@ -34,9 +34,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("guest_count", models.PositiveIntegerField()),
                 (
@@ -118,9 +116,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 (
                     "created_by_source",
@@ -241,9 +237,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 (
                     "status",
@@ -305,9 +299,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("guest_slot", models.PositiveIntegerField()),
                 ("quantity", models.PositiveIntegerField()),
@@ -423,27 +415,21 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="order",
             constraint=models.CheckConstraint(
-                condition=models.Q(
-                    ("created_by_source__in", ["staff", "customer", "system"])
-                ),
+                condition=models.Q(("created_by_source__in", ["staff", "customer", "system"])),
                 name="orders_order_created_by_source_valid",
             ),
         ),
         migrations.AddConstraint(
             model_name="order",
             constraint=models.CheckConstraint(
-                condition=models.Q(
-                    ("source__in", ["waiter_manual", "customer_prepaid"])
-                ),
+                condition=models.Q(("source__in", ["waiter_manual", "customer_prepaid"])),
                 name="orders_order_source_valid",
             ),
         ),
         migrations.AddConstraint(
             model_name="order",
             constraint=models.CheckConstraint(
-                condition=models.Q(
-                    ("status__in", ["draft", "submitted", "completed", "cancelled"])
-                ),
+                condition=models.Q(("status__in", ["draft", "submitted", "completed", "cancelled"])),
                 name="orders_order_status_valid",
             ),
         ),
@@ -476,9 +462,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="ticket",
             constraint=models.CheckConstraint(
-                condition=models.Q(
-                    ("status__in", ["incoming", "active", "completed", "bumped"])
-                ),
+                condition=models.Q(("status__in", ["incoming", "active", "completed", "bumped"])),
                 name="orders_ticket_status_valid",
             ),
         ),

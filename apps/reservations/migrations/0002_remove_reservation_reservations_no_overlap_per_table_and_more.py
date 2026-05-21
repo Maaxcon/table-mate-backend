@@ -9,34 +9,33 @@ import apps.reservations.models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('reservations', '0001_initial'),
-        ('restaurants', '0001_initial'),
+        ("reservations", "0001_initial"),
+        ("restaurants", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='reservation',
-            name='reservations_no_overlap_per_table',
+            model_name="reservation",
+            name="reservations_no_overlap_per_table",
         ),
         migrations.AddConstraint(
-            model_name='reservation',
+            model_name="reservation",
             constraint=django.contrib.postgres.constraints.ExclusionConstraint(
-                condition=models.Q(('status', 'confirmed')),
+                condition=models.Q(("status", "confirmed")),
                 expressions=[
                     (
                         apps.reservations.models.TsTzRange(
-                            models.F('start_at'),
-                            models.F('end_at'),
+                            models.F("start_at"),
+                            models.F("end_at"),
                             django.contrib.postgres.fields.ranges.RangeBoundary(),
                         ),
-                        '&&',
+                        "&&",
                     ),
-                    ('table', '='),
+                    ("table", "="),
                 ],
-                name='reservations_no_overlap_per_table',
+                name="reservations_no_overlap_per_table",
             ),
         ),
     ]
