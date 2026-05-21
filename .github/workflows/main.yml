@@ -65,4 +65,5 @@ jobs:
       - name: Check schema drift
         run: |
           uv run python manage.py spectacular --validate --file /tmp/schema.yaml
+          touch schema.yaml
           diff -u schema.yaml /tmp/schema.yaml

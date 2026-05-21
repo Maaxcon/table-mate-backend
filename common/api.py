@@ -1,4 +1,3 @@
-from contextvars import ContextVar, Token
 from typing import ClassVar, Generic, Protocol, TypeVar, cast
 
 from django.db.models import Manager, Model, QuerySet
@@ -41,24 +40,6 @@ class PublicIdRelatedField(serializers.SlugRelatedField[_ModelT]):
         )
 
 
-_current_restaurant_id: ContextVar[int | None] = ContextVar(
-    "current_restaurant_id",
-    default=None,
-)
-
-
-def set_current_restaurant_id(restaurant_id: int | None) -> Token[int | None]:
-    return _current_restaurant_id.set(restaurant_id)
-
-
-def reset_current_restaurant_id(token: Token[int | None]) -> None:
-    _current_restaurant_id.reset(token)
-
-
-def get_current_restaurant_id() -> int | None:
-    return _current_restaurant_id.get()
-
-
 class RestaurantScopedViewSetMixin(PublicLookupMixin, Generic[_ModelT]):
     restaurant_lookup: ClassVar[str] = "restaurant_id"
 
@@ -73,10 +54,16 @@ class RestaurantScopedViewSetMixin(PublicLookupMixin, Generic[_ModelT]):
     def get_queryset(self) -> QuerySet[_ModelT]:
         queryset = cast(QuerySet[_ModelT], super().get_queryset())  # type: ignore[misc]
         request = cast(_HasRequest, self).request
-        restaurant_id = getattr(request, "restaurant_id", None)
+        auth = getattr(request, "auth", None)
+        restaurant_id = None
 
-        if restaurant_id is None:
-            restaurant_id = get_current_restaurant_id()
+        if hasattr(auth, "get"):
+            try:
+                val = auth.get("restaurant_id")  # type: ignore[union-attr]
+                if val is not None:
+                    restaurant_id = int(val)
+            except (TypeError, ValueError, AttributeError):
+                pass
 
         if restaurant_id is None:
             return queryset.none()
