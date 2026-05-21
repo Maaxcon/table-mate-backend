@@ -122,6 +122,7 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "OAS_VERSION": "3.0.3",
+    "SECURITY": [{"jwt_Auth": []}],
 }
 
 SIMPLE_JWT = {
