@@ -22,12 +22,16 @@ repos:
           - django>=5.0
           - django-stubs
           - djangorestframework
+          - djangorestframework-stubs
           - djangorestframework-simplejwt
+          - django-environ
+          - daphne
           - google-auth
           - django-cors-headers
           - channels
           - channels-redis
           - drf-spectacular
           - psycopg2-binary
+          - pytest
           - types-requests
           - pydantic
