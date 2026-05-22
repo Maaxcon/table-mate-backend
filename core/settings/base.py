@@ -150,4 +150,9 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Table Mate backend API",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "TableStatus": "apps.restaurants.models.TableStatus",
+        "ReservationStatus": "apps.reservations.models.ReservationStatus",
+        "TableShape": "apps.restaurants.models.TableShape",
+    },
 }

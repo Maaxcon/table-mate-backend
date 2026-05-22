@@ -121,6 +121,137 @@ paths:
               schema:
                 $ref: '#/components/schemas/Layout'
           description: ''
+  /api/editor/tables/:
+    get:
+      operationId: editor_tables_list
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+      - in: query
+        name: capacity
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: shape
+        schema:
+          type: string
+          enum:
+          - booth
+          - rectangle
+          - round
+          - square
+        description: |-
+          * `rectangle` - Rectangle
+          * `round` - Round
+          * `square` - Square
+          * `booth` - Booth
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - free
+          - occupied
+          - reserved
+        description: |-
+          * `free` - Free
+          * `reserved` - Reserved
+          * `occupied` - Occupied
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEditorTableList'
+          description: ''
+  /api/editor/tables/{public_id}/:
+    get:
+      operationId: editor_tables_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorTable'
+          description: ''
+    patch:
+      operationId: editor_tables_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorTable'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorTable'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorTable'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorTable'
+          description: ''
+  /api/editor/tables/available/:
+    get:
+      operationId: editor_tables_available_retrieve
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorTable'
+          description: ''
   /api/menu/menu-categories/:
     get:
       operationId: menu_menu_categories_list
@@ -788,6 +919,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedReservationList'
           description: ''
+    post:
+      operationId: reservations_reservations_create
+      tags:
+      - Reservations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reservation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reservation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reservation'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
   /api/reservations/reservations/{public_id}/:
     get:
       operationId: reservations_reservations_retrieve
@@ -798,6 +955,53 @@ paths:
           type: string
           pattern: ^[0-9a-fA-F-]{36}$
         required: true
+      tags:
+      - Reservations
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+    patch:
+      operationId: reservations_reservations_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedReservation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedReservation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedReservation'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/reservations/reservations/my/:
+    get:
+      operationId: reservations_reservations_my_retrieve
       tags:
       - Reservations
       security:
@@ -1007,6 +1211,54 @@ components:
         * `staff` - Staff
         * `customer` - Customer
         * `system` - System
+    EditorTable:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        table_number:
+          type: string
+          readOnly: true
+        capacity:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/TableStatus'
+        shape:
+          $ref: '#/components/schemas/TableShape'
+        active:
+          type: boolean
+        position_x:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        position_y:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - capacity
+      - created_at
+      - public_id
+      - restaurant
+      - table_number
+      - updated_at
     Layout:
       type: object
       properties:
@@ -1362,6 +1614,29 @@ components:
         * `submitted` - Submitted
         * `completed` - Completed
         * `cancelled` - Cancelled
+    PaginatedEditorTableList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorTable'
     PaginatedLayoutList:
       type: object
       required:
@@ -1661,6 +1936,90 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ticket'
+    PatchedEditorTable:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        table_number:
+          type: string
+          readOnly: true
+        capacity:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/TableStatus'
+        shape:
+          $ref: '#/components/schemas/TableShape'
+        active:
+          type: boolean
+        position_x:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        position_y:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedReservation:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        customer:
+          type: string
+          format: uuid
+          readOnly: true
+        table:
+          type: string
+          format: uuid
+        guest_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ReservationStatus'
+          readOnly: true
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     Payment:
       type: object
       properties:
@@ -1743,7 +2102,6 @@ components:
         table:
           type: string
           format: uuid
-          readOnly: true
         guest_count:
           type: integer
           maximum: 2147483647
@@ -1755,7 +2113,9 @@ components:
           type: string
           format: date-time
         status:
-          $ref: '#/components/schemas/ReservationStatusEnum'
+          allOf:
+          - $ref: '#/components/schemas/ReservationStatus'
+          readOnly: true
         notes:
           type: string
           nullable: true
@@ -1775,9 +2135,10 @@ components:
       - public_id
       - restaurant
       - start_at
+      - status
       - table
       - updated_at
-    ReservationStatusEnum:
+    ReservationStatus:
       enum:
       - pending
       - confirmed
@@ -1961,7 +2322,11 @@ components:
           maximum: 2147483647
           minimum: 0
         status:
-          $ref: '#/components/schemas/TableStatusEnum'
+          $ref: '#/components/schemas/TableStatus'
+        shape:
+          $ref: '#/components/schemas/TableShape'
+        active:
+          type: boolean
         position_x:
           type: integer
           maximum: 2147483647
@@ -1987,7 +2352,19 @@ components:
       - restaurant
       - table_number
       - updated_at
-    TableStatusEnum:
+    TableShape:
+      enum:
+      - rectangle
+      - round
+      - square
+      - booth
+      type: string
+      description: |-
+        * `rectangle` - Rectangle
+        * `round` - Round
+        * `square` - Square
+        * `booth` - Booth
+    TableStatus:
       enum:
       - free
       - reserved

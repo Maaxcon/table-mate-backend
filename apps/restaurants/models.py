@@ -30,9 +30,7 @@ class RestaurantSettings(BaseModel):
     currency = models.CharField(max_length=3)
     locale = models.CharField(max_length=16, default="en")
     default_tax_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0)
-    default_service_charge = models.DecimalField(
-        max_digits=5, decimal_places=4, default=0
-    )
+    default_service_charge = models.DecimalField(max_digits=5, decimal_places=4, default=0)
     working_hours = models.JSONField(default=dict)
 
     class Meta:
@@ -40,6 +38,13 @@ class RestaurantSettings(BaseModel):
 
     def __str__(self) -> str:
         return f"Settings for {self.restaurant.name}"
+
+
+class TableShape(models.TextChoices):
+    RECTANGLE = "rectangle", "Rectangle"
+    ROUND = "round", "Round"
+    SQUARE = "square", "Square"
+    BOOTH = "booth", "Booth"
 
 
 class Table(RestaurantScopedModel):
@@ -50,6 +55,12 @@ class Table(RestaurantScopedModel):
         choices=TableStatus.choices,
         default=TableStatus.FREE,
     )
+    shape = models.CharField(
+        max_length=20,
+        choices=TableShape.choices,
+        default=TableShape.RECTANGLE,
+    )
+    active = models.BooleanField(default=True)
     position_x = models.IntegerField(null=True, blank=True)
     position_y = models.IntegerField(null=True, blank=True)
 
