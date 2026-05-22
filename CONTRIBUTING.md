@@ -65,7 +65,7 @@ Run tests with `pytest --reuse-db` locally for speed; CI uses fresh Postgres via
 ### 8. Quality Gates Before PR
 1. Lint must pass: `ruff check apps core common manage.py`
 2. Security checks must pass: `bandit -r apps core common manage.py`
-3. Tests must pass: `python manage.py test`
+3. Tests must pass: `pytest --reuse-db`
 4. Open PR to `dev`
 5. PR requires at least 1 approval and passing CI
 
