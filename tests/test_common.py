@@ -1,9 +1,11 @@
 import pytest
+from django.http import HttpRequest
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 from rest_framework.views import APIView
 
+from common.api.exception_handler import custom_exception_handler
 from common.exceptions import DomainError, ReservationConflictError
 
 
@@ -59,3 +61,8 @@ class TestExceptionHandlerEndToEnd:
         response = view(request)
         assert response.status_code == 403
         assert response.data == {"detail": "not allowed"}
+
+    def test_handler_returns_none_for_unhandled_non_drf_error(self) -> None:
+        context: dict[str, object] = {"view": None, "args": (), "kwargs": {}, "request": HttpRequest()}
+        result = custom_exception_handler(ValueError("oops"), context)
+        assert result is None
