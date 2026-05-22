@@ -1,4 +1,3 @@
-import pytest
 from django.http import HttpRequest
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
@@ -33,7 +32,6 @@ class _PermissionDeniedView(APIView):
         raise PermissionDenied("not allowed")
 
 
-@pytest.mark.django_db
 class TestExceptionHandlerEndToEnd:
     def test_domain_error_returns_400(self) -> None:
         view = _DomainErrorView.as_view()
