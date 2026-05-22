@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+from django.contrib.auth.models import AnonymousUser
 from rest_framework.test import APIRequestFactory
 
 from apps.authentication.models import RoleCode
@@ -30,7 +31,7 @@ def test_role_permission_matrix(perm_cls: type[Any], user_role: str, user_factor
 @pytest.mark.parametrize("perm_cls", PERM_CLASSES)
 def test_denied_for_anonymous(perm_cls: type[Any]) -> None:
     request = APIRequestFactory().get("/")
-    request.user = type("AnonUser", (), {"is_authenticated": False, "role": None})()
+    request.user = AnonymousUser()
     assert perm_cls().has_permission(request, None) is False
 
 
