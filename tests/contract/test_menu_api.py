@@ -31,6 +31,11 @@ def category(menu: Menu) -> MenuCategory:
 
 
 @pytest.fixture
+def empty_restaurant() -> Restaurant:
+    return Restaurant.objects.create(name="Empty Restaurant", address="456 Oak St")
+
+
+@pytest.fixture
 def item(menu: Menu, category: MenuCategory, restaurant: Restaurant) -> MenuItem:
     return MenuItem.objects.create(
         restaurant=restaurant,
@@ -62,13 +67,46 @@ class TestPublicMenuCategories:
         self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
     ) -> None:
         url = reverse("menu-category-list")
-        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "menu": str(menu.pk)})
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "menu": str(menu.public_id)})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         results = data["results"]
         assert len(results) == 1
         assert results[0]["name"] == "Mains"
+
+    def test_empty_database_returns_empty_results(self, api_client: Client, empty_restaurant: Restaurant) -> None:
+        url = reverse("menu-category-list")
+        response: Any = api_client.get(url, {"restaurant": str(empty_restaurant.public_id)})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["count"] == 0
+        assert data["results"] == []
+
+    def test_ordering_by_name(self, api_client: Client, restaurant: Restaurant, menu: Menu) -> None:
+        MenuCategory.objects.create(menu=menu, name="A", sort_order=2)
+        MenuCategory.objects.create(menu=menu, name="B", sort_order=1)
+        url = reverse("menu-category-list")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "ordering": "name"})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        names = [r["name"] for r in data["results"]]
+        assert names == sorted(names)
+
+    def test_pagination_response_structure(
+        self, api_client: Client, restaurant: Restaurant, category: MenuCategory
+    ) -> None:
+        url = reverse("menu-category-list")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "count" in data
+        assert "next" in data
+        assert "previous" in data
+        assert "results" in data
 
 
 @pytest.mark.django_db(databases=["default"])
@@ -92,7 +130,9 @@ class TestPublicMenuItems:
         self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
     ) -> None:
         url = reverse("menu-item-list")
-        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "category": str(category.pk)})
+        response: Any = api_client.get(
+            url, {"restaurant": str(restaurant.public_id), "category": str(category.public_id)}
+        )
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -100,7 +140,7 @@ class TestPublicMenuItems:
         assert len(results) == 1
         assert results[0]["name"] == "Steak"
 
-    def test_unavailable_item_hidden(
+    def test_filter_by_is_available_false(
         self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
     ) -> None:
         item.is_available = False
@@ -115,6 +155,55 @@ class TestPublicMenuItems:
         assert len(results) == 1
         assert results[0]["is_available"] is False
 
+    def test_filter_by_is_available_true(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
+    ) -> None:
+        url = reverse("menu-item-list")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "is_available": "true"})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        results = data["results"]
+        assert len(results) >= 1
+        assert results[0]["is_available"] is True
+
+    def test_empty_database_returns_empty_results(self, api_client: Client, empty_restaurant: Restaurant) -> None:
+        url = reverse("menu-item-list")
+        response: Any = api_client.get(url, {"restaurant": str(empty_restaurant.public_id)})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["count"] == 0
+        assert data["results"] == []
+
+    def test_ordering_by_name(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        MenuItem.objects.create(
+            restaurant=restaurant, menu=menu, category=category, name="B", price=Decimal("10.00"), sort_order=2
+        )
+        MenuItem.objects.create(
+            restaurant=restaurant, menu=menu, category=category, name="A", price=Decimal("20.00"), sort_order=1
+        )
+        url = reverse("menu-item-list")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "ordering": "name"})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        names = [r["name"] for r in data["results"]]
+        assert names == sorted(names)
+
+    def test_pagination_response_structure(self, api_client: Client, restaurant: Restaurant, item: MenuItem) -> None:
+        url = reverse("menu-item-list")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "count" in data
+        assert "next" in data
+        assert "previous" in data
+        assert "results" in data
+
 
 @pytest.mark.django_db(databases=["default"])
 class TestPublicMenuMenus:
@@ -128,3 +217,34 @@ class TestPublicMenuMenus:
         assert len(results) >= 1
         assert results[0]["name"] == "Dinner"
         assert results[0]["public_id"] == str(menu.public_id)
+
+    def test_empty_database_returns_empty_results(self, api_client: Client, empty_restaurant: Restaurant) -> None:
+        url = reverse("menu-list")
+        response: Any = api_client.get(url, {"restaurant": str(empty_restaurant.public_id)})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["count"] == 0
+        assert data["results"] == []
+
+    def test_ordering_by_name(self, api_client: Client, restaurant: Restaurant) -> None:
+        Menu.objects.create(restaurant=restaurant, name="A", is_active=True)
+        Menu.objects.create(restaurant=restaurant, name="B", is_active=True)
+        url = reverse("menu-list")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "ordering": "name"})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        names = [r["name"] for r in data["results"]]
+        assert names == sorted(names)
+
+    def test_pagination_response_structure(self, api_client: Client, restaurant: Restaurant, menu: Menu) -> None:
+        url = reverse("menu-list")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "count" in data
+        assert "next" in data
+        assert "previous" in data
+        assert "results" in data
