@@ -37,3 +37,4 @@ repos:
           - pytest
           - types-requests
           - pydantic
+          - factory-boy
