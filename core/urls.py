@@ -15,6 +15,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/reservations/", include("apps.reservations.urls")),
     path("api/orders/", include("apps.orders.urls")),
     path("api/menu/", include("apps.menu.urls")),
+    path("api/payments/", include("apps.payments.urls")),
 ]
 
 urlpatterns += [

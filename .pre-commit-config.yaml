@@ -20,6 +20,9 @@ repos:
       - id: mypy
         additional_dependencies:
           - django>=5.0
+          - django-environ
+          - daphne
+          - django-filter
           - django-stubs
           - django-environ
           - daphne

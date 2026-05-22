@@ -1,14 +1,18 @@
 import os
 
-import apps.orders.routing as orders_routing
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
+from django.urls.resolvers import URLPattern, URLResolver
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings.production')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings.production")
 
-application = ProtocolTypeRouter({
-    'http': get_asgi_application(),
-    'websocket': URLRouter(
-        orders_routing.websocket_urlpatterns
-    ),
-})
+django_asgi_app = get_asgi_application()
+
+websocket_urlpatterns: list[URLPattern | URLResolver] = []
+
+application = ProtocolTypeRouter(
+    {
+        "http": django_asgi_app,
+        "websocket": URLRouter(websocket_urlpatterns),
+    }
+)
