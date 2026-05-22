@@ -46,10 +46,10 @@ def item(menu: Menu, category: MenuCategory, restaurant: Restaurant) -> MenuItem
 @pytest.mark.django_db(databases=["default"])
 class TestPublicMenuCategories:
     def test_unauthenticated_returns_200(
-        self, api_client: Client, menu: Menu, category: MenuCategory, item: MenuItem
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
     ) -> None:
         url = reverse("menu-category-list")
-        response: Any = api_client.get(url)
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -58,9 +58,11 @@ class TestPublicMenuCategories:
         assert results[0]["name"] == "Mains"
         assert results[0]["public_id"] == str(category.public_id)
 
-    def test_filter_by_menu(self, api_client: Client, menu: Menu, category: MenuCategory, item: MenuItem) -> None:
+    def test_filter_by_menu(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
+    ) -> None:
         url = reverse("menu-category-list")
-        response: Any = api_client.get(url, {"menu": menu.pk})
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "menu": str(menu.pk)})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -72,10 +74,10 @@ class TestPublicMenuCategories:
 @pytest.mark.django_db(databases=["default"])
 class TestPublicMenuItems:
     def test_unauthenticated_returns_200(
-        self, api_client: Client, menu: Menu, category: MenuCategory, item: MenuItem
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
     ) -> None:
         url = reverse("menu-item-list")
-        response: Any = api_client.get(url)
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -86,9 +88,11 @@ class TestPublicMenuItems:
         assert results[0]["is_available"] is True
         assert results[0]["public_id"] == str(item.public_id)
 
-    def test_filter_by_category(self, api_client: Client, menu: Menu, category: MenuCategory, item: MenuItem) -> None:
+    def test_filter_by_category(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
+    ) -> None:
         url = reverse("menu-item-list")
-        response: Any = api_client.get(url, {"category": category.pk})
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "category": str(category.pk)})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -97,13 +101,13 @@ class TestPublicMenuItems:
         assert results[0]["name"] == "Steak"
 
     def test_unavailable_item_hidden(
-        self, api_client: Client, menu: Menu, category: MenuCategory, item: MenuItem
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
     ) -> None:
         item.is_available = False
         item.save()
 
         url = reverse("menu-item-list")
-        response: Any = api_client.get(url, {"is_available": "false"})
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "is_available": "false"})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -114,9 +118,9 @@ class TestPublicMenuItems:
 
 @pytest.mark.django_db(databases=["default"])
 class TestPublicMenuMenus:
-    def test_unauthenticated_returns_200(self, api_client: Client, menu: Menu) -> None:
+    def test_unauthenticated_returns_200(self, api_client: Client, restaurant: Restaurant, menu: Menu) -> None:
         url = reverse("menu-list")
-        response: Any = api_client.get(url)
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
