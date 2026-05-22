@@ -8,6 +8,7 @@ from rest_framework.response import Response
 
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin
 
+from .filters import MenuCategoryFilter, MenuItemFilter
 from .models import Menu, MenuCategory, MenuItem
 from .selectors import (
     get_active_menus,
@@ -43,7 +44,7 @@ class MenuCategoryViewSet(
 ):
     serializer_class = MenuCategorySerializer
     permission_classes = [AllowAny]
-    filterset_fields = ["menu"]
+    filterset_class = MenuCategoryFilter
     ordering_fields = ["created_at", "updated_at", "sort_order", "name"]
 
     def get_queryset(self) -> QuerySet[MenuCategory]:
@@ -61,7 +62,7 @@ class MenuItemViewSet(
 ):
     serializer_class = MenuItemSerializer
     permission_classes = [AllowAny]
-    filterset_fields = ["menu", "category", "is_available"]
+    filterset_class = MenuItemFilter
     ordering_fields = ["created_at", "updated_at", "sort_order", "name", "price"]
 
     def get_queryset(self) -> QuerySet[MenuItem]:
