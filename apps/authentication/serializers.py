@@ -28,15 +28,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     restaurant_id = serializers.IntegerField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        restaurant_id: int | None = attrs.pop("restaurant_id", None)
-        data = super().validate(attrs)
+        self._restaurant_id: int | None = attrs.pop("restaurant_id", None)
+        return super().validate(attrs)
 
-        user = cast(User, self.user)
-        refresh: RefreshToken = RefreshToken.for_user(user)
-        refresh["role"] = user.role
-        if restaurant_id is not None:
-            refresh["restaurant_id"] = restaurant_id
-
-        data["refresh"] = str(refresh)
-        data["access"] = str(refresh.access_token)
-        return data
+    def get_token(self, user: User) -> RefreshToken:  # type: ignore[override]
+        token: RefreshToken = super().get_token(user)
+        token["role"] = cast(User, user).role
+        if self._restaurant_id is not None:
+            token["restaurant_id"] = self._restaurant_id
+        return token
