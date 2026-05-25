@@ -1,10 +1,17 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
 
-from .views import CustomTokenObtainPairView, MeView
+from .views import (
+    CookieTokenRefreshView,
+    CustomTokenObtainPairView,
+    GoogleAuthView,
+    LogoutView,
+    MeView,
+)
 
 urlpatterns = [
     path("token/", CustomTokenObtainPairView.as_view(), name="token-obtain"),
-    path("refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("refresh/", CookieTokenRefreshView.as_view(), name="token-refresh"),
     path("me/", MeView.as_view(), name="me"),
+    path("google/", GoogleAuthView.as_view(), name="google-auth"),
+    path("logout/", LogoutView.as_view(), name="logout"),
 ]

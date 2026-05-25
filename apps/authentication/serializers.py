@@ -6,6 +6,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import RoleCode, User
 
+
+class GoogleAuthSerializer(serializers.Serializer[None]):
+    code = serializers.CharField()
+    redirect_uri = serializers.CharField()
+
 _STAFF_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 
 
