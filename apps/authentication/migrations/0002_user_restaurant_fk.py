@@ -15,6 +15,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='user',
             name='restaurant',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='staff', to='restaurants.restaurant'),
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name='staff',
+                to='restaurants.restaurant',
+            ),
         ),
     ]
