@@ -37,7 +37,9 @@ class TestGoogleAuthenticate:
         with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
             mock_open.side_effect = [
                 _urlopen_mock({"access_token": "goog-tok"}),
-                _urlopen_mock({"email": "new@example.com", "email_verified": True, "given_name": "John", "family_name": "Doe"}),
+                _urlopen_mock(
+                    {"email": "new@example.com", "email_verified": True, "given_name": "John", "family_name": "Doe"}
+                ),
             ]
             user = google_authenticate("code123", "http://localhost:3000")
 
