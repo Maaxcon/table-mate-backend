@@ -11,7 +11,7 @@ class TokenVersionJWTAuthentication(JWTAuthentication):
     def get_user(self, validated_token: Token) -> User:  # type: ignore[override]
         user = cast(User, super().get_user(validated_token))
         token_version: int | None = validated_token.payload.get("token_version")
-        if token_version is not None and user.token_version != token_version:
+        if token_version is None or user.token_version != token_version:
             raise InvalidToken("Token invalidated due to role change.")
         return user
 

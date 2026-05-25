@@ -92,6 +92,12 @@ class GoogleContextView(APIView):
         restaurant_id: int = serializer.validated_data["restaurant_id"]
         user = cast(User, request.user)
 
+        if user.role == RoleCode.CUSTOMER:
+            return Response(
+                {"detail": "This endpoint is not available for customer accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if user.restaurant_id != restaurant_id:
             return Response(
                 {"restaurant_id": "User is not a member of this restaurant."},

@@ -112,6 +112,16 @@ class TestGoogleContextView:
         response = APIClient().post(self.url, {"restaurant_id": 1}, format="json")
         assert response.status_code == 401
 
+    def test_customer_cannot_use_context_endpoint(self) -> None:
+        user = UserFactory.create(role=RoleCode.CUSTOMER)
+        access, _ = issue_tokens(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post(self.url, {"restaurant_id": 1}, format="json")
+
+        assert response.status_code == 403
+
     def test_missing_restaurant_id_returns_400(self) -> None:
         user = UserFactory.create(role=RoleCode.WAITER)
         access, _ = issue_tokens(user)
@@ -225,6 +235,20 @@ class TestMeView:
         user.__class__.objects.filter(pk=user.pk).update(token_version=99)
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.get(self.url)
+
+        assert response.status_code == 401
+
+    def test_token_without_version_claim_returns_401(self) -> None:
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        user = UserFactory.create()
+        # AccessToken.for_user does not embed token_version (only issue_tokens does)
+        token = AccessToken.for_user(user)
+        assert "token_version" not in token.payload
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(token)}")
 
         response = client.get(self.url)
 

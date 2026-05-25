@@ -29,7 +29,10 @@ def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
         with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             return cast(dict[str, Any], json.loads(resp.read()))
     except urllib.error.HTTPError as exc:
-        body: dict[str, Any] = json.loads(exc.read())
+        try:
+            body: dict[str, Any] = json.loads(exc.read())
+        except json.JSONDecodeError:
+            raise ValueError("Google token exchange failed.") from exc
         raise ValueError(body.get("error_description", "Google token exchange failed.")) from exc
     except urllib.error.URLError as exc:
         raise ValueError(f"Failed to reach Google: {exc.reason}") from exc
@@ -56,6 +59,9 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
 
     userinfo = fetch_google_userinfo(google_access_token)
 
+    if not userinfo.get("email_verified"):
+        raise ValueError("Google account email is not verified.")
+
     email: str | None = userinfo.get("email")
     if not email:
         raise ValueError("Google account has no email.")
@@ -68,6 +74,8 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
             last_name=userinfo.get("family_name", ""),
             role=RoleCode.CUSTOMER,
         )
+    elif not user.is_active:
+        raise ValueError("This account has been deactivated.")
     return user
 
 
