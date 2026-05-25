@@ -2,7 +2,7 @@ from datetime import datetime
 
 from django.db import transaction
 
-from apps.restaurants.models import RestaurantSettings, Table, TableStatus
+from apps.restaurants.models import Table, TableStatus
 from common.exceptions import ReservationConflictError
 
 from ..editor.selectors import get_available_tables
@@ -34,8 +34,6 @@ def create_reservation(
     end_at: datetime,
     notes: str | None = None,
 ) -> Reservation:
-    RestaurantSettings.objects.filter(restaurant_id=restaurant_id).select_for_update().first()
-
     table = (
         Table.objects.filter(restaurant_id=restaurant_id, public_id=table_id, active=True).select_for_update().first()
     )
