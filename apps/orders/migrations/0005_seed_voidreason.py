@@ -1,4 +1,7 @@
+from typing import Any
+
 from django.db import migrations
+from django.db.migrations.state import StateApps
 
 VOID_REASONS = [
     ("mispick", "Mispick"),
@@ -8,14 +11,14 @@ VOID_REASONS = [
 ]
 
 
-def seed_void_reasons(apps, schema_editor):
+def seed_void_reasons(apps: StateApps, schema_editor: Any) -> None:
     VoidReason = apps.get_model("orders", "VoidReason")
     VoidReason.objects.bulk_create(
         [VoidReason(code=code, label=label) for code, label in VOID_REASONS]
     )
 
 
-def unseed_void_reasons(apps, schema_editor):
+def unseed_void_reasons(apps: StateApps, schema_editor: Any) -> None:
     VoidReason = apps.get_model("orders", "VoidReason")
     VoidReason.objects.filter(code__in=[code for code, _ in VOID_REASONS]).delete()
 
