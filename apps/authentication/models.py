@@ -61,6 +61,13 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
         choices=RoleCode.choices,
         default=RoleCode.CUSTOMER,
     )
+    restaurant = models.ForeignKey(
+        "restaurants.Restaurant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="staff",
+    )
     token_version = models.PositiveIntegerField(default=0)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
