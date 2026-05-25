@@ -4,6 +4,48 @@ info:
   version: 0.1.0
   description: Table Mate backend API
 paths:
+  /api/auth/google/:
+    post:
+      operationId: auth_google_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleAuth'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GoogleAuth'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GoogleAuth'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleAuthResponse'
+          description: ''
+        '400':
+          description: Google authentication failed.
+  /api/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: Refresh token cookie cleared.
   /api/auth/me/:
     get:
       operationId: auth_me_retrieve
@@ -1031,6 +1073,24 @@ components:
       - email
       - password
       - refresh
+    GoogleAuth:
+      type: object
+      properties:
+        code:
+          type: string
+        redirect_uri:
+          type: string
+      required:
+      - code
+      - redirect_uri
+    GoogleAuthResponse:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+      required:
+      - access
     Layout:
       type: object
       properties:

@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.conf import settings
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -10,7 +11,12 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .models import User
-from .serializers import CustomTokenObtainPairSerializer, GoogleAuthSerializer, UserSerializer
+from .serializers import (
+    CustomTokenObtainPairSerializer,
+    GoogleAuthResponseSerializer,
+    GoogleAuthSerializer,
+    UserSerializer,
+)
 from .services import google_authenticate, issue_tokens
 
 
@@ -38,7 +44,15 @@ class MeView(generics.RetrieveAPIView[User]):
 
 class GoogleAuthView(APIView):
     permission_classes = [AllowAny]
+    serializer_class = GoogleAuthSerializer
 
+    @extend_schema(
+        request=GoogleAuthSerializer,
+        responses={
+            200: GoogleAuthResponseSerializer,
+            400: OpenApiResponse(description="Google authentication failed."),
+        },
+    )
     def post(self, request: Request) -> Response:
         serializer = GoogleAuthSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -74,7 +88,12 @@ class CookieTokenRefreshView(TokenRefreshView):
 
 class LogoutView(APIView):
     permission_classes = [AllowAny]
+    serializer_class = None
 
+    @extend_schema(
+        request=None,
+        responses={200: OpenApiResponse(description="Refresh token cookie cleared.")},
+    )
     def post(self, request: Request) -> Response:
         response = Response(status=status.HTTP_200_OK)
         response.delete_cookie(key="refresh_token", samesite="Strict")

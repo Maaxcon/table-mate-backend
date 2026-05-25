@@ -2,7 +2,7 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -10,7 +10,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import RoleCode, User
 from .selectors import get_user_by_email
 
-_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_GOOGLE_OAUTH_EXCHANGE_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 
@@ -24,10 +24,10 @@ def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
             "grant_type": "authorization_code",
         }
     ).encode()
-    req = urllib.request.Request(_GOOGLE_TOKEN_URL, data=payload, method="POST")
+    req = urllib.request.Request(_GOOGLE_OAUTH_EXCHANGE_URL, data=payload, method="POST")
     try:
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read())  # type: ignore[no-any-return]
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
+            return cast(dict[str, Any], json.loads(resp.read()))
     except urllib.error.HTTPError as exc:
         body: dict[str, Any] = json.loads(exc.read())
         raise ValueError(body.get("error_description", "Google token exchange failed.")) from exc
@@ -38,8 +38,8 @@ def fetch_google_userinfo(access_token: str) -> dict[str, Any]:
         _GOOGLE_USERINFO_URL,
         headers={"Authorization": f"Bearer {access_token}"},
     )
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read())  # type: ignore[no-any-return]
+    with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
+        return cast(dict[str, Any], json.loads(resp.read()))
 
 
 def google_authenticate(code: str, redirect_uri: str) -> User:
@@ -69,8 +69,8 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
 def issue_tokens(user: User) -> tuple[str, str]:
     """Returns (access_token, refresh_token) as strings."""
     refresh = RefreshToken.for_user(user)
-    refresh["role"] = user.role  # type: ignore[index]
-    refresh["token_version"] = user.token_version  # type: ignore[index]
+    refresh["role"] = user.role
+    refresh["token_version"] = user.token_version
     return str(refresh.access_token), str(refresh)
 
 

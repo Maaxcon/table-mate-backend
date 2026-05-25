@@ -11,6 +11,11 @@ class GoogleAuthSerializer(serializers.Serializer[None]):
     code = serializers.CharField()
     redirect_uri = serializers.CharField()
 
+
+class GoogleAuthResponseSerializer(serializers.Serializer[None]):
+    access = serializers.CharField(read_only=True)
+
+
 _STAFF_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 
 
