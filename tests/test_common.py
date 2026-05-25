@@ -1,6 +1,7 @@
 from django.http import HttpRequest
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory
 from rest_framework.views import APIView
 
@@ -12,7 +13,7 @@ class _DomainErrorView(APIView):
     authentication_classes = []
     permission_classes = []
 
-    def get(self, request: Request) -> None:
+    def get(self, request: Request) -> Response:
         raise DomainError()
 
 
@@ -20,7 +21,7 @@ class _ReservationConflictView(APIView):
     authentication_classes = []
     permission_classes = []
 
-    def get(self, request: Request) -> None:
+    def get(self, request: Request) -> Response:
         raise ReservationConflictError()
 
 
@@ -28,7 +29,7 @@ class _PermissionDeniedView(APIView):
     authentication_classes = []
     permission_classes = []
 
-    def get(self, request: Request) -> None:
+    def get(self, request: Request) -> Response:
         raise PermissionDenied("not allowed")
 
 
