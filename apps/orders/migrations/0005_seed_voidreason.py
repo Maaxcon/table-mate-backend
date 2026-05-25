@@ -13,9 +13,7 @@ VOID_REASONS = [
 
 def seed_void_reasons(apps: StateApps, schema_editor: Any) -> None:
     VoidReason = apps.get_model("orders", "VoidReason")
-    VoidReason.objects.bulk_create(
-        [VoidReason(code=code, label=label) for code, label in VOID_REASONS]
-    )
+    VoidReason.objects.bulk_create([VoidReason(code=code, label=label) for code, label in VOID_REASONS])
 
 
 def unseed_void_reasons(apps: StateApps, schema_editor: Any) -> None:
@@ -24,7 +22,6 @@ def unseed_void_reasons(apps: StateApps, schema_editor: Any) -> None:
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("orders", "0004_voidreason"),
     ]

@@ -43,13 +43,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def _validate_restaurant_id(self, user: User) -> None:
         if self._restaurant_id is not None:
             if user.restaurant_id != self._restaurant_id:
-                raise serializers.ValidationError(
-                    {"restaurant_id": "User is not a member of this restaurant."}
-                )
+                raise serializers.ValidationError({"restaurant_id": "User is not a member of this restaurant."})
         elif user.role in _STAFF_ROLES:
-            raise serializers.ValidationError(
-                {"restaurant_id": "This field is required for staff users."}
-            )
+            raise serializers.ValidationError({"restaurant_id": "This field is required for staff users."})
 
     def get_token(self, user: User) -> RefreshToken:  # type: ignore[override]
         token = cast(RefreshToken, super().get_token(user))

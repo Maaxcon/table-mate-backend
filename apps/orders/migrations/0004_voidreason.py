@@ -5,36 +5,35 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('orders', '0003_orderitem_cross_tenant_fks'),
+        ("orders", "0003_orderitem_cross_tenant_fks"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='VoidReason',
+            name="VoidReason",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('code', models.CharField(max_length=32, unique=True)),
-                ('label', models.CharField(max_length=64)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("code", models.CharField(max_length=32, unique=True)),
+                ("label", models.CharField(max_length=64)),
             ],
             options={
-                'ordering': ['id'],
+                "ordering": ["id"],
             },
         ),
         migrations.RemoveConstraint(
-            model_name='orderitem',
-            name='orders_orderitem_void_reason_valid',
+            model_name="orderitem",
+            name="orders_orderitem_void_reason_valid",
         ),
         migrations.AlterField(
-            model_name='orderitem',
-            name='void_reason',
+            model_name="orderitem",
+            name="void_reason",
             field=models.ForeignKey(
                 blank=True,
                 null=True,
                 on_delete=django.db.models.deletion.PROTECT,
-                related_name='order_items',
-                to='orders.voidreason',
+                related_name="order_items",
+                to="orders.voidreason",
             ),
         ),
     ]
