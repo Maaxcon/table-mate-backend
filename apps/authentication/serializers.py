@@ -28,6 +28,8 @@ class UserSerializer(serializers.ModelSerializer[User]):
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     restaurant_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    access = serializers.CharField(read_only=True)
+    refresh = serializers.CharField(read_only=True)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         self._restaurant_id: int | None = attrs.pop("restaurant_id", None)
