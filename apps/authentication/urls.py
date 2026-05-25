@@ -4,6 +4,7 @@ from .views import (
     CookieTokenRefreshView,
     CustomTokenObtainPairView,
     GoogleAuthView,
+    GoogleContextView,
     LogoutView,
     MeView,
 )
@@ -13,5 +14,6 @@ urlpatterns = [
     path("refresh/", CookieTokenRefreshView.as_view(), name="token-refresh"),
     path("me/", MeView.as_view(), name="me"),
     path("google/", GoogleAuthView.as_view(), name="google-auth"),
+    path("google/context/", GoogleContextView.as_view(), name="google-context"),
     path("logout/", LogoutView.as_view(), name="logout"),
 ]

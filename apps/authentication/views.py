@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -10,14 +10,16 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import User
+from .models import RoleCode, User
 from .serializers import (
     CustomTokenObtainPairSerializer,
     GoogleAuthResponseSerializer,
     GoogleAuthSerializer,
+    GoogleContextResponseSerializer,
+    GoogleContextSerializer,
     UserSerializer,
 )
-from .services import google_authenticate, issue_tokens
+from .services import google_authenticate, issue_tokens, issue_tokens_with_restaurant
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -65,7 +67,38 @@ class GoogleAuthView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+        if user.role != RoleCode.CUSTOMER:
+            access, _ = issue_tokens(user)
+            return Response({"access": access, "needs_restaurant_context": True})
+
         access, refresh = issue_tokens(user)
+        response = Response({"access": access})
+        _set_refresh_cookie(response, refresh)
+        return response
+
+
+class GoogleContextView(APIView):
+    @extend_schema(
+        request=GoogleContextSerializer,
+        responses={
+            200: GoogleContextResponseSerializer,
+            400: OpenApiResponse(description="User is not a member of this restaurant."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        serializer = GoogleContextSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        restaurant_id: int = serializer.validated_data["restaurant_id"]
+        user = cast(User, request.user)
+
+        if user.restaurant_id != restaurant_id:
+            return Response(
+                {"restaurant_id": "User is not a member of this restaurant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        access, refresh = issue_tokens_with_restaurant(user, restaurant_id)
         response = Response({"access": access})
         _set_refresh_cookie(response, refresh)
         return response
@@ -104,6 +137,7 @@ __all__ = [
     "CustomTokenObtainPairView",
     "MeView",
     "GoogleAuthView",
+    "GoogleContextView",
     "CookieTokenRefreshView",
     "LogoutView",
 ]

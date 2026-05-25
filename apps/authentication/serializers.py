@@ -14,6 +14,15 @@ class GoogleAuthSerializer(serializers.Serializer[None]):
 
 class GoogleAuthResponseSerializer(serializers.Serializer[None]):
     access = serializers.CharField(read_only=True)
+    needs_restaurant_context = serializers.BooleanField(read_only=True, required=False)
+
+
+class GoogleContextSerializer(serializers.Serializer[None]):
+    restaurant_id = serializers.IntegerField()
+
+
+class GoogleContextResponseSerializer(serializers.Serializer[None]):
+    access = serializers.CharField(read_only=True)
 
 
 _STAFF_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})

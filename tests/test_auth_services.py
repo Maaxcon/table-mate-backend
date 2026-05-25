@@ -8,7 +8,7 @@ import pytest
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.authentication.models import RoleCode
-from apps.authentication.services import google_authenticate, issue_tokens
+from apps.authentication.services import google_authenticate, issue_tokens, issue_tokens_with_restaurant
 from tests.conftest import UserFactory
 
 
@@ -101,3 +101,18 @@ class TestIssueTokens:
         user.refresh_from_db()
         access, _ = issue_tokens(user)
         assert AccessToken(access).payload["token_version"] == 5
+
+
+@pytest.mark.django_db
+class TestIssueTokensWithRestaurant:
+    def test_access_token_contains_restaurant_id(self) -> None:
+        user = UserFactory.create(role=RoleCode.WAITER)
+        access, _ = issue_tokens_with_restaurant(user, 42)
+        assert AccessToken(access).payload["restaurant_id"] == 42
+
+    def test_access_token_contains_role_and_token_version(self) -> None:
+        user = UserFactory.create(role=RoleCode.COOK)
+        access, _ = issue_tokens_with_restaurant(user, 7)
+        payload = AccessToken(access).payload
+        assert payload["role"] == RoleCode.COOK
+        assert "token_version" in payload

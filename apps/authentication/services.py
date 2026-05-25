@@ -72,10 +72,17 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
 
 
 def issue_tokens(user: User) -> tuple[str, str]:
-    """Returns (access_token, refresh_token) as strings."""
     refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role
     refresh["token_version"] = user.token_version
+    return str(refresh.access_token), str(refresh)
+
+
+def issue_tokens_with_restaurant(user: User, restaurant_id: int) -> tuple[str, str]:
+    refresh = RefreshToken.for_user(user)
+    refresh["role"] = user.role
+    refresh["token_version"] = user.token_version
+    refresh["restaurant_id"] = restaurant_id
     return str(refresh.access_token), str(refresh)
 
 
@@ -84,4 +91,5 @@ __all__ = [
     "fetch_google_userinfo",
     "google_authenticate",
     "issue_tokens",
+    "issue_tokens_with_restaurant",
 ]
