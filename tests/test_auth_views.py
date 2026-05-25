@@ -147,6 +147,24 @@ class TestCookieTokenRefreshView:
         assert response.status_code == 200
         assert "access" in response.data
 
+    def test_rotated_refresh_written_to_cookie_not_body(self) -> None:
+        user = UserFactory.create()
+        _, refresh = issue_tokens(user)
+        client = APIClient()
+        client.cookies["refresh_token"] = refresh
+
+        new_refresh = "new.refresh.token"
+        with patch("apps.authentication.views.CookieTokenRefreshView.get_serializer") as mock_ser:
+            mock_instance = mock_ser.return_value
+            mock_instance.is_valid.return_value = None
+            mock_instance.validated_data = {"access": "new.access.token", "refresh": new_refresh}
+
+            response = client.post(self.url)
+
+        assert response.status_code == 200
+        assert "refresh" not in response.data
+        assert response.cookies["refresh_token"].value == new_refresh
+
     def test_no_cookie_returns_401(self) -> None:
         response = APIClient().post(self.url)
         assert response.status_code == 401

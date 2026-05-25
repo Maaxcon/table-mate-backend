@@ -116,7 +116,12 @@ class CookieTokenRefreshView(TokenRefreshView):
         except TokenError as exc:
             raise InvalidToken(exc.args[0]) from exc
 
-        return Response(serializer.validated_data)
+        response_data = dict(serializer.validated_data)
+        new_refresh = response_data.pop("refresh", None)
+        response = Response(response_data)
+        if new_refresh:
+            _set_refresh_cookie(response, new_refresh)
+        return response
 
 
 class LogoutView(APIView):
