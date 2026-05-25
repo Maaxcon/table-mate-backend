@@ -26,8 +26,8 @@ class UserFactory(factory.django.DjangoModelFactory):  # type: ignore[type-arg]
 @pytest.fixture
 def user_factory(db: Any) -> Callable[..., Any]:
 
-    def _factory(role: str = RoleCode.CUSTOMER) -> Any:
-        return UserFactory(role=role)  # type: ignore[no-untyped-call]
+    def _factory(role: str = RoleCode.CUSTOMER, **kwargs: Any) -> Any:
+        return UserFactory(role=role, **kwargs)  # type: ignore[no-untyped-call]
 
     return _factory
 
