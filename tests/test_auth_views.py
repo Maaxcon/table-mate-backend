@@ -95,7 +95,7 @@ class TestGoogleContextView:
         assert "access" in response.data
         assert "refresh_token" in response.cookies
 
-    def test_wrong_restaurant_returns_400(self) -> None:
+    def test_wrong_restaurant_returns_403(self) -> None:
         restaurant = Restaurant.objects.create(name="Restaurant A")
         other = Restaurant.objects.create(name="Restaurant B")
         user = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
@@ -105,8 +105,8 @@ class TestGoogleContextView:
 
         response = client.post(self.url, {"restaurant_id": other.pk}, format="json")
 
-        assert response.status_code == 400
-        assert "restaurant_id" in response.data
+        assert response.status_code == 403
+        assert "detail" in response.data
 
     def test_unauthenticated_returns_401(self) -> None:
         response = APIClient().post(self.url, {"restaurant_id": 1}, format="json")

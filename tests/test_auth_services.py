@@ -91,15 +91,17 @@ class TestGoogleAuthenticate:
             with pytest.raises(ValueError, match="No access token"):
                 google_authenticate("code123", "http://localhost:3000")
 
-    def test_raises_when_no_email_in_userinfo(self) -> None:
+    def test_creates_user_with_no_given_or_family_name(self) -> None:
         with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
             mock_open.side_effect = [
                 _urlopen_mock({"access_token": "goog-tok"}),
                 _urlopen_mock({"email": "x@example.com", "email_verified": True}),
             ]
-            # Should succeed with verified email
             user = google_authenticate("code123", "http://localhost:3000")
-            assert user.email == "x@example.com"
+
+        assert user.email == "x@example.com"
+        assert user.first_name == ""
+        assert user.last_name == ""
 
     def test_raises_when_email_not_verified(self) -> None:
         with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:

@@ -19,7 +19,7 @@ from .serializers import (
     GoogleContextSerializer,
     UserSerializer,
 )
-from .services import google_authenticate, issue_tokens, issue_tokens_with_restaurant
+from .services import google_authenticate, issue_access_token, issue_tokens, issue_tokens_with_restaurant
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -68,7 +68,7 @@ class GoogleAuthView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         if user.role != RoleCode.CUSTOMER:
-            access, _ = issue_tokens(user)
+            access = issue_access_token(user)
             return Response({"access": access, "needs_restaurant_context": True})
 
         access, refresh = issue_tokens(user)
@@ -100,8 +100,8 @@ class GoogleContextView(APIView):
 
         if user.restaurant_id != restaurant_id:
             return Response(
-                {"restaurant_id": "User is not a member of this restaurant."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "You do not have access to this restaurant."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         access, refresh = issue_tokens_with_restaurant(user, restaurant_id)
