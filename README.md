@@ -39,6 +39,23 @@ uv run python manage.py migrate
 
 ---
 
+## Docker (optional)
+
+`docker-compose.yml` maps Postgres to host port **5433** (not 5432) to avoid conflicts
+with a locally-running Postgres instance. Make sure `.env` uses port 5433:
+
+```
+DATABASE_URL=postgresql://table_mate_user:table_mate_pass@localhost:5433/table_mate
+```
+
+Start the stack:
+
+```bash
+docker compose up -d
+```
+
+---
+
 ## Local Development
 
 **Start Redis**
