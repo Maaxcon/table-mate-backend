@@ -51,12 +51,23 @@ If you use Codex chat commands, use:
 - Feature code changes
 - Tests and migrations when applicable
 
-### 7. Quality Gates Before PR
+### 7. Testing Approach
+
+We follow a **real-objects, behaviour-level** testing strategy:
+
+- **Fixtures over mocks.** Use `factory_boy` + `conftest.py` shared fixtures (`user_factory(role=...)`, `api(role=...)`). Reserve `unittest.mock` for project boundaries (external APIs, Redis, etc.).
+- **Parametrised matrices.** Permission tests use `@pytest.mark.parametrize` to cover all role × permission combinations instead of writing individual test methods per class.
+- **End-to-end via APIClient.** Exception handler tests raise exceptions inside real `APIView` subclasses and assert the response — no mocking of `exception_handler`.
+- **AnonymousUser.** Always include at least one test for unauthenticated/`None` user paths.
+
+Run tests with `pytest --reuse-db` locally for speed; CI uses fresh Postgres via the service container (already configured in `.github/`).
+
+### 8. Quality Gates Before PR
 1. Lint must pass: `ruff check apps core common manage.py`
 2. Security checks must pass: `bandit -r apps core common manage.py`
-3. Tests must pass: `python manage.py test`
+3. Tests must pass: `pytest --reuse-db`
 4. Open PR to `dev`
 5. PR requires at least 1 approval and passing CI
 
-### 8. Commit Message Format
+### 9. Commit Message Format
 - Use Conventional Commits: `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`
