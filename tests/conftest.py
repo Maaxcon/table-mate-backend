@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NamedTuple
 
 import factory
 import pytest
@@ -24,21 +24,26 @@ class UserFactory(factory.django.DjangoModelFactory):  # type: ignore[type-arg]
 
 
 @pytest.fixture
-def user_factory(db: Any) -> Callable[..., Any]:
+def user_factory() -> Callable[..., Any]:
 
     def _factory(role: str = RoleCode.CUSTOMER, **kwargs: Any) -> Any:
-        return UserFactory(role=role, **kwargs)  # type: ignore[no-untyped-call]
+        return UserFactory.build(role=role, **kwargs)
 
     return _factory
 
 
-@pytest.fixture
-def api(user_factory: Callable[..., Any]) -> Callable[..., APIClient]:
+class AuthContext(NamedTuple):
+    client: APIClient
+    user: Any
 
-    def _api(role: str = RoleCode.CUSTOMER) -> APIClient:
-        user = user_factory(role=role)
+
+@pytest.fixture
+def api(user_factory: Callable[..., Any]) -> Callable[..., AuthContext]:
+    def _api(role: str = RoleCode.CUSTOMER, **kwargs: Any) -> AuthContext:
+        user = user_factory(role=role, **kwargs)
         client = APIClient()
         client.force_authenticate(user=user)
-        return client
+
+        return AuthContext(client=client, user=user)
 
     return _api
