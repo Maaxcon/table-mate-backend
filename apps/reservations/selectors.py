@@ -20,9 +20,10 @@ def get_reservations_for_table(
     )
 
 
-def get_customer_reservations(customer_id: int) -> QuerySet[Reservation]:
+def get_customer_reservations(customer_id: int, restaurant_id: int) -> QuerySet[Reservation]:
     return Reservation.objects.filter(
         customer_id=customer_id,
+        restaurant_id=restaurant_id,
     ).select_related("table", "customer")
 
 
