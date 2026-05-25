@@ -2,7 +2,7 @@ from datetime import datetime
 
 from django.db import transaction
 
-from apps.restaurants.models import Table, TableStatus
+from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
 
 from ..editor.selectors import get_available_tables
@@ -62,8 +62,5 @@ def create_reservation(
         status=ReservationStatus.CONFIRMED,
         notes=notes or "",
     )
-
-    table.status = TableStatus.RESERVED
-    table.save(update_fields=["status", "updated_at"])
 
     return reservation
