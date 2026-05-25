@@ -10,5 +10,5 @@ media/
 docker-compose.override.yml
 .postgres_data/
 table_mate.egg-info/
-schema.yaml
+
 

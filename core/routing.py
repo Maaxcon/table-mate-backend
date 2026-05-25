@@ -8,6 +8,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings.production")
 
 django_asgi_app = get_asgi_application()
 
+# Consumers reference models; Django apps must be fully populated first.
+# get_asgi_application() triggers apps.populate(), so these must come after.
 from apps.editor.routing import (  # noqa: E402
     websocket_urlpatterns as editor_ws_patterns,
 )
