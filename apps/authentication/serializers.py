@@ -52,8 +52,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             )
 
     def get_token(self, user: User) -> RefreshToken:  # type: ignore[override]
-        token: RefreshToken = super().get_token(user)
-        token["role"] = cast(User, user).role
+        token = cast(RefreshToken, super().get_token(user))
+        token["role"] = user.role
         if self._restaurant_id is not None:
             token["restaurant_id"] = self._restaurant_id
         return token
