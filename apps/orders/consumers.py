@@ -63,20 +63,19 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         if not hasattr(self, "group_name"):
             return
 
-        if hasattr(self, "user"):
-            await self.channel_layer.group_send(
-                self.group_name,
-                {
-                    "type": "cart.event",
-                    "event": _make_cart_event(
-                        "CART_PARTICIPANT_LEFT",
-                        {
-                            "session_id": str(self.session_id),
-                            "user_id": str(self.user.public_id),
-                        },
-                    ),
-                },
-            )
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                "type": "cart.event",
+                "event": _make_cart_event(
+                    "CART_PARTICIPANT_LEFT",
+                    {
+                        "session_id": str(self.session_id),
+                        "user_id": str(self.user.public_id),
+                    },
+                ),
+            },
+        )
 
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
