@@ -1028,6 +1028,12 @@ components:
         restaurant_id:
           type: integer
           nullable: true
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
         email:
           type: string
           writeOnly: true
@@ -1035,8 +1041,10 @@ components:
           type: string
           writeOnly: true
       required:
+      - access
       - email
       - password
+      - refresh
     Layout:
       type: object
       properties:
