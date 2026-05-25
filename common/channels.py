@@ -6,7 +6,7 @@ from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken, TokenError
 
 if TYPE_CHECKING:
     from apps.authentication.models import User
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 def _resolve_user(jwt_auth: JWTAuthentication, validated_token: object) -> User | None:
     try:
         return cast("User", jwt_auth.get_user(validated_token))  # type: ignore[arg-type]
-    except Exception:
+    except (InvalidToken, AuthenticationFailed):
         return None
 
 
