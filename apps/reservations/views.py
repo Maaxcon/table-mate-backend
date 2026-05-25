@@ -12,7 +12,7 @@ from common.permissions import HasAnyRole
 from .models import Reservation
 from .selectors import get_customer_reservations
 from .serializers import ReservationSerializer
-from .services import create_reservation
+from .services import create_reservation, reschedule_reservation
 
 
 @extend_schema(tags=["Reservations"])
@@ -56,8 +56,25 @@ class ReservationViewSet(
         result_serializer = self.get_serializer(reservation)
         return Response(result_serializer.data, status=status.HTTP_201_CREATED)
 
+    def partial_update(self, request: Request, *args: object) -> Response:
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        reservation = reschedule_reservation(
+            reservation=instance,
+            validated_data=serializer.validated_data,
+        )
+
+        result_serializer = self.get_serializer(reservation)
+        return Response(result_serializer.data)
+
     @action(detail=False, methods=["get"], url_path="my")
     def my(self, request: Request) -> Response:
-        reservations = get_customer_reservations(request.user.pk)  # type: ignore[arg-type]
+        auth = getattr(request, "auth", None)
+        restaurant_id: int | None = auth.get("restaurant_id") if auth is not None and hasattr(auth, "get") else None
+        if restaurant_id is None:
+            raise ValidationError("Restaurant context required.")
+        reservations = get_customer_reservations(request.user.pk, restaurant_id=restaurant_id)  # type: ignore[arg-type]
         serializer = self.get_serializer(reservations, many=True)
         return Response(serializer.data)

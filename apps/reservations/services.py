@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from django.db import transaction
 
@@ -23,6 +24,27 @@ def check_availability(
     return available.filter(public_id=table_id).exists()
 
 
+def _check_reservation_conflict(
+    *,
+    restaurant_id: int,
+    table: Table,
+    start_at: datetime,
+    end_at: datetime,
+    exclude_id: int | None = None,
+) -> None:
+    qs = Reservation.objects.filter(
+        restaurant_id=restaurant_id,
+        table=table,
+        status=ReservationStatus.CONFIRMED,
+        start_at__lt=end_at,
+        end_at__gt=start_at,
+    )
+    if exclude_id is not None:
+        qs = qs.exclude(id=exclude_id)
+    if qs.exists():
+        raise ReservationConflictError("Table is not available during the requested time.")
+
+
 @transaction.atomic
 def create_reservation(
     *,
@@ -41,16 +63,12 @@ def create_reservation(
     if not table:
         raise ReservationConflictError("Table not found or inactive.")
 
-    overlapping = Reservation.objects.filter(
+    _check_reservation_conflict(
         restaurant_id=restaurant_id,
         table=table,
-        status=ReservationStatus.CONFIRMED,
-        start_at__lt=end_at,
-        end_at__gt=start_at,
-    ).select_for_update()
-
-    if overlapping.exists():
-        raise ReservationConflictError("Table is not available during the requested time.")
+        start_at=start_at,
+        end_at=end_at,
+    )
 
     reservation = Reservation.objects.create(
         restaurant_id=restaurant_id,
@@ -63,4 +81,34 @@ def create_reservation(
         notes=notes or "",
     )
 
+    return reservation
+
+
+@transaction.atomic
+def reschedule_reservation(
+    reservation: Reservation,
+    validated_data: dict[str, Any],
+) -> Reservation:
+    table = validated_data.get("table", reservation.table)
+    if table is None:
+        raise ReservationConflictError("Table not found or inactive.")
+    Table.objects.select_for_update().get(id=table.id)
+
+    start_at = validated_data.get("start_at", reservation.start_at)
+    end_at = validated_data.get("end_at", reservation.end_at)
+
+    _check_reservation_conflict(
+        restaurant_id=reservation.restaurant_id,
+        table=table,
+        start_at=start_at,
+        end_at=end_at,
+        exclude_id=reservation.id,
+    )
+
+    fields_to_update = ["table", "guest_count", "start_at", "end_at", "notes"]
+    for field in fields_to_update:
+        if field in validated_data:
+            setattr(reservation, field, validated_data[field])
+
+    reservation.save()
     return reservation
