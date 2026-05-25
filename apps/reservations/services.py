@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from django.db import transaction
+from rest_framework.exceptions import NotFound
 
 from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
@@ -61,7 +62,7 @@ def create_reservation(
     )
 
     if not table:
-        raise ReservationConflictError("Table not found or inactive.")
+        raise NotFound("Table not found or inactive.")
 
     _check_reservation_conflict(
         restaurant_id=restaurant_id,
