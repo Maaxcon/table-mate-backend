@@ -357,18 +357,7 @@ paths:
       - in: query
         name: void_reason
         schema:
-          type: string
-          nullable: true
-          enum:
-          - guest_changed_mind
-          - mispick
-          - out_of_stock
-          - quality_issue
-        description: |-
-          * `mispick` - Mispick
-          * `guest_changed_mind` - Guest changed mind
-          * `quality_issue` - Quality issue
-          * `out_of_stock` - Out of stock
+          type: integer
       - in: query
         name: voided_by
         schema:
@@ -1009,9 +998,6 @@ paths:
           description: ''
 components:
   schemas:
-    BlankEnum:
-      enum:
-      - ''
     CreatedBySourceEnum:
       enum:
       - staff
@@ -1212,9 +1198,6 @@ components:
       - public_id
       - restaurant
       - updated_at
-    NullEnum:
-      enum:
-      - null
     Order:
       type: object
       properties:
@@ -1347,11 +1330,8 @@ components:
           format: uuid
           readOnly: true
         void_reason:
+          type: integer
           nullable: true
-          oneOf:
-          - $ref: '#/components/schemas/VoidReasonEnum'
-          - $ref: '#/components/schemas/BlankEnum'
-          - $ref: '#/components/schemas/NullEnum'
         is_wasted:
           type: boolean
         created_at:
@@ -2157,18 +2137,6 @@ components:
       - email
       - public_id
       - updated_at
-    VoidReasonEnum:
-      enum:
-      - mispick
-      - guest_changed_mind
-      - quality_issue
-      - out_of_stock
-      type: string
-      description: |-
-        * `mispick` - Mispick
-        * `guest_changed_mind` - Guest changed mind
-        * `quality_issue` - Quality issue
-        * `out_of_stock` - Out of stock
   securitySchemes:
     cookieAuth:
       type: apiKey
