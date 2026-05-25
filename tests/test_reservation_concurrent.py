@@ -6,17 +6,19 @@ from typing import Any
 import pytest
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APIClient
 
+from apps.authentication.models import RoleCode
 from apps.restaurants.models import Restaurant, Table
+
+from .conftest import AuthContext
 
 
 @pytest.mark.django_db(transaction=True)
 def test_concurrent_reservation_slot_yields_exactly_one_success(
     restaurant: Restaurant,
     table: Table,
-    customer_user: Any,
-    api_factory: Callable[..., APIClient],
+    user_factory: Callable[..., Any],
+    api_factory: Callable[..., AuthContext],
 ) -> None:
     now = timezone.now()
     start_at = (now + timedelta(hours=1)).isoformat()
@@ -31,8 +33,10 @@ def test_concurrent_reservation_slot_yields_exactly_one_success(
     url = "/api/reservations/reservations/"
     attempts = 100
 
+    customer = user_factory(role=RoleCode.CUSTOMER)
+
     def _attempt() -> int:
-        client = api_factory(customer_user, restaurant.id)
+        client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
         return client.post(url, payload, format="json").status_code
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(attempts, 50)) as pool:
