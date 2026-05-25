@@ -31,6 +31,8 @@ def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
     except urllib.error.HTTPError as exc:
         body: dict[str, Any] = json.loads(exc.read())
         raise ValueError(body.get("error_description", "Google token exchange failed.")) from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f"Failed to reach Google: {exc.reason}") from exc
 
 
 def fetch_google_userinfo(access_token: str) -> dict[str, Any]:
@@ -38,8 +40,11 @@ def fetch_google_userinfo(access_token: str) -> dict[str, Any]:
         _GOOGLE_USERINFO_URL,
         headers={"Authorization": f"Bearer {access_token}"},
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
-        return cast(dict[str, Any], json.loads(resp.read()))
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
+            return cast(dict[str, Any], json.loads(resp.read()))
+    except urllib.error.URLError as exc:
+        raise ValueError(f"Failed to reach Google: {exc.reason}") from exc
 
 
 def google_authenticate(code: str, redirect_uri: str) -> User:
