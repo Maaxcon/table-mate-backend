@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -70,8 +72,6 @@ class EditorTableViewSet(
                 {"detail": "start_at and end_at query parameters are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        from datetime import datetime
 
         try:
             start_dt = datetime.fromisoformat(start_at)

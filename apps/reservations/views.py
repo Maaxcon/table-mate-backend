@@ -1,6 +1,7 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -40,8 +41,6 @@ class ReservationViewSet(
             restaurant_id = auth.get("restaurant_id")
 
         if restaurant_id is None:
-            from rest_framework.exceptions import ValidationError
-
             raise ValidationError("Restaurant context required.")
 
         reservation = create_reservation(
