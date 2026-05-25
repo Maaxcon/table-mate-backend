@@ -34,6 +34,35 @@ paths:
           description: ''
         '400':
           description: Google authentication failed.
+  /api/auth/google/context/:
+    post:
+      operationId: auth_google_context_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleContext'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GoogleContext'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GoogleContext'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleContextResponse'
+          description: ''
+        '400':
+          description: User is not a member of this restaurant.
   /api/auth/logout/:
     post:
       operationId: auth_logout_create
@@ -1084,6 +1113,25 @@ components:
       - code
       - redirect_uri
     GoogleAuthResponse:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        needs_restaurant_context:
+          type: boolean
+          readOnly: true
+      required:
+      - access
+      - needs_restaurant_context
+    GoogleContext:
+      type: object
+      properties:
+        restaurant_id:
+          type: integer
+      required:
+      - restaurant_id
+    GoogleContextResponse:
       type: object
       properties:
         access:
