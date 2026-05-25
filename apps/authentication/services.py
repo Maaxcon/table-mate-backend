@@ -70,6 +70,7 @@ def issue_tokens(user: User) -> tuple[str, str]:
     """Returns (access_token, refresh_token) as strings."""
     refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role  # type: ignore[index]
+    refresh["token_version"] = user.token_version  # type: ignore[index]
     return str(refresh.access_token), str(refresh)
 
 
