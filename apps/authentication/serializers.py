@@ -4,7 +4,9 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import User
+from .models import RoleCode, User
+
+_STAFF_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 
 
 class UserSerializer(serializers.ModelSerializer[User]):
@@ -29,7 +31,25 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         self._restaurant_id: int | None = attrs.pop("restaurant_id", None)
-        return super().validate(attrs)
+        data = super().validate(attrs)  # authenticates user; calls get_token()
+
+        user = cast(User, self.user)
+        self._validate_restaurant_id(user)
+
+        return data
+
+    def _validate_restaurant_id(self, user: User) -> None:
+        from apps.restaurants.models import Restaurant
+
+        if self._restaurant_id is not None:
+            if not Restaurant.objects.filter(id=self._restaurant_id).exists():
+                raise serializers.ValidationError(
+                    {"restaurant_id": "Restaurant not found."}
+                )
+        elif user.role in _STAFF_ROLES:
+            raise serializers.ValidationError(
+                {"restaurant_id": "This field is required for staff users."}
+            )
 
     def get_token(self, user: User) -> RefreshToken:  # type: ignore[override]
         token: RefreshToken = super().get_token(user)
