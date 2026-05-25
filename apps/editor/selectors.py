@@ -27,7 +27,7 @@ def is_within_working_hours(settings: RestaurantSettings, dt: datetime) -> bool:
     if not day_config:
         return False
 
-    current_time = local_dt.timetz()
+    current_time = local_dt.time()
     open_time = _parse_time(day_config.get("open", "00:00"))
     close_time = _parse_time(day_config.get("close", "23:59"))
 
