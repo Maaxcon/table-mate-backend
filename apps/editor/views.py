@@ -82,7 +82,10 @@ class EditorTableViewSet(
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        gc = int(guest_count) if guest_count else None
+        try:
+            gc = int(guest_count) if guest_count else None
+        except ValueError:
+            return Response({"detail": "guest_count must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
         tables = get_available_tables(
             restaurant_id=int(restaurant_id),
             start_at=start_dt,
