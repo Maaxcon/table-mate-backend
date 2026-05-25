@@ -41,11 +41,10 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
 
     def validate_table(self, value: Table) -> Table:
         request = self.context.get("request")
-        if request and hasattr(request, "auth"):
-            auth = request.auth
-            restaurant_id = None
-            if hasattr(auth, "get"):
-                restaurant_id = auth.get("restaurant_id")
-            if restaurant_id is not None and value.restaurant_id != int(restaurant_id):
-                raise serializers.ValidationError("Table does not belong to this restaurant.")
+        auth = getattr(request, "auth", None)
+        restaurant_id = auth.get("restaurant_id") if isinstance(auth, dict) else None
+        if restaurant_id is None:
+            raise serializers.ValidationError("Restaurant context required.")
+        if value.restaurant_id != int(restaurant_id):
+            raise serializers.ValidationError("Table does not belong to this restaurant.")
         return value
