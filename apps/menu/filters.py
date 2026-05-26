@@ -1,8 +1,7 @@
 import django_filters
 from django.db.models import QuerySet
 
-from .models import Menu, MenuCategory, MenuItem
-from .selectors import get_menu_items_ordered
+from .models import MenuCategory, MenuItem
 
 
 class MenuCategoryFilter(django_filters.FilterSet):  # type: ignore[misc]
@@ -24,6 +23,9 @@ class MenuItemFilter(django_filters.FilterSet):  # type: ignore[misc]
     def filter_queryset(self, queryset: QuerySet[MenuItem]) -> QuerySet[MenuItem]:
         menu_uuid = self.form.cleaned_data.get("menu")
         if menu_uuid is not None:
-            menu = Menu.objects.only("pk").get(public_id=menu_uuid)
-            queryset = get_menu_items_ordered(menu_id=menu.pk)
+            queryset = (
+                MenuItem.objects.filter(menu__public_id=menu_uuid)
+                .select_related("category")
+                .order_by("category__sort_order", "sort_order")
+            )
         return super().filter_queryset(queryset)  # type: ignore[no-any-return]

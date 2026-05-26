@@ -21,14 +21,6 @@ def get_menu_items_by_restaurant(*, restaurant_id: int) -> QuerySet[MenuItem]:
     ).select_related("category")
 
 
-def get_menu_items_ordered(*, menu_id: int) -> QuerySet[MenuItem]:
-    return (
-        MenuItem.objects.filter(menu_id=menu_id)
-        .select_related("category")
-        .order_by("category__sort_order", "sort_order")
-    )
-
-
 def search_menu_items(*, query: str, restaurant_id: int) -> QuerySet[MenuItem]:
     return MenuItem.objects.filter(
         restaurant_id=restaurant_id,
