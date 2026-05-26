@@ -20,3 +20,7 @@ class IsFloor(HasAnyRole):
 
 class IsCustomer(HasAnyRole):
     roles = frozenset({RoleCode.CUSTOMER})
+
+
+class IsFloorOrCustomer(HasAnyRole):
+    roles = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.CUSTOMER})
