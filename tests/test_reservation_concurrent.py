@@ -34,6 +34,7 @@ def test_concurrent_reservation_slot_yields_exactly_one_success(
     attempts = 100
 
     customer = user_factory(role=RoleCode.CUSTOMER)
+    customer.save()
 
     def _attempt() -> int:
         client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
