@@ -5,10 +5,22 @@ import pytest
 from django.test import Client
 from faker import Faker as FakerProxy
 
+from apps.authentication.models import RoleCode, User
 from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.restaurants.models import Restaurant
 
 fake = FakerProxy()
+
+
+class UserFactory(factory.django.DjangoModelFactory):  # type: ignore[misc]
+    class Meta:
+        model = User
+
+    email = factory.Sequence(lambda n: f"user{n}@example.com")
+    first_name = factory.Faker("first_name")
+    last_name = factory.Faker("last_name")
+    role = RoleCode.CUSTOMER
+    is_active = True
 
 
 class RestaurantFactory(factory.django.DjangoModelFactory):  # type: ignore[misc]
