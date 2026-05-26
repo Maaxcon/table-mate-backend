@@ -88,7 +88,10 @@ class MenuItemViewSet(
         query = request.query_params.get("q", "").strip()
         restaurant_id = self.resolve_restaurant_or_not_found()
         if not query or restaurant_id is None:
-            return self.get_paginated_response([]) if self.paginator else Response([])
+            page = self.paginate_queryset(MenuItem.objects.none())
+            if page is not None:
+                return self.get_paginated_response([])
+            return Response([])
         items = search_menu_items(query=query, restaurant_id=restaurant_id)
         page = self.paginate_queryset(items)
         if page is not None:

@@ -214,3 +214,74 @@ class TestPublicMenuMenus:
         assert "next" in data
         assert "previous" in data
         assert "results" in data
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestMenuItemSearch:
+    def test_search_returns_matching_items(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            name="Margherita Pizza",
+            description="Classic tomato and mozzarella",
+            is_available=True,
+        )
+        MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            name="Pepperoni",
+            description="Spicy salami pizza",
+            is_available=True,
+        )
+        MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            name="Caesar Salad",
+            description="Romaine with parmesan",
+            is_available=True,
+        )
+
+        url = reverse("menu-item-search")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "q": "pizza"})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        names = [r["name"] for r in data["results"]]
+        assert "Margherita Pizza" in names
+        assert "Pepperoni" in names
+        assert "Caesar Salad" not in names
+
+    def test_search_empty_q_returns_empty_paginated_response(
+        self, api_client: Client, restaurant: Restaurant, item: MenuItem
+    ) -> None:
+        url = reverse("menu-item-search")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "q": ""})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["count"] == 0
+        assert data["results"] == []
+
+    def test_search_accessible_without_authentication(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            name="Burger",
+            description="Beef patty",
+            is_available=True,
+        )
+        url = reverse("menu-item-search")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "q": "Burger"})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data["results"]) == 1
+        assert data["results"][0]["name"] == "Burger"
