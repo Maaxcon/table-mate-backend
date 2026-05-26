@@ -43,7 +43,7 @@ class MenuItemFactory(factory.django.DjangoModelFactory):  # type: ignore[misc]
 
     restaurant = factory.SelfAttribute("menu.restaurant")
     menu = factory.SubFactory(MenuFactory)
-    category = factory.SubFactory(MenuCategoryFactory)
+    category = factory.SubFactory(MenuCategoryFactory, menu=factory.SelfAttribute("..menu"))
     name = factory.Sequence(lambda n: f"Item {n}")
     description = factory.Faker("sentence")
     price = Decimal("29.9900")
