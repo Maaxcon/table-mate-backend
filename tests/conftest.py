@@ -1,9 +1,12 @@
+from collections.abc import Callable
 from decimal import Decimal
+from typing import Any
 
 import factory
 import pytest
 from django.test import Client
 from faker import Faker as FakerProxy
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.authentication.models import RoleCode, User
 from apps.menu.models import Menu, MenuCategory, MenuItem
@@ -61,6 +64,20 @@ class MenuItemFactory(factory.django.DjangoModelFactory):  # type: ignore[misc]
     price = Decimal("29.9900")
     sort_order = factory.Sequence(lambda n: n)
     is_available = True
+
+
+@pytest.fixture
+def api() -> Callable[..., Any]:
+    def _api(role: str) -> Any:
+        user: Any = UserFactory(role=role)
+        refresh = RefreshToken.for_user(user)
+        refresh["role"] = user.role
+        refresh["token_version"] = user.token_version
+        access_token = str(refresh.access_token)
+        client = Client(HTTP_AUTHORIZATION=f"Bearer {access_token}")
+        return type("ApiCtx", (), {"client": client})()
+
+    return _api
 
 
 @pytest.fixture
