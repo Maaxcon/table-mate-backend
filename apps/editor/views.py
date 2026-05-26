@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from django.db.models import QuerySet
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -50,7 +50,14 @@ class EditorTableViewSet(
             return [IsAuthenticated()]
         return [IsAuthenticated(), HasAnyRole.with_roles("admin", "waiter")]
 
-    @extend_schema(responses=EditorTableSerializer(many=True))
+    @extend_schema(
+        responses=EditorTableSerializer(many=True),
+        parameters=[
+            OpenApiParameter(name="start_at", type=str, required=True, description="ISO 8601 datetime"),
+            OpenApiParameter(name="end_at", type=str, required=True, description="ISO 8601 datetime"),
+            OpenApiParameter(name="guest_count", type=int, required=False),
+        ],
+    )
     @action(detail=False, methods=["get"], url_path="available")
     def available(self, request: Request) -> Response:
         auth = getattr(request, "auth", None)
