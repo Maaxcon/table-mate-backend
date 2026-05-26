@@ -239,7 +239,54 @@ paths:
           description: ''
   /api/editor/tables/available/:
     get:
-      operationId: editor_tables_available_retrieve
+      operationId: editor_tables_available_list
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+      - in: query
+        name: capacity
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: shape
+        schema:
+          type: string
+          enum:
+          - booth
+          - rectangle
+          - round
+          - square
+        description: |-
+          * `rectangle` - Rectangle
+          * `round` - Round
+          * `square` - Square
+          * `booth` - Booth
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - free
+          - occupied
+          - reserved
+        description: |-
+          * `free` - Free
+          * `reserved` - Reserved
+          * `occupied` - Occupied
       tags:
       - Editor
       security:
@@ -250,7 +297,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EditorTable'
+                $ref: '#/components/schemas/PaginatedEditorTableList'
           description: ''
   /api/menu/menu-categories/:
     get:
@@ -1001,7 +1048,42 @@ paths:
           description: ''
   /api/reservations/reservations/my/:
     get:
-      operationId: reservations_reservations_my_retrieve
+      operationId: reservations_reservations_my_list
+      parameters:
+      - in: query
+        name: customer
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - cancelled
+          - completed
+          - confirmed
+          - pending
+        description: |-
+          * `pending` - Pending
+          * `confirmed` - Confirmed
+          * `cancelled` - Cancelled
+          * `completed` - Completed
+      - in: query
+        name: table
+        schema:
+          type: integer
       tags:
       - Reservations
       security:
@@ -1012,7 +1094,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Reservation'
+                $ref: '#/components/schemas/PaginatedReservationList'
           description: ''
   /api/restaurants/restaurant-settings/:
     get:

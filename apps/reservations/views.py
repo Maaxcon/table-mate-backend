@@ -73,6 +73,7 @@ class ReservationViewSet(
         result_serializer = self.get_serializer(reservation)
         return Response(result_serializer.data)
 
+    @extend_schema(responses=ReservationSerializer(many=True))
     @action(detail=False, methods=["get"], url_path="my")
     def my(self, request: Request) -> Response:
         auth = getattr(request, "auth", None)

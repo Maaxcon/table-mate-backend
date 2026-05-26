@@ -50,6 +50,7 @@ class EditorTableViewSet(
             return [IsAuthenticated()]
         return [IsAuthenticated(), HasAnyRole.with_roles("admin", "waiter")]
 
+    @extend_schema(responses=EditorTableSerializer(many=True))
     @action(detail=False, methods=["get"], url_path="available")
     def available(self, request: Request) -> Response:
         auth = getattr(request, "auth", None)
