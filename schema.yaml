@@ -207,14 +207,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Layout'
           description: ''
-  /api/menu/menu-categories/:
+  /api/menu/categories/:
     get:
-      operationId: menu_menu_categories_list
+      operationId: menu_categories_list
       parameters:
       - in: query
         name: menu
         schema:
-          type: integer
+          type: string
+          format: uuid
       - name: ordering
         required: false
         in: query
@@ -232,6 +233,7 @@ paths:
       security:
       - jwtAuth: []
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -239,9 +241,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedMenuCategoryList'
           description: ''
-  /api/menu/menu-categories/{public_id}/:
+  /api/menu/categories/{public_id}/:
     get:
-      operationId: menu_menu_categories_retrieve
+      operationId: menu_categories_retrieve
       parameters:
       - in: path
         name: public_id
@@ -254,6 +256,7 @@ paths:
       security:
       - jwtAuth: []
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -261,14 +264,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/MenuCategory'
           description: ''
-  /api/menu/menu-items/:
+  /api/menu/items/:
     get:
-      operationId: menu_menu_items_list
+      operationId: menu_items_list
       parameters:
       - in: query
         name: category
         schema:
-          type: integer
+          type: string
+          format: uuid
       - in: query
         name: is_available
         schema:
@@ -276,7 +280,8 @@ paths:
       - in: query
         name: menu
         schema:
-          type: integer
+          type: string
+          format: uuid
       - name: ordering
         required: false
         in: query
@@ -294,6 +299,7 @@ paths:
       security:
       - jwtAuth: []
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -301,9 +307,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedMenuItemList'
           description: ''
-  /api/menu/menu-items/{public_id}/:
+  /api/menu/items/{public_id}/:
     get:
-      operationId: menu_menu_items_retrieve
+      operationId: menu_items_retrieve
       parameters:
       - in: path
         name: public_id
@@ -316,6 +322,23 @@ paths:
       security:
       - jwtAuth: []
       - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+          description: ''
+  /api/menu/items/search/:
+    get:
+      operationId: menu_items_search_retrieve
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -327,10 +350,6 @@ paths:
     get:
       operationId: menu_menus_list
       parameters:
-      - in: query
-        name: is_active
-        schema:
-          type: boolean
       - name: ordering
         required: false
         in: query
@@ -348,6 +367,7 @@ paths:
       security:
       - jwtAuth: []
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
@@ -370,6 +390,7 @@ paths:
       security:
       - jwtAuth: []
       - cookieAuth: []
+      - {}
       responses:
         '200':
           content:
