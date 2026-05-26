@@ -49,7 +49,7 @@ def test_protected_endpoint_role_enforcement(ep_name: str, ep_path: str, role: s
     ctx = api(role=role)
     response = ctx.client.get(ep_path)
     if role in ROLE_ALLOW_MATRIX[ep_name]:
-        assert response.status_code != status.HTTP_403_FORBIDDEN, f"{role} should be allowed on {ep_name}"
+        assert response.status_code == status.HTTP_200_OK, f"{role} should be allowed on {ep_name}"
     else:
         assert response.status_code == status.HTTP_403_FORBIDDEN, f"{role} should be denied on {ep_name}"
         assert "detail" in response.data
