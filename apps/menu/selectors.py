@@ -8,11 +8,17 @@ def get_active_menus(*, restaurant_id: int) -> QuerySet[Menu]:
 
 
 def get_categories_by_restaurant(*, restaurant_id: int) -> QuerySet[MenuCategory]:
-    return MenuCategory.objects.filter(menu__restaurant_id=restaurant_id)
+    return MenuCategory.objects.filter(
+        menu__restaurant_id=restaurant_id,
+        menu__is_active=True,
+    )
 
 
 def get_menu_items_by_restaurant(*, restaurant_id: int) -> QuerySet[MenuItem]:
-    return MenuItem.objects.filter(restaurant_id=restaurant_id).select_related("category")
+    return MenuItem.objects.filter(
+        restaurant_id=restaurant_id,
+        menu__is_active=True,
+    ).select_related("category")
 
 
 def get_items_by_category(*, menu_id: int) -> QuerySet[MenuItem]:
