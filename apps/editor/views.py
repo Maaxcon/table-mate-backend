@@ -58,7 +58,7 @@ class EditorTableViewSet(
             OpenApiParameter(name="guest_count", type=int, required=False),
         ],
     )
-    @action(detail=False, methods=["get"], url_path="available")
+    @action(detail=False, methods=["get"], url_path="available", filter_backends=[])
     def available(self, request: Request) -> Response:
         restaurant_id = get_restaurant_id_from_auth(request)
 
