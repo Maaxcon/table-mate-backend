@@ -1,5 +1,5 @@
 from django.db.models import QuerySet
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
@@ -72,11 +72,25 @@ class MenuItemViewSet(
         return get_menu_items_by_restaurant(restaurant_id=restaurant_id)
 
     @action(detail=False, methods=["get"])
+    @extend_schema(
+        summary="Full-text search across menu items",
+        parameters=[
+            OpenApiParameter(name="q", description="Search query", required=True, type=str),
+            OpenApiParameter(
+                name="restaurant",
+                description="Restaurant public UUID",
+                required=True,
+                type=str,
+            ),
+        ],
+    )
     def search(self, request: Request) -> Response:
-        query = request.query_params.get("q", "")
+        query = request.query_params.get("q", "").strip()
         restaurant_id = self.get_restaurant_id()
-        if restaurant_id is None or not query:
-            return Response([])
+        if not query or restaurant_id is None:
+            return self.get_paginated_response([]) if self.paginator else Response([])
         items = search_menu_items(query=query, restaurant_id=restaurant_id)
-        serializer = self.get_serializer(items, many=True)
-        return Response(serializer.data)
+        page = self.paginate_queryset(items)
+        if page is not None:
+            return self.get_paginated_response(self.get_serializer(page, many=True).data)
+        return Response(self.get_serializer(items, many=True).data)
