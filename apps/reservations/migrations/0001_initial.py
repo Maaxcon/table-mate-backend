@@ -36,9 +36,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("guest_count", models.PositiveIntegerField()),
                 ("start_at", models.DateTimeField()),

@@ -30,9 +30,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("name", models.CharField(max_length=255)),
                 ("is_active", models.BooleanField(default=True)),
@@ -64,9 +62,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("name", models.CharField(max_length=255)),
                 ("sort_order", models.PositiveIntegerField(default=0)),
@@ -99,9 +95,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("name", models.CharField(max_length=255)),
                 ("description", models.TextField(blank=True, null=True)),
@@ -140,9 +134,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name="menucategory",
-            constraint=models.UniqueConstraint(
-                fields=("menu", "name"), name="menu_category_menu_name_unique"
-            ),
+            constraint=models.UniqueConstraint(fields=("menu", "name"), name="menu_category_menu_name_unique"),
         ),
         migrations.AddIndex(
             model_name="menuitem",
@@ -153,8 +145,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name="menuitem",
-            constraint=models.UniqueConstraint(
-                fields=("menu", "name"), name="menu_item_menu_name_unique"
-            ),
+            constraint=models.UniqueConstraint(fields=("menu", "name"), name="menu_item_menu_name_unique"),
         ),
     ]

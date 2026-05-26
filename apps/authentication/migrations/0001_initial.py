@@ -30,18 +30,13 @@ class Migration(migrations.Migration):
                 ("password", models.CharField(max_length=128, verbose_name="password")),
                 (
                     "last_login",
-                    models.DateTimeField(
-                        blank=True, null=True, verbose_name="last login"
-                    ),
+                    models.DateTimeField(blank=True, null=True, verbose_name="last login"),
                 ),
                 (
                     "is_superuser",
                     models.BooleanField(
                         default=False,
-                        help_text=(
-                            "Designates that this user has all permissions "
-                            "without explicitly assigning them."
-                        ),
+                        help_text=("Designates that this user has all permissions without explicitly assigning them."),
                         verbose_name="superuser status",
                     ),
                 ),
@@ -49,9 +44,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("email", models.EmailField(max_length=254, unique=True)),
                 ("first_name", models.CharField(blank=True, max_length=150)),
@@ -103,9 +96,7 @@ class Migration(migrations.Migration):
                 "ordering": ["id"],
                 "constraints": [
                     models.CheckConstraint(
-                        condition=models.Q(
-                            ("role__in", ["admin", "waiter", "cook", "customer"])
-                        ),
+                        condition=models.Q(("role__in", ["admin", "waiter", "cook", "customer"])),
                         name="authentication_user_role_valid",
                     )
                 ],
