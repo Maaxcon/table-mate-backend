@@ -18,6 +18,13 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
+class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
+    class Meta:
+        model = Restaurant
+        fields = ["public_id", "name", "address"]
+        read_only_fields = ["public_id", "name", "address"]
+
+
 class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
 
