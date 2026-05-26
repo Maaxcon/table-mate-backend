@@ -87,6 +87,12 @@ class EditorTableViewSet(
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if start_dt >= end_dt:
+            return Response(
+                {"detail": "start_at must be before end_at."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             gc = int(guest_count) if guest_count else None
         except ValueError:
