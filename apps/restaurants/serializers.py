@@ -18,11 +18,20 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
+class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
+    class Meta:
+        model = RestaurantSettings
+        fields = ["currency", "timezone", "working_hours"]
+        read_only_fields = ["currency", "timezone", "working_hours"]
+
+
 class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
+    settings = PublicRestaurantSettingsSerializer(read_only=True)
+
     class Meta:
         model = Restaurant
-        fields = ["public_id", "name", "address"]
-        read_only_fields = ["public_id", "name", "address"]
+        fields = ["public_id", "name", "address", "phone", "settings"]
+        read_only_fields = ["public_id", "name", "address", "phone", "settings"]
 
 
 class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):

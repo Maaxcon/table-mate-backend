@@ -11,6 +11,7 @@ class TableStatus(models.TextChoices):
 class Restaurant(BaseModel):
     name = models.CharField(max_length=255)
     address = models.TextField()
+    phone = models.CharField(max_length=32, blank=True, default="")
 
     class Meta:
         ordering = ["id"]

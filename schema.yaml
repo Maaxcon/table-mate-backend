@@ -1260,6 +1260,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedRestaurantList'
           description: ''
+  /api/restaurants/restaurants-public/{public_id}/:
+    get:
+      operationId: restaurants_restaurants_public_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicRestaurant'
+          description: ''
   /api/restaurants/restaurants/{public_id}/:
     get:
       operationId: restaurants_restaurants_retrieve
@@ -2285,6 +2308,47 @@ components:
         * `settled` - Settled
         * `refunded` - Refunded
         * `cancelled` - Cancelled
+    PublicRestaurant:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        address:
+          type: string
+          readOnly: true
+        phone:
+          type: string
+          readOnly: true
+        settings:
+          allOf:
+          - $ref: '#/components/schemas/PublicRestaurantSettings'
+          readOnly: true
+      required:
+      - address
+      - name
+      - phone
+      - public_id
+      - settings
+    PublicRestaurantSettings:
+      type: object
+      properties:
+        currency:
+          type: string
+          readOnly: true
+        timezone:
+          type: string
+          readOnly: true
+        working_hours:
+          readOnly: true
+      required:
+      - currency
+      - timezone
+      - working_hours
     Reservation:
       type: object
       properties:

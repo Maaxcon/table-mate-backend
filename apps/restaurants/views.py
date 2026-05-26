@@ -20,7 +20,7 @@ class PublicRestaurantViewSet(
     mixins.RetrieveModelMixin,
     viewsets.GenericViewSet[Restaurant],
 ):
-    queryset = Restaurant.objects.all()
+    queryset = Restaurant.objects.select_related("settings").all()
     serializer_class = PublicRestaurantSerializer
     permission_classes = [AllowAny]
 
