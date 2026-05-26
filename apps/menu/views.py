@@ -30,7 +30,7 @@ class MenuViewSet(
     ordering_fields = ["created_at", "updated_at", "name"]
 
     def get_queryset(self) -> QuerySet[Menu]:
-        restaurant_id = self.get_restaurant_id()
+        restaurant_id = self.resolve_restaurant_or_not_found()
         if restaurant_id is None:
             return Menu.objects.none()
         return get_active_menus(restaurant_id=restaurant_id)
@@ -48,7 +48,7 @@ class MenuCategoryViewSet(
     ordering_fields = ["created_at", "updated_at", "sort_order", "name"]
 
     def get_queryset(self) -> QuerySet[MenuCategory]:
-        restaurant_id = self.get_restaurant_id()
+        restaurant_id = self.resolve_restaurant_or_not_found()
         if restaurant_id is None:
             return MenuCategory.objects.none()
         return get_categories_by_restaurant(restaurant_id=restaurant_id)
@@ -66,7 +66,7 @@ class MenuItemViewSet(
     ordering_fields = ["created_at", "updated_at", "sort_order", "name", "price"]
 
     def get_queryset(self) -> QuerySet[MenuItem]:
-        restaurant_id = self.get_restaurant_id()
+        restaurant_id = self.resolve_restaurant_or_not_found()
         if restaurant_id is None:
             return MenuItem.objects.none()
         return get_menu_items_by_restaurant(restaurant_id=restaurant_id)
@@ -86,7 +86,7 @@ class MenuItemViewSet(
     )
     def search(self, request: Request) -> Response:
         query = request.query_params.get("q", "").strip()
-        restaurant_id = self.get_restaurant_id()
+        restaurant_id = self.resolve_restaurant_or_not_found()
         if not query or restaurant_id is None:
             return self.get_paginated_response([]) if self.paginator else Response([])
         items = search_menu_items(query=query, restaurant_id=restaurant_id)

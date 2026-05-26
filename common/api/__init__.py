@@ -33,6 +33,19 @@ class PublicRestaurantQueryMixin:
         except (Restaurant.DoesNotExist, ValueError):
             return None
 
+    def resolve_restaurant_or_not_found(self) -> int | None:
+        from django.http import Http404
+
+        from apps.restaurants.models import Restaurant
+
+        public_id = cast(_HasRequest, self).request.query_params.get(self.restaurant_query_param)
+        if not public_id:
+            return None
+        try:
+            return Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
+        except (Restaurant.DoesNotExist, ValueError):
+            raise Http404("Restaurant not found.") from None
+
 
 @extend_schema_field(OpenApiTypes.UUID)
 class PublicIdRelatedField(serializers.SlugRelatedField[_ModelT]):
