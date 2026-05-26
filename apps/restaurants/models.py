@@ -5,7 +5,6 @@ from common.models import BaseModel, RestaurantScopedModel
 
 class TableStatus(models.TextChoices):
     FREE = "free", "Free"
-    RESERVED = "reserved", "Reserved"
     OCCUPIED = "occupied", "Occupied"
 
 

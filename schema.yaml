@@ -166,10 +166,8 @@ paths:
           enum:
           - free
           - occupied
-          - reserved
         description: |-
           * `free` - Free
-          * `reserved` - Reserved
           * `occupied` - Occupied
       tags:
       - Editor
@@ -282,10 +280,8 @@ paths:
           enum:
           - free
           - occupied
-          - reserved
         description: |-
           * `free` - Free
-          * `reserved` - Reserved
           * `occupied` - Occupied
       tags:
       - Editor
@@ -1239,10 +1235,8 @@ paths:
           enum:
           - free
           - occupied
-          - reserved
         description: |-
           * `free` - Free
-          * `reserved` - Reserved
           * `occupied` - Occupied
       tags:
       - Restaurants
@@ -2449,12 +2443,10 @@ components:
     TableStatus:
       enum:
       - free
-      - reserved
       - occupied
       type: string
       description: |-
         * `free` - Free
-        * `reserved` - Reserved
         * `occupied` - Occupied
     Ticket:
       type: object

@@ -28,9 +28,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("name", models.CharField(max_length=255)),
                 ("address", models.TextField()),
@@ -55,9 +53,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("timezone", models.CharField(default="UTC", max_length=64)),
                 ("currency", models.CharField(max_length=3)),
@@ -100,9 +96,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
                     "public_id",
-                    models.UUIDField(
-                        db_index=True, default=uuid.uuid4, editable=False, unique=True
-                    ),
+                    models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
                 ),
                 ("table_number", models.CharField(max_length=64)),
                 ("capacity", models.PositiveIntegerField()),
@@ -111,7 +105,6 @@ class Migration(migrations.Migration):
                     models.CharField(
                         choices=[
                             ("free", "Free"),
-                            ("reserved", "Reserved"),
                             ("occupied", "Occupied"),
                         ],
                         default="free",
@@ -136,9 +129,7 @@ class Migration(migrations.Migration):
                         name="restaurants_table_restaurant_number_unique",
                     ),
                     models.CheckConstraint(
-                        condition=models.Q(
-                            ("status__in", ["free", "reserved", "occupied"])
-                        ),
+                        condition=models.Q(("status__in", ["free", "occupied"])),
                         name="restaurants_table_status_valid",
                     ),
                 ],
