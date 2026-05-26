@@ -93,7 +93,7 @@ def reschedule_reservation(
     table = validated_data.get("table", reservation.table)
     if table is None:
         raise ReservationConflictError("Table not found or inactive.")
-    Table.objects.select_for_update().get(id=table.id)
+    table = Table.objects.select_for_update().get(id=table.id)
 
     start_at = validated_data.get("start_at", reservation.start_at)
     end_at = validated_data.get("end_at", reservation.end_at)
