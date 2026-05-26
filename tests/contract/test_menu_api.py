@@ -9,43 +9,7 @@ from rest_framework import status
 from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.restaurants.models import Restaurant
 
-
-@pytest.fixture
-def api_client() -> Client:
-    return Client()
-
-
-@pytest.fixture
-def restaurant() -> Restaurant:
-    return Restaurant.objects.create(name="Test Restaurant", address="123 Main St")
-
-
-@pytest.fixture
-def menu(restaurant: Restaurant) -> Menu:
-    return Menu.objects.create(restaurant=restaurant, name="Dinner", is_active=True)
-
-
-@pytest.fixture
-def category(menu: Menu) -> MenuCategory:
-    return MenuCategory.objects.create(menu=menu, name="Mains", sort_order=1)
-
-
-@pytest.fixture
-def empty_restaurant() -> Restaurant:
-    return Restaurant.objects.create(name="Empty Restaurant", address="456 Oak St")
-
-
-@pytest.fixture
-def item(menu: Menu, category: MenuCategory, restaurant: Restaurant) -> MenuItem:
-    return MenuItem.objects.create(
-        restaurant=restaurant,
-        menu=menu,
-        category=category,
-        name="Steak",
-        description="Grilled to perfection",
-        price=Decimal("29.9900"),
-        sort_order=1,
-    )
+from ..conftest import MenuCategoryFactory, MenuFactory, MenuItemFactory
 
 
 @pytest.mark.django_db(databases=["default"])
@@ -85,8 +49,8 @@ class TestPublicMenuCategories:
         assert data["results"] == []
 
     def test_ordering_by_name(self, api_client: Client, restaurant: Restaurant, menu: Menu) -> None:
-        MenuCategory.objects.create(menu=menu, name="A", sort_order=2)
-        MenuCategory.objects.create(menu=menu, name="B", sort_order=1)
+        MenuCategoryFactory(menu=menu, name="A", sort_order=2)
+        MenuCategoryFactory(menu=menu, name="B", sort_order=1)
         url = reverse("menu-category-list")
         response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "ordering": "name"})
 
@@ -179,11 +143,11 @@ class TestPublicMenuItems:
     def test_ordering_by_name(
         self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
     ) -> None:
-        MenuItem.objects.create(
-            restaurant=restaurant, menu=menu, category=category, name="B", price=Decimal("10.00"), sort_order=2
+        MenuItemFactory(
+            restaurant=restaurant, menu=menu, category=category, name="B", price=Decimal("10.0000"), sort_order=2
         )
-        MenuItem.objects.create(
-            restaurant=restaurant, menu=menu, category=category, name="A", price=Decimal("20.00"), sort_order=1
+        MenuItemFactory(
+            restaurant=restaurant, menu=menu, category=category, name="A", price=Decimal("20.0000"), sort_order=1
         )
         url = reverse("menu-item-list")
         response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "ordering": "name"})
@@ -228,8 +192,8 @@ class TestPublicMenuMenus:
         assert data["results"] == []
 
     def test_ordering_by_name(self, api_client: Client, restaurant: Restaurant) -> None:
-        Menu.objects.create(restaurant=restaurant, name="A", is_active=True)
-        Menu.objects.create(restaurant=restaurant, name="B", is_active=True)
+        MenuFactory(restaurant=restaurant, name="A", is_active=True)
+        MenuFactory(restaurant=restaurant, name="B", is_active=True)
         url = reverse("menu-list")
         response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "ordering": "name"})
 
