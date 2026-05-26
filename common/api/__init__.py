@@ -31,6 +31,31 @@ class PublicLookupMixin:
     lookup_value_regex: ClassVar[str] = "[0-9a-fA-F-]{36}"
 
 
+class PublicRestaurantQueryMixin:
+    restaurant_query_param: ClassVar[str] = "restaurant"
+
+    def get_restaurant_id(self) -> int | None:
+        from apps.restaurants.models import Restaurant
+
+        public_id = cast(_HasRequest, self).request.query_params.get(self.restaurant_query_param)
+        if not public_id:
+            return None
+        try:
+            return Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
+        except (Restaurant.DoesNotExist, ValueError):
+            return None
+
+    def resolve_restaurant_or_not_found(self) -> int | None:
+        restaurant_id = self.get_restaurant_id()
+        if restaurant_id is None:
+            public_id = cast(_HasRequest, self).request.query_params.get(self.restaurant_query_param)
+            if public_id:
+                from django.http import Http404
+
+                raise Http404("Restaurant not found.") from None
+        return restaurant_id
+
+
 @extend_schema_field(OpenApiTypes.UUID)
 class PublicIdRelatedField(serializers.SlugRelatedField[_ModelT]):
     def __init__(

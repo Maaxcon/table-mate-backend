@@ -35,14 +35,17 @@ services:
       - db
       - redis
   test:
-    build: .
-    command: uv run pytest tests/test_reservation_concurrent.py -v --reuse-db
+    build:
+      context: .
+      target: test
+    command: uv run pytest tests/ -v
     volumes:
       - .:/app
     environment:
       DATABASE_URL: postgresql://table_mate_user:table_mate_pass@db:5432/table_mate
       DJANGO_SETTINGS_MODULE: core.settings.local
     depends_on:
-      - db
+      db:
+        condition: service_started
 volumes:
   postgres_data:

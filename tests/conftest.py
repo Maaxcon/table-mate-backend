@@ -1,43 +1,85 @@
+# mypy: disable-error-code="no-untyped-call"
 from collections.abc import Callable
-from typing import Any, NamedTuple
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
-import factory
 import pytest
-from django.contrib.auth import get_user_model
+from django.test import Client
+from factory.declarations import (
+    PostGenerationMethodCall,
+    SelfAttribute,
+    Sequence,
+    SubFactory,
+)
+from factory.django import DjangoModelFactory
+from factory.faker import Faker
 from rest_framework.test import APIClient
 
 from apps.authentication.models import RoleCode
+from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.restaurants.models import Restaurant, Table, TableStatus
 
-User = get_user_model()
+if TYPE_CHECKING:
+    from django.contrib.auth.models import AbstractUser
+
+    User = AbstractUser
+else:
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
 
 
-@pytest.fixture
-def restaurant() -> Restaurant:
-    return Restaurant.objects.create(name="Test Restaurant", address="123 Main St")
-
-
-@pytest.fixture
-def table(restaurant: Restaurant) -> Table:
-    return Table.objects.create(
-        restaurant=restaurant,
-        table_number="T1",
-        capacity=4,
-        active=True,
-        status=TableStatus.FREE,
-    )
-
-
-class UserFactory(factory.django.DjangoModelFactory):  # type: ignore[type-arg]
+class UserFactory(DjangoModelFactory[User]):
     class Meta:
         model = User
         skip_postgeneration_save = True
 
-    email = factory.Sequence(lambda n: f"user{n}@example.com")  # type: ignore[attr-defined, no-untyped-call]
-    password = factory.PostGenerationMethodCall("set_password", "password")  # type: ignore[attr-defined, no-untyped-call]
+    email = Sequence(lambda n: f"user{n}@example.com")
+    password = PostGenerationMethodCall("set_password", "password")
     role = RoleCode.CUSTOMER
-    first_name = factory.Faker("first_name")  # type: ignore[attr-defined, no-untyped-call]
-    last_name = factory.Faker("last_name")  # type: ignore[attr-defined, no-untyped-call]
+    first_name = Faker("first_name")
+    last_name = Faker("last_name")
+    is_active = True
+
+
+class RestaurantFactory(DjangoModelFactory[Restaurant]):
+    class Meta:
+        model = Restaurant
+
+    name = Sequence(lambda n: f"Restaurant {n}")
+    address = "123 Main St"
+
+
+class MenuFactory(DjangoModelFactory[Menu]):
+    class Meta:
+        model = Menu
+
+    restaurant = SubFactory(RestaurantFactory)
+    name = Sequence(lambda n: f"Menu {n}")
+    is_active = True
+
+
+class MenuCategoryFactory(DjangoModelFactory[MenuCategory]):
+    class Meta:
+        model = MenuCategory
+
+    menu = SubFactory(MenuFactory)
+    name = Sequence(lambda n: f"Category {n}")
+    sort_order = Sequence(lambda n: n)
+
+
+class MenuItemFactory(DjangoModelFactory[MenuItem]):
+    class Meta:
+        model = MenuItem
+
+    restaurant = SelfAttribute("menu.restaurant")
+    menu = SubFactory(MenuFactory)
+    category = SubFactory(MenuCategoryFactory, menu=SelfAttribute("..menu"))
+    name = Sequence(lambda n: f"Item {n}")
+    description = Faker("sentence")
+    price = Decimal("29.9900")
+    sort_order = Sequence(lambda n: n)
+    is_available = True
 
 
 @pytest.fixture
@@ -74,3 +116,54 @@ def api_factory() -> Callable[..., AuthContext]:
         return AuthContext(client=client, user=user)
 
     return _factory
+
+
+@pytest.fixture
+def api_client() -> Client:
+    return Client()
+
+
+@pytest.fixture
+def restaurant() -> Restaurant:
+    return cast(Restaurant, RestaurantFactory(name="Test Restaurant", address="123 Main St"))
+
+
+@pytest.fixture
+def empty_restaurant() -> Restaurant:
+    return cast(Restaurant, RestaurantFactory(name="Empty Restaurant"))
+
+
+@pytest.fixture
+def table(restaurant: Restaurant) -> Table:
+    return Table.objects.create(
+        restaurant=restaurant,
+        table_number="T1",
+        capacity=4,
+        active=True,
+        status=TableStatus.FREE,
+    )
+
+
+@pytest.fixture
+def menu(restaurant: Restaurant) -> Menu:
+    return cast(Menu, MenuFactory(restaurant=restaurant, name="Dinner"))
+
+
+@pytest.fixture
+def category(menu: Menu) -> MenuCategory:
+    return cast(MenuCategory, MenuCategoryFactory(menu=menu, name="Mains", sort_order=1))
+
+
+@pytest.fixture
+def item(menu: Menu, category: MenuCategory, restaurant: Restaurant) -> MenuItem:
+    return cast(
+        MenuItem,
+        MenuItemFactory(
+            menu=menu,
+            category=category,
+            restaurant=restaurant,
+            name="Steak",
+            description="Grilled to perfection",
+            sort_order=1,
+        ),
+    )
