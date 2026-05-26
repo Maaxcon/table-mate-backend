@@ -227,7 +227,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 
 | Transition Domain | Authoritative Backend Service | Allowed Transition Rule | Client Restriction |
 |---|---|---|---|
-| Table status | Table state service | `free <-> reserved <-> occupied` only through backend validation | Clients MAY request; clients MUST NOT set canonical table status directly |
+| Table status | Table state service | `free <-> occupied` only through backend validation | Clients MAY request; clients MUST NOT set canonical table status directly |
 | Session lifecycle | Session lifecycle service | Open on waiter manual flow or prepaid confirmation; close only on explicit waiter close action | No client-side auto-close or timeout-driven canonical close |
 | Order lifecycle | Order orchestration service | `draft -> submitted -> unpaid -> paid -> settled` with policy checks | Clients cannot mark paid/settled directly |
 | Order item lifecycle | Kitchen workflow service | `pending -> in_progress -> ready -> served` and void branch by policy | Frontend cannot bypass kitchen policy or set terminal status directly |

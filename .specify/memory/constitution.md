@@ -69,7 +69,7 @@ The following entities are the source of truth across all surfaces:
   IDs.
 - `RestaurantSettings`: one-to-one sibling of `Restaurant` (`restaurant_id`);
   `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`.
-- `Table`: `id`, sector, capacity, and status (`free`, `reserved`, `occupied`).
+- `Table`: `id`, sector, capacity, and status (`free`, `occupied`).
   Status is backend-computed and backend-pushed only.
 - `Menu`: top-level menu container for a restaurant (for example breakfast,
   lunch, dinner) with `id`, restaurant reference, `name`, service window
