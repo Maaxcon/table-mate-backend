@@ -64,7 +64,7 @@ WSGI_APPLICATION = "core.wsgi.application"
 DATABASES = {
     "default": env.db(
         "DATABASE_URL",
-        default=("postgresql://table_mate_user:table_mate_pass@localhost:5432/table_mate"),
+        default=("postgresql://postgres:12345678@localhost:5432/test_db"),
     ),
 }
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)

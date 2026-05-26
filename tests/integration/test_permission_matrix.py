@@ -40,14 +40,6 @@ ROLE_ALLOW_MATRIX: dict[str, set[str]] = {
 ROLES = [RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER]
 
 
-def _build_ids() -> list[str]:
-    ids: list[str] = []
-    for role in ROLES:
-        for ep_name in ENDPOINTS:
-            ids.append(f"{role}@{ep_name}")
-    return ids
-
-
 @pytest.mark.django_db
 @pytest.mark.parametrize("role", ROLES)
 @pytest.mark.parametrize("ep_name,ep_path", list(ENDPOINTS.items()), ids=list(ENDPOINTS.keys()))
