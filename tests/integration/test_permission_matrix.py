@@ -58,11 +58,11 @@ def test_protected_endpoint_role_enforcement(ep_name: str, ep_path: str, role: s
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("ep_name,ep_path", list(PUBLIC_ENDPOINTS.items()), ids=list(PUBLIC_ENDPOINTS.keys()))
-def test_public_menu_endpoints_allow_anonymous(ep_name: str, ep_path: str) -> None:
+def test_public_menu_endpoints_allow_anonymous(ep_name: str, ep_path: str, restaurant: Any) -> None:
     client = APIClient()
-    response = client.get(ep_path)
-    assert response.status_code != status.HTTP_403_FORBIDDEN, f"{ep_name} should be accessible without auth"
-    assert response.status_code != status.HTTP_401_UNAUTHORIZED
+    url = f"{ep_path}?restaurant={restaurant.public_id}"
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK, f"{ep_name} should return 200 with valid restaurant"
 
 
 @pytest.mark.django_db
