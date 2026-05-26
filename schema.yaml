@@ -4,36 +4,24 @@ info:
   version: 0.1.0
   description: Table Mate backend API
 paths:
-  /api/auth/token/:
-    post:
-      operationId: auth_token_create
-      description: |-
-        Takes a set of user credentials and returns an access and refresh JSON web
-        token pair to prove the authentication of those credentials.
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
       tags:
       - auth
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TokenObtainPair'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/TokenObtainPair'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/TokenObtainPair'
-        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenObtainPair'
+                $ref: '#/components/schemas/User'
           description: ''
-  /api/auth/token/refresh/:
+  /api/auth/refresh/:
     post:
-      operationId: auth_token_refresh_create
+      operationId: auth_refresh_create
       description: |-
         Takes a refresh type JSON web token and returns an access type JSON web
         token if the refresh token is valid.
@@ -57,6 +45,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/auth/token/:
+    post:
+      operationId: auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPair'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomTokenObtainPair'
           description: ''
   /api/editor/layouts/:
     get:
@@ -342,18 +357,7 @@ paths:
       - in: query
         name: void_reason
         schema:
-          type: string
-          nullable: true
-          enum:
-          - guest_changed_mind
-          - mispick
-          - out_of_stock
-          - quality_issue
-        description: |-
-          * `mispick` - Mispick
-          * `guest_changed_mind` - Guest changed mind
-          * `quality_issue` - Quality issue
-          * `out_of_stock` - Out of stock
+          type: integer
       - in: query
         name: voided_by
         schema:
@@ -994,9 +998,6 @@ paths:
           description: ''
 components:
   schemas:
-    BlankEnum:
-      enum:
-      - ''
     CreatedBySourceEnum:
       enum:
       - staff
@@ -1007,6 +1008,29 @@ components:
         * `staff` - Staff
         * `customer` - Customer
         * `system` - System
+    CustomTokenObtainPair:
+      type: object
+      properties:
+        restaurant_id:
+          type: integer
+          nullable: true
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - email
+      - password
+      - refresh
     Layout:
       type: object
       properties:
@@ -1174,9 +1198,6 @@ components:
       - public_id
       - restaurant
       - updated_at
-    NullEnum:
-      enum:
-      - null
     Order:
       type: object
       properties:
@@ -1309,11 +1330,8 @@ components:
           format: uuid
           readOnly: true
         void_reason:
+          type: integer
           nullable: true
-          oneOf:
-          - $ref: '#/components/schemas/VoidReasonEnum'
-          - $ref: '#/components/schemas/BlankEnum'
-          - $ref: '#/components/schemas/NullEnum'
         is_wasted:
           type: boolean
         created_at:
@@ -1858,6 +1876,18 @@ components:
       - public_id
       - restaurant
       - updated_at
+    RoleEnum:
+      enum:
+      - admin
+      - waiter
+      - cook
+      - customer
+      type: string
+      description: |-
+        * `admin` - Admin
+        * `waiter` - Waiter
+        * `cook` - Cook
+        * `customer` - Customer
     Session:
       type: object
       properties:
@@ -2057,26 +2087,6 @@ components:
         * `active` - Active
         * `completed` - Completed
         * `bumped` - Bumped
-    TokenObtainPair:
-      type: object
-      properties:
-        email:
-          type: string
-          writeOnly: true
-        password:
-          type: string
-          writeOnly: true
-        access:
-          type: string
-          readOnly: true
-        refresh:
-          type: string
-          readOnly: true
-      required:
-      - access
-      - email
-      - password
-      - refresh
     TokenRefresh:
       type: object
       properties:
@@ -2089,18 +2099,44 @@ components:
       required:
       - access
       - refresh
-    VoidReasonEnum:
-      enum:
-      - mispick
-      - guest_changed_mind
-      - quality_issue
-      - out_of_stock
-      type: string
-      description: |-
-        * `mispick` - Mispick
-        * `guest_changed_mind` - Guest changed mind
-        * `quality_issue` - Quality issue
-        * `out_of_stock` - Out of stock
+    User:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - public_id
+      - updated_at
   securitySchemes:
     cookieAuth:
       type: apiKey

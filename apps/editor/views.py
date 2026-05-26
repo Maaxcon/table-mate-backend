@@ -8,9 +8,7 @@ from .serializers import LayoutSerializer
 
 
 @extend_schema(tags=["Editor"])
-class LayoutViewSet(
-    RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModelViewSet[Layout]
-):
+class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModelViewSet[Layout]):
     queryset = Layout.objects.all()
     serializer_class = LayoutSerializer
     filterset_fields = ["version", "published_at", "published_by"]
