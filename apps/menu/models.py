@@ -51,6 +51,7 @@ class MenuItem(RestaurantScopedModel):
     )
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
+    ingredients = models.JSONField(default=list, blank=True)
     price = models.DecimalField(max_digits=14, decimal_places=4)
     is_available = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
