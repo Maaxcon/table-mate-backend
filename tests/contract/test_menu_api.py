@@ -30,6 +30,8 @@ class TestPublicMenuCategories:
     def test_filter_by_menu(
         self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
     ) -> None:
+        other_menu = MenuFactory(restaurant=restaurant, name="Other")
+        MenuCategoryFactory(menu=other_menu, name="Should not appear")
         url = reverse("menu-category-list")
         response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "menu": str(menu.public_id)})
 
