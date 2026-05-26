@@ -2,28 +2,29 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.authentication.models import RoleCode
 
 ENDPOINTS = {
-    "editor:layout-list": "/api/editor/layouts/",
-    "reservations:reservation-list": "/api/reservations/reservations/",
-    "restaurants:restaurant-list": "/api/restaurants/restaurants/",
-    "restaurants:settings-list": "/api/restaurants/restaurant-settings/",
-    "restaurants:table-list": "/api/restaurants/tables/",
-    "orders:session-list": "/api/orders/sessions/",
-    "orders:order-list": "/api/orders/orders/",
-    "orders:ticket-list": "/api/orders/tickets/",
-    "orders:order-item-list": "/api/orders/order-items/",
-    "payments:payment-list": "/api/payments/payments/",
+    "editor:layout-list": "layout-list",
+    "reservations:reservation-list": "reservation-list",
+    "restaurants:restaurant-list": "restaurant-list",
+    "restaurants:settings-list": "restaurant-settings-list",
+    "restaurants:table-list": "table-list",
+    "orders:session-list": "session-list",
+    "orders:order-list": "order-list",
+    "orders:ticket-list": "ticket-list",
+    "orders:order-item-list": "order-item-list",
+    "payments:payment-list": "payment-list",
 }
 
 PUBLIC_ENDPOINTS = {
-    "menu:menu-list": "/api/menu/menus/",
-    "menu:category-list": "/api/menu/menu-categories/",
-    "menu:item-list": "/api/menu/menu-items/",
+    "menu:menu-list": "menu-list",
+    "menu:category-list": "menu-category-list",
+    "menu:item-list": "menu-item-list",
 }
 
 ROLE_ALLOW_MATRIX: dict[str, set[str]] = {
@@ -44,10 +45,10 @@ ROLES = [RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER]
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("role", ROLES)
-@pytest.mark.parametrize("ep_name,ep_path", list(ENDPOINTS.items()), ids=list(ENDPOINTS.keys()))
-def test_protected_endpoint_role_enforcement(ep_name: str, ep_path: str, role: str, api: Callable[..., Any]) -> None:
+@pytest.mark.parametrize("ep_name,url_name", list(ENDPOINTS.items()), ids=list(ENDPOINTS.keys()))
+def test_protected_endpoint_role_enforcement(ep_name: str, url_name: str, role: str, api: Callable[..., Any]) -> None:
     ctx = api(role=role)
-    response = ctx.client.get(ep_path)
+    response = ctx.client.get(reverse(url_name))
     if role in ROLE_ALLOW_MATRIX[ep_name]:
         assert response.status_code == status.HTTP_200_OK, f"{role} should be allowed on {ep_name}"
     else:
@@ -57,19 +58,19 @@ def test_protected_endpoint_role_enforcement(ep_name: str, ep_path: str, role: s
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("ep_name,ep_path", list(PUBLIC_ENDPOINTS.items()), ids=list(PUBLIC_ENDPOINTS.keys()))
-def test_public_menu_endpoints_allow_anonymous(ep_name: str, ep_path: str, restaurant: Any) -> None:
+@pytest.mark.parametrize("ep_name,url_name", list(PUBLIC_ENDPOINTS.items()), ids=list(PUBLIC_ENDPOINTS.keys()))
+def test_public_menu_endpoints_allow_anonymous(ep_name: str, url_name: str, restaurant: Any) -> None:
     client = APIClient()
-    url = f"{ep_path}?restaurant={restaurant.public_id}"
+    url = f"{reverse(url_name)}?restaurant={restaurant.public_id}"
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK, f"{ep_name} should return 200 with valid restaurant"
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("ep_name,ep_path", list(ENDPOINTS.items()), ids=list(ENDPOINTS.keys()))
-def test_protected_endpoints_reject_anonymous(ep_name: str, ep_path: str) -> None:
+@pytest.mark.parametrize("ep_name,url_name", list(ENDPOINTS.items()), ids=list(ENDPOINTS.keys()))
+def test_protected_endpoints_reject_anonymous(ep_name: str, url_name: str) -> None:
     client = APIClient()
-    response = client.get(ep_path)
+    response = client.get(reverse(url_name))
     assert response.status_code in (
         status.HTTP_401_UNAUTHORIZED,
         status.HTTP_403_FORBIDDEN,

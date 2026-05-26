@@ -23,4 +23,6 @@ class IsCustomer(HasAnyRole):
 
 
 class IsFloorOrCustomer(HasAnyRole):
+    """Admin is always included (same pattern as IsFloor)."""
+
     roles = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.CUSTOMER})
