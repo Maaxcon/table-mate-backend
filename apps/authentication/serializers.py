@@ -6,6 +6,25 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import RoleCode, User
 
+
+class GoogleAuthSerializer(serializers.Serializer[None]):
+    code = serializers.CharField()
+    redirect_uri = serializers.CharField()
+
+
+class GoogleAuthResponseSerializer(serializers.Serializer[None]):
+    access = serializers.CharField(read_only=True)
+    needs_restaurant_context = serializers.BooleanField(read_only=True, required=False)
+
+
+class GoogleContextSerializer(serializers.Serializer[None]):
+    restaurant_id = serializers.IntegerField()
+
+
+class GoogleContextResponseSerializer(serializers.Serializer[None]):
+    access = serializers.CharField(read_only=True)
+
+
 _STAFF_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 
 
@@ -50,6 +69,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def get_token(self, user: User) -> RefreshToken:  # type: ignore[override]
         token = cast(RefreshToken, super().get_token(user))
         token["role"] = user.role
+        token["token_version"] = user.token_version
         if self._restaurant_id is not None:
             token["restaurant_id"] = self._restaurant_id
         return token

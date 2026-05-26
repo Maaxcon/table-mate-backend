@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
-from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken, TokenError
+
+from apps.authentication.authentication import TokenVersionJWTAuthentication
 
 if TYPE_CHECKING:
     from apps.authentication.models import User
 
 
 @database_sync_to_async  # type: ignore[untyped-decorator]
-def _resolve_user(jwt_auth: JWTAuthentication, validated_token: object) -> User | None:
+def _resolve_user(jwt_auth: TokenVersionJWTAuthentication, validated_token: object) -> User | None:
     try:
-        return cast("User", jwt_auth.get_user(validated_token))  # type: ignore[arg-type]
+        return jwt_auth.get_user(validated_token)  # type: ignore[arg-type]
     except (InvalidToken, AuthenticationFailed):
         return None
 
@@ -27,7 +28,7 @@ async def authenticate_websocket(scope: dict) -> tuple[User | None, int | None]:
     if not token_list:
         return None, None
 
-    jwt_auth = JWTAuthentication()
+    jwt_auth = TokenVersionJWTAuthentication()
     try:
         validated_token = jwt_auth.get_validated_token(token_list[0].encode())
     except TokenError:
