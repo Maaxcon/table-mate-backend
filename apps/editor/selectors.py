@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import time as time_type
 from zoneinfo import ZoneInfo
 
@@ -24,16 +24,30 @@ def is_within_working_hours(settings: RestaurantSettings, dt: datetime) -> bool:
 
     day_name = local_dt.strftime("%A").lower()
     day_config = working_hours.get(day_name)
-    if not day_config:
-        return False
 
     current_time = local_dt.time()
-    open_time = _parse_time(day_config.get("open", "00:00"))
-    close_time = _parse_time(day_config.get("close", "23:59"))
 
-    if open_time <= close_time:
-        return open_time <= current_time <= close_time
-    return current_time >= open_time or current_time <= close_time
+    if day_config:
+        open_time = _parse_time(day_config.get("open", "00:00"))
+        close_time = _parse_time(day_config.get("close", "23:59"))
+
+        if open_time <= close_time:
+            if open_time <= current_time <= close_time:
+                return True
+        else:
+            if current_time >= open_time or current_time <= close_time:
+                return True
+
+    if current_time <= time_type(hour=12, minute=0):
+        prev_day_name = (local_dt - timedelta(days=1)).strftime("%A").lower()
+        prev_config = working_hours.get(prev_day_name)
+        if prev_config:
+            prev_open = _parse_time(prev_config.get("open", "00:00"))
+            prev_close = _parse_time(prev_config.get("close", "23:59"))
+            if prev_open > prev_close and current_time <= prev_close:
+                return True
+
+    return False
 
 
 def get_available_tables(

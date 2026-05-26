@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from rest_framework import serializers
 
 from apps.authentication.models import User
@@ -47,3 +49,10 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         if value.restaurant_id != restaurant_id:
             raise serializers.ValidationError("Table does not belong to this restaurant.")
         return value
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        start_at = attrs.get("start_at")
+        end_at = attrs.get("end_at")
+        if isinstance(start_at, datetime) and isinstance(end_at, datetime) and start_at >= end_at:
+            raise serializers.ValidationError({"end_at": "end_at must be after start_at."})
+        return attrs
