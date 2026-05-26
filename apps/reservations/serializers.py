@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.authentication.models import User
 from apps.restaurants.models import Restaurant, Table
-from common.api import PublicIdRelatedField
+from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
 from .models import Reservation
 
@@ -41,10 +41,9 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
 
     def validate_table(self, value: Table) -> Table:
         request = self.context.get("request")
-        auth = getattr(request, "auth", None)
-        restaurant_id = auth.get("restaurant_id") if isinstance(auth, dict) else None
+        restaurant_id = get_restaurant_id_from_auth(request) if request else None
         if restaurant_id is None:
             raise serializers.ValidationError("Restaurant context required.")
-        if value.restaurant_id != int(restaurant_id):
+        if value.restaurant_id != restaurant_id:
             raise serializers.ValidationError("Table does not belong to this restaurant.")
         return value

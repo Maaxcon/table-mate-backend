@@ -6,7 +6,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from common.api import RestaurantScopedViewSetMixin
+from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.permissions import HasAnyRole
 
 from ..authentication.models import RoleCode
@@ -36,16 +36,13 @@ class ReservationViewSet(
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        auth = getattr(request, "auth", None)
-        restaurant_id = None
-        if auth is not None and hasattr(auth, "get"):
-            restaurant_id = auth.get("restaurant_id")
+        restaurant_id = get_restaurant_id_from_auth(request)
 
         if restaurant_id is None:
             raise ValidationError("Restaurant context required.")
 
         reservation = create_reservation(
-            restaurant_id=int(restaurant_id),
+            restaurant_id=restaurant_id,
             customer_id=request.user.pk,  # type: ignore[arg-type]
             table_id=str(serializer.validated_data["table"].public_id),
             guest_count=serializer.validated_data["guest_count"],
@@ -76,8 +73,7 @@ class ReservationViewSet(
     @extend_schema(responses=ReservationSerializer(many=True))
     @action(detail=False, methods=["get"], url_path="my")
     def my(self, request: Request) -> Response:
-        auth = getattr(request, "auth", None)
-        restaurant_id: int | None = auth.get("restaurant_id") if auth is not None and hasattr(auth, "get") else None
+        restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
             raise ValidationError("Restaurant context required.")
         reservations = get_customer_reservations(request.user.pk, restaurant_id=restaurant_id)  # type: ignore[arg-type]

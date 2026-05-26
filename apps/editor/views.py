@@ -9,7 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.restaurants.models import Table
-from common.api import RestaurantScopedViewSetMixin
+from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.permissions import HasAnyRole
 
 from .models import Layout
@@ -60,10 +60,7 @@ class EditorTableViewSet(
     )
     @action(detail=False, methods=["get"], url_path="available")
     def available(self, request: Request) -> Response:
-        auth = getattr(request, "auth", None)
-        restaurant_id = None
-        if auth is not None and hasattr(auth, "get"):
-            restaurant_id = auth.get("restaurant_id")
+        restaurant_id = get_restaurant_id_from_auth(request)
 
         if restaurant_id is None:
             return Response(
@@ -95,7 +92,7 @@ class EditorTableViewSet(
         except ValueError:
             return Response({"detail": "guest_count must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
         tables = get_available_tables(
-            restaurant_id=int(restaurant_id),
+            restaurant_id=restaurant_id,
             start_at=start_dt,
             end_at=end_dt,
             guest_count=gc,
