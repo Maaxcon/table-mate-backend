@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from common.api import RestaurantScopedViewSetMixin
 from common.permissions import HasAnyRole
 
+from ..authentication.models import RoleCode
 from .models import Reservation
 from .selectors import get_customer_reservations
 from .serializers import ReservationSerializer
@@ -58,6 +59,9 @@ class ReservationViewSet(
 
     def partial_update(self, request: Request, *args: object) -> Response:
         instance = self.get_object()
+        user = request.user
+        if getattr(user, "role", None) == RoleCode.CUSTOMER and instance.customer_id != user.pk:
+            raise PermissionDenied("You can only modify your own reservations.")
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
