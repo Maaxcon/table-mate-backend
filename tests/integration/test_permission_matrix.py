@@ -17,6 +17,7 @@ ENDPOINTS = {
     "orders:order-list": "/api/orders/orders/",
     "orders:ticket-list": "/api/orders/tickets/",
     "orders:order-item-list": "/api/orders/order-items/",
+    "payments:payment-list": "/api/payments/payments/",
 }
 
 PUBLIC_ENDPOINTS = {
@@ -35,6 +36,7 @@ ROLE_ALLOW_MATRIX: dict[str, set[str]] = {
     "orders:order-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
     "orders:ticket-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
     "orders:order-item-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
+    "payments:payment-list": {RoleCode.ADMIN},
 }
 
 ROLES = [RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER]
