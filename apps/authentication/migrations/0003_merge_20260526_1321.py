@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('authentication', '0002_alter_user_public_id'),
-        ('authentication', '0002_user_restaurant_fk'),
+        ("authentication", "0002_alter_user_public_id"),
+        ("authentication", "0002_user_restaurant_fk"),
     ]
 
-    operations = [
-    ]
+    operations = []
