@@ -6,9 +6,7 @@ from rest_framework.views import exception_handler
 from common.exceptions import DomainError
 
 
-def custom_exception_handler(
-    exc: Exception, context: dict[str, Any]
-) -> Response | None:
+def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
     if isinstance(exc, DomainError):
         return Response(
             {"detail": exc.default_detail, "code": exc.default_code},

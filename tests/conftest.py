@@ -64,6 +64,11 @@ class MenuItemFactory(factory.django.DjangoModelFactory):  # type: ignore[misc]
 
 
 @pytest.fixture
+def user_factory() -> UserFactory:
+    return UserFactory.build
+
+
+@pytest.fixture
 def api_client() -> Client:
     return Client()
 

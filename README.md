@@ -39,6 +39,16 @@ uv run python manage.py migrate
 
 ---
 
+## Docker (optional)
+
+Start the stack:
+
+```bash
+docker compose up -d
+```
+
+---
+
 ## Local Development
 
 **Start Redis**

@@ -45,17 +45,21 @@ class OrderItemStatus(models.TextChoices):
     VOIDED = "voided", "Voided"
 
 
-class VoidReasonCode(models.TextChoices):
-    MISPICK = "mispick", "Mispick"
-    GUEST_CHANGED_MIND = "guest_changed_mind", "Guest changed mind"
-    QUALITY_ISSUE = "quality_issue", "Quality issue"
-    OUT_OF_STOCK = "out_of_stock", "Out of stock"
-
-
 class CreatedBySource(models.TextChoices):
     STAFF = "staff", "Staff"
     CUSTOMER = "customer", "Customer"
     SYSTEM = "system", "System"
+
+
+class VoidReason(models.Model):
+    code = models.CharField(max_length=32, unique=True)
+    label = models.CharField(max_length=64)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return self.label
 
 
 class Session(RestaurantScopedModel):
@@ -79,9 +83,7 @@ class Session(RestaurantScopedModel):
         related_name="opened_sessions",
     )
     guest_count = models.PositiveIntegerField()
-    status = models.CharField(
-        max_length=20, choices=SessionStatus.choices, default=SessionStatus.OPEN
-    )
+    status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.OPEN)
     currency = models.CharField(max_length=3)
     running_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     final_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
@@ -256,11 +258,12 @@ class OrderItem(RestaurantScopedModel):
         blank=True,
         related_name="voided_order_items",
     )
-    void_reason = models.CharField(
-        max_length=32,
-        choices=VoidReasonCode.choices,
+    void_reason = models.ForeignKey(
+        "orders.VoidReason",
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
+        related_name="order_items",
     )
     void_reason_note = models.TextField(null=True, blank=True)
     is_wasted = models.BooleanField(default=False)
@@ -277,11 +280,6 @@ class OrderItem(RestaurantScopedModel):
             models.CheckConstraint(
                 condition=models.Q(status__in=OrderItemStatus.values),
                 name="orders_orderitem_status_valid",
-            ),
-            models.CheckConstraint(
-                condition=models.Q(void_reason__isnull=True)
-                | models.Q(void_reason__in=VoidReasonCode.values),
-                name="orders_orderitem_void_reason_valid",
             ),
         ]
 

@@ -1,96 +1,67 @@
-from typing import Any
-from unittest.mock import MagicMock, patch
-
-from rest_framework import status
+from django.http import HttpRequest
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.test import APIRequestFactory
+from rest_framework.views import APIView
 
 from common.api.exception_handler import custom_exception_handler
 from common.exceptions import DomainError, ReservationConflictError
 
 
-class TestDomainError:
-    def test_default_detail(self) -> None:
-        assert DomainError().default_detail == "A domain error occurred."
+class _DomainErrorView(APIView):
+    authentication_classes = []
+    permission_classes = []
 
-    def test_default_code(self) -> None:
-        assert DomainError().default_code == "domain_error"
-
-    def test_is_exception_subclass(self) -> None:
-        assert isinstance(DomainError(), Exception)
+    def get(self, request: Request) -> Response:
+        raise DomainError()
 
 
-class TestReservationConflictError:
-    def test_default_detail(self) -> None:
-        assert (
-            ReservationConflictError().default_detail
-            == "Reservation conflicts with an existing booking."
-        )
+class _ReservationConflictView(APIView):
+    authentication_classes = []
+    permission_classes = []
 
-    def test_default_code(self) -> None:
-        assert ReservationConflictError().default_code == "reservation_conflict"
-
-    def test_is_domain_error_subclass(self) -> None:
-        assert isinstance(ReservationConflictError(), DomainError)
+    def get(self, request: Request) -> Response:
+        raise ReservationConflictError()
 
 
-class TestCustomExceptionHandler:
-    def test_returns_response_for_domain_error(self) -> None:
-        context: dict[str, Any] = {
-            "view": MagicMock(),
-            "request": MagicMock(),
-            "args": (),
-            "kwargs": {},
-        }
-        response = custom_exception_handler(DomainError(), context)
+class _PermissionDeniedView(APIView):
+    authentication_classes = []
+    permission_classes = []
 
-        assert response is not None
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+    def get(self, request: Request) -> Response:
+        raise PermissionDenied("not allowed")
+
+
+class TestExceptionHandlerEndToEnd:
+    def test_domain_error_returns_400(self) -> None:
+        view = _DomainErrorView.as_view()
+        request = APIRequestFactory().get("/")
+        response = view(request)
+        assert response.status_code == 400
         assert response.data == {
             "detail": "A domain error occurred.",
             "code": "domain_error",
         }
 
-    def test_returns_response_for_reservation_conflict(self) -> None:
-        context: dict[str, Any] = {
-            "view": MagicMock(),
-            "request": MagicMock(),
-            "args": (),
-            "kwargs": {},
-        }
-        response = custom_exception_handler(ReservationConflictError(), context)
-
-        assert response is not None
-        assert response.status_code == status.HTTP_409_CONFLICT
+    def test_reservation_conflict_returns_409(self) -> None:
+        view = _ReservationConflictView.as_view()
+        request = APIRequestFactory().get("/")
+        response = view(request)
+        assert response.status_code == 409
         assert response.data == {
             "detail": "Reservation conflicts with an existing booking.",
             "code": "reservation_conflict",
         }
 
-    def test_delegates_non_domain_error(self) -> None:
-        context: dict[str, Any] = {
-            "view": MagicMock(),
-            "request": MagicMock(),
-            "args": (),
-            "kwargs": {},
-        }
+    def test_non_domain_error_delegates(self) -> None:
+        view = _PermissionDeniedView.as_view()
+        request = APIRequestFactory().get("/")
+        response = view(request)
+        assert response.status_code == 403
+        assert response.data == {"detail": "not allowed"}
 
-        with patch("common.api.exception_handler.exception_handler") as mock_handler:
-            mock_handler.return_value = Response({"detail": "test"}, status=400)
-            response = custom_exception_handler(ValueError("test"), context)
-
-        assert response is not None
-        assert response.data == {"detail": "test"}
-
-    def test_returns_none_for_unhandled_non_domain_error(self) -> None:
-        context: dict[str, Any] = {
-            "view": MagicMock(),
-            "request": MagicMock(),
-            "args": (),
-            "kwargs": {},
-        }
-
-        with patch("common.api.exception_handler.exception_handler") as mock_handler:
-            mock_handler.return_value = None
-            response = custom_exception_handler(ValueError("test"), context)
-
-        assert response is None
+    def test_handler_returns_none_for_unhandled_non_drf_error(self) -> None:
+        context: dict[str, object] = {"view": None, "args": (), "kwargs": {}, "request": HttpRequest()}
+        result = custom_exception_handler(ValueError("oops"), context)
+        assert result is None
