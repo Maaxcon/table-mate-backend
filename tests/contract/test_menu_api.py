@@ -15,7 +15,7 @@ from ..conftest import MenuCategoryFactory, MenuFactory, MenuItemFactory
 @pytest.mark.django_db(databases=["default"])
 class TestPublicMenuCategories:
     def test_unauthenticated_returns_200(
-        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
     ) -> None:
         url = reverse("menu-category-list")
         response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
@@ -28,7 +28,7 @@ class TestPublicMenuCategories:
         assert results[0]["public_id"] == str(category.public_id)
 
     def test_filter_by_menu(
-        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory, item: MenuItem
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
     ) -> None:
         url = reverse("menu-category-list")
         response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "menu": str(menu.public_id)})
