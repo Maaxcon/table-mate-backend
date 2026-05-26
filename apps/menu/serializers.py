@@ -37,6 +37,7 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
             "name",
             "description",
             "ingredients",
+            "weight_grams",
             "price",
             "is_available",
             "sort_order",
