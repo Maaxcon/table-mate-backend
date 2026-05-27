@@ -6,7 +6,7 @@ from django.db import models as dm
 from django.db.models import QuerySet
 
 from apps.reservations.models import Reservation, ReservationStatus
-from apps.restaurants.models import RestaurantSettings, Table, TableStatus
+from apps.restaurants.models import RestaurantSettings, Table
 
 
 def _parse_time(value: str) -> time_type:
@@ -74,7 +74,6 @@ def get_available_tables(
     qs = Table.objects.filter(
         restaurant_id=restaurant_id,
         active=True,
-        status=TableStatus.FREE,
     ).exclude(id__in=dm.Subquery(overlapping))
 
     if guest_count is not None:

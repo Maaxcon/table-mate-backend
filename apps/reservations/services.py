@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
-from apps.restaurants.models import Table
+from apps.restaurants.models import Table, TableStatus
 from common.exceptions import ReservationConflictError
 
 from ..editor.selectors import get_available_tables
@@ -80,6 +81,26 @@ def create_reservation(
         end_at=end_at,
         status=ReservationStatus.CONFIRMED,
         notes=notes or "",
+    )
+
+    return reservation
+
+
+@transaction.atomic
+def seat_walk_in_customer(table: Table, guest_count: int) -> Reservation:
+    table.status = TableStatus.OCCUPIED
+    table.save(update_fields=["status"])
+
+    end_at = timezone.now() + timedelta(minutes=90)
+
+    reservation = Reservation.objects.create(
+        table=table,
+        restaurant_id=table.restaurant_id,
+        guest_count=guest_count,
+        start_at=timezone.now(),
+        end_at=end_at,
+        status=ReservationStatus.CONFIRMED,
+        customer=None,
     )
 
     return reservation
