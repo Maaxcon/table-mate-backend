@@ -135,7 +135,7 @@ class MenuItemViewSet(
     def toggle_like(self, request: Request, *args: object, **kwargs: object) -> Response:
         serializer = ToggleMenuItemLikeRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        guest_token = serializer.validated_data["guest_token"]
+        guest_token = str(serializer.validated_data["guest_token"])
 
         item = self.get_object()
         with transaction.atomic():
