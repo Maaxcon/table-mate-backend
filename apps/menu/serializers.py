@@ -47,6 +47,7 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
             "name",
             "description",
             "ingredients",
+            "allergens",
             "weight_grams",
             "image",
             "likes_count",

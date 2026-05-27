@@ -52,6 +52,7 @@ class MenuItem(RestaurantScopedModel):
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     ingredients = models.JSONField(default=list, blank=True)
+    allergens = models.JSONField(default=list, blank=True)
     weight_grams = models.PositiveIntegerField(null=True, blank=True)
     image = models.ImageField(upload_to="menu_items/", null=True, blank=True)
     price = models.DecimalField(max_digits=14, decimal_places=4)

@@ -89,6 +89,7 @@ class TestPublicMenuItems:
         assert len(results) >= 1
         assert results[0]["name"] == "Steak"
         assert results[0]["price"] == "29.9900"
+        assert isinstance(results[0]["allergens"], list)
         assert results[0]["is_available"] is True
         assert results[0]["likes_count"] == 0
         assert results[0]["is_liked"] is False

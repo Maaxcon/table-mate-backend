@@ -20,6 +20,28 @@ class _Menu(TypedDict):
     categories: dict[str, _MenuCategory]
 
 
+_ALLERGEN_RULES: list[tuple[str, tuple[str, ...]]] = [
+    ("глютен", ("борошно", "паста", "спагеті", "хліб", "сухар", "тісто", "савоярд", "печиво", "лазань")),
+    ("молочні продукти", ("молоко", "вершк", "сир", "моцарел", "пармез", "маскарпон", "фета", "рикот", "масло")),
+    ("яйця", ("яйце", "яйця", "жовток")),
+    ("риба", ("лосос", "тунец", "риба", "анчоус")),
+    ("морепродукти", ("кревет", "міді", "устриц", "кальмар")),
+    ("горіхи", ("горіх", "мигдал", "фундук", "кедров")),
+    ("соя", ("соєв", "соус териякі", "тофу")),
+    ("гірчиця", ("гірчиц",)),
+    ("алкоголь", ("білий ром", "чорний ром", "джин", "текіл", "лікер", "алк.", "вино")),
+]
+
+
+def _infer_allergens(ingredients: list[str]) -> list[str]:
+    allergens: list[str] = []
+    normalized = " ".join(ing.lower() for ing in ingredients)
+    for allergen_label, needles in _ALLERGEN_RULES:
+        if any(needle in normalized for needle in needles):
+            allergens.append(allergen_label)
+    return allergens
+
+
 _MENUS_DATA: dict[str, _Menu] = {
     "Обіднє меню": {
         "is_active": True,
@@ -515,6 +537,7 @@ class Command(BaseCommand):
                                 "category": category,
                                 "description": description,
                                 "ingredients": ingredients,
+                                "allergens": _infer_allergens(ingredients),
                                 "weight_grams": weight_grams,
                                 "price": price,
                                 "is_available": is_available,
