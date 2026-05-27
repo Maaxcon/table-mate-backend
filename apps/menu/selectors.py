@@ -47,5 +47,5 @@ def search_menu_items(
         is_available=True,
     ).filter(
         Q(name__icontains=query) | Q(description__icontains=query),
-    )
+    ).select_related("category")
     return _with_like_annotations(qs, guest_token=guest_token)
