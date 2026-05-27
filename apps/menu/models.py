@@ -61,7 +61,7 @@ class MenuItem(RestaurantScopedModel):
     allergens = models.JSONField(default=list, blank=True, validators=[validate_str_list])
     weight_grams = models.PositiveIntegerField(null=True, blank=True)
     image = models.ImageField(upload_to="menu_items/", null=True, blank=True)
-    price = models.DecimalField(max_digits=14, decimal_places=4)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
     is_available = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
 
