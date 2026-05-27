@@ -1,4 +1,4 @@
-from typing import ClassVar, Generic, Protocol, TypeVar, cast
+from typing import ClassVar, Final, Generic, Protocol, TypeVar, cast
 
 from django.db.models import Manager, Model, QuerySet
 from drf_spectacular.types import OpenApiTypes
@@ -7,6 +7,9 @@ from rest_framework import serializers
 from rest_framework.request import Request
 
 _ModelT = TypeVar("_ModelT", bound=Model)
+
+_UNSET: Final = object()
+_CACHE_ATTR: Final = "_resolved_restaurant_id"
 
 
 class _HasRequest(Protocol):
@@ -37,13 +40,23 @@ class PublicRestaurantQueryMixin:
     def get_restaurant_id(self) -> int | None:
         from apps.restaurants.models import Restaurant
 
-        public_id = cast(_HasRequest, self).request.query_params.get(self.restaurant_query_param)
+        request = cast(_HasRequest, self).request
+        cached = getattr(request, _CACHE_ATTR, _UNSET)
+        if cached is not _UNSET:
+            return cached  # type: ignore[return-value]
+
+        public_id = request.query_params.get(self.restaurant_query_param)
         if not public_id:
+            setattr(request, _CACHE_ATTR, None)
             return None
         try:
-            return Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
+            restaurant_id: int | None = Restaurant.objects.values_list("id", flat=True).get(
+                public_id=public_id
+            )
         except (Restaurant.DoesNotExist, ValueError):
-            return None
+            restaurant_id = None
+        setattr(request, _CACHE_ATTR, restaurant_id)
+        return restaurant_id
 
     def resolve_restaurant_or_not_found(self) -> int | None:
         restaurant_id = self.get_restaurant_id()
