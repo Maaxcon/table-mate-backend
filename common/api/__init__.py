@@ -13,6 +13,18 @@ class _HasRequest(Protocol):
     request: Request
 
 
+def get_restaurant_id_from_auth(request: Request) -> int | None:
+    auth = getattr(request, "auth", None)
+    if auth is not None and hasattr(auth, "get"):
+        try:
+            val = auth.get("restaurant_id")
+            if val is not None:
+                return int(val)
+        except (TypeError, ValueError, AttributeError):
+            pass
+    return None
+
+
 class PublicLookupMixin:
     lookup_field: ClassVar[str] = "public_id"
     lookup_url_kwarg: ClassVar[str | None] = "public_id"
@@ -76,16 +88,7 @@ class RestaurantScopedViewSetMixin(PublicLookupMixin, Generic[_ModelT]):
     def get_queryset(self) -> QuerySet[_ModelT]:
         queryset = cast(QuerySet[_ModelT], super().get_queryset())  # type: ignore[misc]
         request = cast(_HasRequest, self).request
-        auth = getattr(request, "auth", None)
-        restaurant_id = None
-
-        if hasattr(auth, "get"):
-            try:
-                val = auth.get("restaurant_id")  # type: ignore[union-attr]
-                if val is not None:
-                    restaurant_id = int(val)
-            except (TypeError, ValueError, AttributeError):
-                pass
+        restaurant_id = get_restaurant_id_from_auth(request)
 
         if restaurant_id is None:
             return queryset.none()

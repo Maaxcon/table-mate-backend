@@ -5,7 +5,6 @@ from common.models import BaseModel, RestaurantScopedModel
 
 class TableStatus(models.TextChoices):
     FREE = "free", "Free"
-    RESERVED = "reserved", "Reserved"
     OCCUPIED = "occupied", "Occupied"
 
 
@@ -40,6 +39,13 @@ class RestaurantSettings(BaseModel):
         return f"Settings for {self.restaurant.name}"
 
 
+class TableShape(models.TextChoices):
+    RECTANGLE = "rectangle", "Rectangle"
+    ROUND = "round", "Round"
+    SQUARE = "square", "Square"
+    BOOTH = "booth", "Booth"
+
+
 class Table(RestaurantScopedModel):
     table_number = models.CharField(max_length=64)
     capacity = models.PositiveIntegerField()
@@ -48,6 +54,12 @@ class Table(RestaurantScopedModel):
         choices=TableStatus.choices,
         default=TableStatus.FREE,
     )
+    shape = models.CharField(
+        max_length=20,
+        choices=TableShape.choices,
+        default=TableShape.RECTANGLE,
+    )
+    active = models.BooleanField(default=True)
     position_x = models.IntegerField(null=True, blank=True)
     position_y = models.IntegerField(null=True, blank=True)
 

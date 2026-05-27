@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.authentication.models import User
-from apps.restaurants.models import Restaurant
+from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField
 
 from .models import Layout
@@ -24,3 +24,31 @@ class LayoutSerializer(serializers.ModelSerializer[Layout]):
             "updated_at",
         ]
         read_only_fields = ["public_id", "created_at", "updated_at"]
+
+
+class EditorTableSerializer(serializers.ModelSerializer[Table]):
+    restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
+
+    class Meta:
+        model = Table
+        fields = [
+            "public_id",
+            "restaurant",
+            "table_number",
+            "capacity",
+            "status",
+            "shape",
+            "active",
+            "position_x",
+            "position_y",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "public_id",
+            "restaurant",
+            "table_number",
+            "capacity",
+            "created_at",
+            "updated_at",
+        ]
