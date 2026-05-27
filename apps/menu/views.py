@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -137,18 +138,15 @@ class MenuItemViewSet(
         guest_token = serializer.validated_data["guest_token"]
 
         item = self.get_object()
-        like_qs = MenuItemLike.objects.filter(menu_item=item, guest_token=guest_token)
-        existing_like = like_qs.first()
-        if existing_like is None:
-            MenuItemLike.objects.create(
-                restaurant=item.restaurant,
+        with transaction.atomic():
+            like, created = MenuItemLike.objects.get_or_create(
                 menu_item=item,
                 guest_token=guest_token,
+                defaults={"restaurant": item.restaurant},
             )
-            is_liked = True
-        else:
-            existing_like.delete()
-            is_liked = False
+            if not created:
+                like.delete()
+            is_liked = created
 
         likes_count = MenuItemLike.objects.filter(menu_item=item).count()
         response_serializer = ToggleMenuItemLikeResponseSerializer(
