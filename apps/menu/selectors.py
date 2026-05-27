@@ -4,7 +4,7 @@ from .models import Menu, MenuCategory, MenuItem, MenuItemLike
 
 
 def get_active_menus(*, restaurant_id: int) -> QuerySet[Menu]:
-    return Menu.objects.filter(restaurant_id=restaurant_id, is_active=True)
+    return Menu.objects.filter(restaurant_id=restaurant_id, is_active=True).prefetch_related("items", "categories")
 
 
 def get_categories_by_restaurant(*, restaurant_id: int) -> QuerySet[MenuCategory]:

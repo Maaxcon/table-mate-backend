@@ -1,7 +1,24 @@
-from django.db import models
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
 
 from common.models import BaseModel, RestaurantScopedModel
+
+_WEEKDAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+
+
+def validate_working_hours(value: object) -> None:
+    if not isinstance(value, dict):
+        raise ValidationError("Must be an object.")
+    for day, hours in value.items():
+        if day not in _WEEKDAYS:
+            raise ValidationError(f"Unknown day key: '{day}'. Use mon/tue/wed/thu/fri/sat/sun.")
+        if not isinstance(hours, dict) or set(hours) != {"open", "close"}:
+            raise ValidationError(f"'{day}' must have exactly 'open' and 'close' keys.")
+        for field in ("open", "close"):
+            v = hours[field]
+            if not isinstance(v, str) or len(v) != 5 or v[2] != ":" or not v[:2].isdigit() or not v[3:].isdigit():
+                raise ValidationError(f"'{day}.{field}' must be HH:MM format, got {v!r}.")
 
 
 class TableStatus(models.TextChoices):
@@ -32,7 +49,7 @@ class RestaurantSettings(BaseModel):
     locale = models.CharField(max_length=16, default="en")
     default_tax_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0)
     default_service_charge = models.DecimalField(max_digits=5, decimal_places=4, default=0)
-    working_hours = models.JSONField(default=dict)
+    working_hours = models.JSONField(default=dict, validators=[validate_working_hours])
     rating = models.DecimalField(
         max_digits=3,
         decimal_places=2,
