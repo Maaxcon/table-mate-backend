@@ -34,6 +34,8 @@ class ReservationViewSet(
             return [IsAuthenticated(), HasAnyRole.with_roles("customer")]
         if self.action in ("update", "partial_update"):
             return [CanManageReservations()]
+        if self.action in ("list", "retrieve"):
+            return [IsAuthenticated(), IsFloorOrCustomer()]
         return [IsAuthenticated()]
 
     def create(self, request: Request, *args: object) -> Response:
