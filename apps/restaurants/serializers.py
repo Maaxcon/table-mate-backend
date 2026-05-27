@@ -21,8 +21,24 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
 class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
     class Meta:
         model = RestaurantSettings
-        fields = ["currency", "timezone", "working_hours"]
-        read_only_fields = ["currency", "timezone", "working_hours"]
+        fields = [
+            "currency",
+            "timezone",
+            "working_hours",
+            "rating",
+            "eta_min_minutes",
+            "eta_max_minutes",
+            "price_band",
+        ]
+        read_only_fields = [
+            "currency",
+            "timezone",
+            "working_hours",
+            "rating",
+            "eta_min_minutes",
+            "eta_max_minutes",
+            "price_band",
+        ]
 
 
 class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
@@ -48,6 +64,10 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
             "default_tax_rate",
             "default_service_charge",
             "working_hours",
+            "rating",
+            "eta_min_minutes",
+            "eta_max_minutes",
+            "price_band",
             "created_at",
             "updated_at",
         ]

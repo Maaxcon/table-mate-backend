@@ -18,7 +18,7 @@ from rest_framework.test import APIClient
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
 from apps.menu.models import Menu, MenuCategory, MenuItem
-from apps.restaurants.models import Restaurant, Table, TableStatus
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table, TableStatus
 
 if TYPE_CHECKING:
     from apps.authentication.models import User as _User
@@ -49,6 +49,31 @@ class RestaurantFactory(DjangoModelFactory[Restaurant]):
 
     name = Sequence(lambda n: f"Restaurant {n}")
     address = "123 Main St"
+
+
+class RestaurantSettingsFactory(DjangoModelFactory[RestaurantSettings]):
+    class Meta:
+        model = RestaurantSettings
+
+    restaurant = SubFactory(RestaurantFactory)
+    timezone = "Europe/Kyiv"
+    currency = "UAH"
+    locale = "uk"
+    default_tax_rate = Decimal("0.1000")
+    default_service_charge = Decimal("0.0500")
+    working_hours = {
+        "mon": {"open": "09:00", "close": "22:00"},
+        "tue": {"open": "09:00", "close": "22:00"},
+        "wed": {"open": "09:00", "close": "22:00"},
+        "thu": {"open": "09:00", "close": "22:00"},
+        "fri": {"open": "09:00", "close": "23:00"},
+        "sat": {"open": "10:00", "close": "23:00"},
+        "sun": {"open": "10:00", "close": "21:00"},
+    }
+    rating = Decimal("4.80")
+    eta_min_minutes = 20
+    eta_max_minutes = 30
+    price_band = 2
 
 
 class MenuFactory(DjangoModelFactory[Menu]):
@@ -174,3 +199,8 @@ def item(menu: Menu, category: MenuCategory, restaurant: Restaurant) -> MenuItem
             sort_order=1,
         ),
     )
+
+
+@pytest.fixture
+def restaurant_settings(restaurant: Restaurant) -> RestaurantSettings:
+    return RestaurantSettingsFactory(restaurant=restaurant)

@@ -45,8 +45,8 @@ class RestaurantSettingsViewSet(
     permission_classes = [IsAdmin]
     queryset = RestaurantSettings.objects.all()
     serializer_class = RestaurantSettingsSerializer
-    filterset_fields = ["restaurant", "timezone", "currency", "locale"]
-    ordering_fields = ["created_at", "updated_at", "timezone", "currency", "locale"]
+    filterset_fields = ["restaurant", "timezone", "currency", "locale", "price_band"]
+    ordering_fields = ["created_at", "updated_at", "timezone", "currency", "locale", "rating", "price_band"]
 
 
 @extend_schema(tags=["Restaurants"])
