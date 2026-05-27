@@ -1,7 +1,5 @@
 from datetime import datetime
 
-from apps.authentication.permissions import IsFloor
-from common.api import RestaurantScopedViewSetMixin
 from django.db.models import QuerySet
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
@@ -10,6 +8,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from apps.authentication.permissions import IsFloor
 from apps.restaurants.models import Table
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.permissions import HasAnyRole
