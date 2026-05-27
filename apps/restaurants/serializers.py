@@ -49,6 +49,8 @@ class TableSerializer(serializers.ModelSerializer[Table]):
             "table_number",
             "capacity",
             "status",
+            "shape",
+            "active",
             "position_x",
             "position_y",
             "created_at",

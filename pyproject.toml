@@ -14,7 +14,6 @@ dependencies = [
     "channels-redis",
     "daphne",
     "drf-spectacular",
-
 ]
 requires-python = ">=3.11"
 
@@ -52,7 +51,6 @@ dev = [
     "django-stubs[compatible-mypy]>=6.0.4",
     "djangorestframework-stubs[compatible-mypy]>=3.17.0",
     "drf-spectacular>=0.29.0",
-
     "pre-commit>=4.6.0",
     "factory-boy>=3.3.3",
     "pytest>=9.0.3",

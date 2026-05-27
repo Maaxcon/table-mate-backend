@@ -105,7 +105,6 @@ class Migration(migrations.Migration):
                     models.CharField(
                         choices=[
                             ("free", "Free"),
-                            ("reserved", "Reserved"),
                             ("occupied", "Occupied"),
                         ],
                         default="free",
@@ -130,7 +129,7 @@ class Migration(migrations.Migration):
                         name="restaurants_table_restaurant_number_unique",
                     ),
                     models.CheckConstraint(
-                        condition=models.Q(("status__in", ["free", "reserved", "occupied"])),
+                        condition=models.Q(("status__in", ["free", "occupied"])),
                         name="restaurants_table_status_valid",
                     ),
                 ],
