@@ -8,6 +8,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .models import RoleCode, User
@@ -139,6 +140,12 @@ class LogoutView(APIView):
         responses={200: OpenApiResponse(description="Refresh token cookie cleared.")},
     )
     def post(self, request: Request) -> Response:
+        raw_refresh = request.COOKIES.get("refresh_token")
+        if raw_refresh:
+            try:
+                RefreshToken(raw_refresh).blacklist()
+            except TokenError:
+                pass  # already expired or invalid — still clear the cookie
         response = Response(status=status.HTTP_200_OK)
         response.delete_cookie(key="refresh_token", samesite="Strict")
         return response
