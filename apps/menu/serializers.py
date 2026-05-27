@@ -26,6 +26,16 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     menu: PublicIdRelatedField[Menu] = PublicIdRelatedField(read_only=True)
     category: PublicIdRelatedField[MenuCategory] = PublicIdRelatedField(read_only=True)
+    likes_count = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+
+    def get_likes_count(self, obj: MenuItem) -> int:
+        val = getattr(obj, "likes_count", None)
+        return int(val) if val is not None else 0
+
+    def get_is_liked(self, obj: MenuItem) -> bool:
+        val = getattr(obj, "is_liked", None)
+        return bool(val) if val is not None else False
 
     class Meta:
         model = MenuItem
@@ -39,6 +49,8 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
             "ingredients",
             "weight_grams",
             "image",
+            "likes_count",
+            "is_liked",
             "price",
             "is_available",
             "sort_order",
@@ -72,3 +84,13 @@ class MenuSerializer(serializers.ModelSerializer[Menu]):
             "updated_at",
         ]
         read_only_fields = ["public_id", "created_at", "updated_at"]
+
+
+class ToggleMenuItemLikeRequestSerializer(serializers.Serializer):
+    guest_token = serializers.CharField(max_length=64, trim_whitespace=True)
+
+
+class ToggleMenuItemLikeResponseSerializer(serializers.Serializer):
+    public_id = serializers.UUIDField()
+    is_liked = serializers.BooleanField()
+    likes_count = serializers.IntegerField(min_value=0)
