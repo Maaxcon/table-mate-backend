@@ -88,7 +88,7 @@ class MenuSerializer(serializers.ModelSerializer[Menu]):
 
 
 class ToggleMenuItemLikeRequestSerializer(serializers.Serializer):
-    guest_token = serializers.UUIDField()
+    guest_token = serializers.CharField(max_length=64)
 
 
 class ToggleMenuItemLikeResponseSerializer(serializers.Serializer):
