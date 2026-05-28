@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs
 
@@ -46,10 +45,6 @@ async def authenticate_websocket(scope: dict) -> tuple[User | None, int | None]:
         return user, int(claim)
     except (TypeError, ValueError):
         return None, None
-
-
-def cart_group_name(session_public_id: uuid.UUID | str) -> str:
-    return f"cart_{str(session_public_id).replace('-', '')}"
 
 
 def hall_group_name(restaurant_id: int) -> str:
