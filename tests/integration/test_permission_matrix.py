@@ -7,6 +7,8 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.authentication.models import RoleCode
+from apps.authentication.services import issue_tokens_with_restaurant
+from tests.conftest import UserFactory
 
 ENDPOINTS: list[str] = [
     "layout-list",
@@ -79,3 +81,22 @@ def test_protected_endpoints_reject_anonymous(url_name: str) -> None:
         status.HTTP_401_UNAUTHORIZED,
         status.HTTP_403_FORBIDDEN,
     ), f"{url_name} should reject anonymous users"
+
+
+@pytest.mark.django_db
+def test_role_change_invalidates_existing_token(restaurant: Any) -> None:
+    user = UserFactory.create(role=RoleCode.ADMIN, restaurant=restaurant)
+    access, _ = issue_tokens_with_restaurant(user, restaurant.id)  # type: ignore[arg-type]
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+    response = client.get(reverse("layout-list"))
+    assert response.status_code == status.HTTP_200_OK
+
+    user.role = RoleCode.CUSTOMER  # type: ignore[attr-defined]
+    user.save()
+    user.refresh_from_db()
+    assert user.token_version == 1  # type: ignore[attr-defined]
+
+    response = client.get(reverse("layout-list"))
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
