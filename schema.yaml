@@ -482,6 +482,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/MenuItem'
           description: ''
+  /api/menu/items/{public_id}/toggle-like/:
+    post:
+      operationId: menu_items_toggle_like_create
+      summary: Toggle like on a menu item for an anonymous client token
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      - in: query
+        name: restaurant
+        schema:
+          type: string
+          format: uuid
+        description: Restaurant public UUID
+        required: true
+      tags:
+      - Menu
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToggleMenuItemLikeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ToggleMenuItemLikeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ToggleMenuItemLikeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToggleMenuItemLikeResponse'
+          description: ''
   /api/menu/items/search/:
     get:
       operationId: menu_items_search_retrieve
@@ -1191,6 +1234,10 @@ paths:
         schema:
           type: integer
       - in: query
+        name: price_band
+        schema:
+          type: integer
+      - in: query
         name: restaurant
         schema:
           type: integer
@@ -1259,6 +1306,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedRestaurantList'
+          description: ''
+  /api/restaurants/restaurants-public/{public_id}/:
+    get:
+      operationId: restaurants_restaurants_public_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicRestaurant'
           description: ''
   /api/restaurants/restaurants/{public_id}/:
     get:
@@ -1606,6 +1676,31 @@ components:
         description:
           type: string
           nullable: true
+        ingredients:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        allergens:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        weight_grams:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        image:
+          type: string
+          format: uri
+          nullable: true
+        likes_count:
+          type: integer
+          readOnly: true
+        is_liked:
+          type: boolean
+          readOnly: true
         price:
           type: string
           format: decimal
@@ -1625,8 +1720,12 @@ components:
           format: date-time
           readOnly: true
       required:
+      - allergens
       - category
       - created_at
+      - ingredients
+      - is_liked
+      - likes_count
       - menu
       - name
       - price
@@ -2285,6 +2384,67 @@ components:
         * `settled` - Settled
         * `refunded` - Refunded
         * `cancelled` - Cancelled
+    PublicRestaurant:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        address:
+          type: string
+          readOnly: true
+        phone:
+          type: string
+          readOnly: true
+        settings:
+          allOf:
+          - $ref: '#/components/schemas/PublicRestaurantSettings'
+          readOnly: true
+          nullable: true
+      required:
+      - address
+      - name
+      - phone
+      - public_id
+      - settings
+    PublicRestaurantSettings:
+      type: object
+      properties:
+        currency:
+          type: string
+          readOnly: true
+        timezone:
+          type: string
+          readOnly: true
+        working_hours:
+          readOnly: true
+        rating:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        eta_min_minutes:
+          type: integer
+          readOnly: true
+        eta_max_minutes:
+          type: integer
+          readOnly: true
+        price_band:
+          type: integer
+          readOnly: true
+      required:
+      - currency
+      - eta_max_minutes
+      - eta_min_minutes
+      - price_band
+      - rating
+      - timezone
+      - working_hours
     Reservation:
       type: object
       properties:
@@ -2406,6 +2566,23 @@ components:
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
         working_hours: {}
+        rating:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+          nullable: true
+        eta_min_minutes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        eta_max_minutes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        price_band:
+          type: integer
+          maximum: 4
+          minimum: 1
         created_at:
           type: string
           format: date-time
@@ -2645,6 +2822,29 @@ components:
         * `active` - Active
         * `completed` - Completed
         * `bumped` - Bumped
+    ToggleMenuItemLikeRequest:
+      type: object
+      properties:
+        guest_token:
+          type: string
+          maxLength: 64
+      required:
+      - guest_token
+    ToggleMenuItemLikeResponse:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+        is_liked:
+          type: boolean
+        likes_count:
+          type: integer
+          minimum: 0
+      required:
+      - is_liked
+      - likes_count
+      - public_id
     TokenRefresh:
       type: object
       properties:
@@ -2680,6 +2880,10 @@ components:
           maxLength: 32
         role:
           $ref: '#/components/schemas/RoleEnum'
+        restaurant_public_id:
+          type: string
+          nullable: true
+          readOnly: true
         is_active:
           type: boolean
         created_at:
@@ -2694,6 +2898,7 @@ components:
       - created_at
       - email
       - public_id
+      - restaurant_public_id
       - updated_at
   securitySchemes:
     cookieAuth:

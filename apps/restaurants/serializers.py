@@ -18,6 +18,22 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
+class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
+    class Meta:
+        model = RestaurantSettings
+        fields = ["currency", "timezone", "working_hours", "rating", "eta_min_minutes", "eta_max_minutes", "price_band"]
+        read_only_fields = fields
+
+
+class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
+    settings = PublicRestaurantSettingsSerializer(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Restaurant
+        fields = ["public_id", "name", "address", "phone", "settings"]
+        read_only_fields = ["public_id", "name", "address", "phone", "settings"]
+
+
 class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
 
@@ -32,6 +48,10 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
             "default_tax_rate",
             "default_service_charge",
             "working_hours",
+            "rating",
+            "eta_min_minutes",
+            "eta_max_minutes",
+            "price_band",
             "created_at",
             "updated_at",
         ]
