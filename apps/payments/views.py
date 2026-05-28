@@ -1,6 +1,7 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 
+from apps.authentication.permissions import IsAdmin
 from common.api import RestaurantScopedViewSetMixin
 
 from .models import Payment
@@ -14,5 +15,6 @@ class PaymentViewSet(
 ):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
+    permission_classes = [IsAdmin]
     filterset_fields = ["order", "provider", "status", "currency"]
     ordering_fields = ["created_at", "updated_at", "amount", "status"]

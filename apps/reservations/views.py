@@ -1,13 +1,15 @@
+from collections.abc import Sequence
+
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from apps.authentication.permissions import IsNonKitchen, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
-from common.permissions import HasAnyRole
 
 from .models import Reservation
 from .permissions import CanManageReservations
@@ -27,12 +29,12 @@ class ReservationViewSet(
     filterset_fields = ["customer", "table", "status"]
     ordering_fields = ["created_at", "updated_at", "start_at", "end_at", "guest_count"]
 
-    def get_permissions(self) -> list[BasePermission]:
-        if self.action in ("create", "my"):
-            return [IsAuthenticated(), HasAnyRole.with_roles("customer")]
-        if self.action in ("update", "partial_update"):
+    def get_permissions(self) -> Sequence[BasePermission]:
+        if self.action in ("create", "my", "update", "partial_update"):
             return [CanManageReservations()]
-        return [IsAuthenticated()]
+        if self.action in ("list", "retrieve"):
+            return [IsNonKitchen()]
+        return [IsStaff()]
 
     def create(self, request: Request, *args: object) -> Response:
         serializer = self.get_serializer(data=request.data)
