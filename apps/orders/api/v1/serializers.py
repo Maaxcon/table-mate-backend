@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from rest_framework import serializers
 
 from apps.authentication.models import User
@@ -5,7 +7,7 @@ from apps.menu.models import MenuItem
 from apps.orders.models import CartItem, CartSession
 from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant
-from common.api import PublicIdRelatedField
+from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
 
 class CartSessionSerializer(serializers.ModelSerializer[CartSession]):
@@ -20,6 +22,17 @@ class CartSessionSerializer(serializers.ModelSerializer[CartSession]):
         queryset=User.objects.all(),
         required=False,
     )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request is not None:
+            restaurant_id = get_restaurant_id_from_auth(request)
+            if restaurant_id is not None:
+                field = cast(PublicIdRelatedField[Reservation], self.fields["reservation"])
+                field.queryset = Reservation.objects.filter(
+                    restaurant_id=restaurant_id,
+                )
 
     class Meta:
         model = CartSession
@@ -80,3 +93,14 @@ class AddCartItemSerializer(serializers.Serializer[None]):
     )
     quantity = serializers.IntegerField(min_value=1)
     comment = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request is not None:
+            restaurant_id = get_restaurant_id_from_auth(request)
+            if restaurant_id is not None:
+                field = cast(PublicIdRelatedField[MenuItem], self.fields["menu_item"])
+                field.queryset = MenuItem.objects.filter(
+                    restaurant_id=restaurant_id,
+                )
