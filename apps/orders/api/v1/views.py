@@ -70,6 +70,8 @@ class CartSessionItemViewSet(
         return CartItemSerializer
 
     def safely_get_queryset(self, qs: QuerySet[CartItem]) -> QuerySet[CartItem]:
+        user = cast(User, self.request.user)
+        qs = qs.filter(cart_session__participants=user)
         session_pk = self.kwargs.get("session_pk")
         if session_pk:
             return qs.filter(cart_session__public_id=session_pk)
