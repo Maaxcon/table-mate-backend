@@ -23,7 +23,6 @@ class ReservationViewSet(
     RestaurantScopedViewSetMixin[Reservation],
     viewsets.ModelViewSet[Reservation],
 ):
-    permission_classes = [IsAuthenticated]
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
