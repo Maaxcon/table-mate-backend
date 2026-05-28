@@ -42,7 +42,7 @@ class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantS
 
 
 class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
-    settings = PublicRestaurantSettingsSerializer(read_only=True)
+    settings = PublicRestaurantSettingsSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = Restaurant
