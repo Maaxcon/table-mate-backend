@@ -139,16 +139,29 @@ class MenuItemViewSet(
 
         item = self.get_object()
         with transaction.atomic():
-            like, created = MenuItemLike.objects.get_or_create(
-                menu_item=item,
-                guest_token=guest_token,
-                defaults={"restaurant": item.restaurant},
-            )
-            if not created:
-                like.delete()
-            is_liked = created
+            # Lock the MenuItem row to serialize concurrent toggles for the same item.
+            # Without this, two simultaneous requests can both find no like, both INSERT,
+            # causing IntegrityError → get_or_create retry finds the row → deletes it,
+            # leaving the item unliked even though both requests intended to like it.
+            locked_item = MenuItem.objects.select_for_update().get(pk=item.pk)
 
-        likes_count = MenuItemLike.objects.filter(menu_item=item).count()
+            existing = MenuItemLike.objects.filter(
+                menu_item=locked_item,
+                guest_token=guest_token,
+            ).first()
+
+            if existing:
+                existing.delete()
+                is_liked = False
+            else:
+                MenuItemLike.objects.create(
+                    menu_item=locked_item,
+                    guest_token=guest_token,
+                    restaurant=locked_item.restaurant,
+                )
+                is_liked = True
+
+            likes_count = MenuItemLike.objects.filter(menu_item=locked_item).count()
         response_serializer = ToggleMenuItemLikeResponseSerializer(
             data={
                 "public_id": item.public_id,
