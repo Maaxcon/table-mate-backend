@@ -10,7 +10,6 @@ from rest_framework.response import Response
 
 from apps.authentication.permissions import IsNonKitchen, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
-from common.permissions import HasAnyRole
 
 from .models import Reservation
 from .permissions import CanManageReservations
@@ -33,7 +32,7 @@ class ReservationViewSet(
 
     def get_permissions(self) -> Sequence[BasePermission]:
         if self.action in ("create", "my"):
-            return [HasAnyRole.with_roles("customer")]
+            return [CanManageReservations()]
         if self.action in ("update", "partial_update"):
             return [CanManageReservations()]
         if self.action in ("list", "retrieve"):
