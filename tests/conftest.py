@@ -70,7 +70,6 @@ class RestaurantSettingsFactory(DjangoModelFactory[RestaurantSettings]):
         "sat": {"open": "10:00", "close": "23:00"},
         "sun": {"open": "10:00", "close": "21:00"},
     }
-    rating = Decimal("4.80")
     eta_min_minutes = 20
     eta_max_minutes = 30
     price_band = 2

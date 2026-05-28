@@ -53,7 +53,9 @@ class RestaurantSettings(BaseModel):
     rating = models.DecimalField(
         max_digits=3,
         decimal_places=2,
-        default=4.8,
+        null=True,
+        blank=True,
+        default=None,
         validators=[MinValueValidator(0), MaxValueValidator(5)],
     )
     eta_min_minutes = models.PositiveSmallIntegerField(default=20)

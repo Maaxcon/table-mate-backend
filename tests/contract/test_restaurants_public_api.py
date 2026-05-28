@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -16,6 +17,9 @@ class TestPublicRestaurantRetrieve:
         restaurant: Restaurant,
         restaurant_settings: RestaurantSettings,
     ) -> None:
+        restaurant_settings.rating = Decimal("4.80")
+        restaurant_settings.save()
+
         url = reverse("restaurant-public-detail", kwargs={"public_id": str(restaurant.public_id)})
         response: Any = api_client.get(url)
 
@@ -30,6 +34,18 @@ class TestPublicRestaurantRetrieve:
         assert data["settings"]["eta_max_minutes"] == 30
         assert data["settings"]["price_band"] == 2
         assert "working_hours" in data["settings"]
+
+    def test_rating_is_null_for_new_restaurant(
+        self,
+        api_client: Client,
+        restaurant: Restaurant,
+        restaurant_settings: RestaurantSettings,
+    ) -> None:
+        url = reverse("restaurant-public-detail", kwargs={"public_id": str(restaurant.public_id)})
+        response: Any = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["settings"]["rating"] is None
 
     def test_returns_settings_null_when_no_settings_row(
         self,
