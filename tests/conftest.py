@@ -21,9 +21,9 @@ from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.restaurants.models import Restaurant, Table, TableStatus
 
 if TYPE_CHECKING:
-    from django.contrib.auth.models import AbstractUser
+    from apps.authentication.models import User as _User
 
-    User = AbstractUser
+    User = _User
 else:
     from django.contrib.auth import get_user_model
 
