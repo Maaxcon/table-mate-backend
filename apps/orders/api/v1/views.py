@@ -27,12 +27,13 @@ class CartSessionViewSet(
     serializer_class = CartSessionSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
     queryset = CartSession.objects.all()
+    lookup_url_kwarg = "pk"  # type: ignore[misc]
 
     def safely_get_queryset(self, qs: QuerySet[CartSession]) -> QuerySet[CartSession]:
         user = cast(User, self.request.user)
         return qs.filter(participants=user)
 
-    def create(self, request: Request, *args: object) -> Response:
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -92,7 +93,7 @@ class CartSessionItemViewSet(
         )
         return session
 
-    def create(self, request: Request, *args: object) -> Response:
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -110,7 +111,7 @@ class CartSessionItemViewSet(
         result = CartItemSerializer(item, context=self.get_serializer_context())
         return Response(result.data, status=status.HTTP_201_CREATED)
 
-    def destroy(self, request: Request, *args: object) -> Response:
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         session = self._get_session()
 
         user = cast(User, request.user)
