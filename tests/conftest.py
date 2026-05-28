@@ -97,10 +97,13 @@ class AuthContext(NamedTuple):
 
 @pytest.fixture
 def api(user_factory: Callable[..., Any]) -> Callable[..., AuthContext]:
-    def _api(role: str = RoleCode.CUSTOMER, **kwargs: Any) -> AuthContext:
+    def _api(role: str = RoleCode.CUSTOMER, restaurant_id: int | None = None, **kwargs: Any) -> AuthContext:
         user = user_factory(role=role, **kwargs)
         client = APIClient()
-        client.force_authenticate(user=user)
+        if restaurant_id is not None:
+            client.force_authenticate(user=user, token={"restaurant_id": str(restaurant_id)})  # type: ignore[arg-type]
+        else:
+            client.force_authenticate(user=user)
 
         return AuthContext(client=client, user=user)
 

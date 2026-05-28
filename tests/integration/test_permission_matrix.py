@@ -46,8 +46,10 @@ ROLES = [RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER]
 @pytest.mark.django_db
 @pytest.mark.parametrize("role", ROLES)
 @pytest.mark.parametrize("url_name", ENDPOINTS)
-def test_protected_endpoint_role_enforcement(url_name: str, role: str, api: Callable[..., Any]) -> None:
-    ctx = api(role=role)
+def test_protected_endpoint_role_enforcement(
+    url_name: str, role: str, api: Callable[..., Any], restaurant: Any
+) -> None:
+    ctx = api(role=role, restaurant_id=restaurant.id)
     response = ctx.client.get(reverse(url_name))
     if role in ROLE_ALLOW_MATRIX[url_name]:
         assert response.status_code == status.HTTP_200_OK, f"{role} should be allowed on {url_name}"
