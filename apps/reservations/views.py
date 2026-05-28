@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from typing import cast
 
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -9,7 +8,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.authentication.permissions import IsFloorOrCustomer
+from apps.authentication.permissions import IsFloorOrCustomer, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.permissions import HasAnyRole
 
@@ -39,7 +38,7 @@ class ReservationViewSet(
             return [CanManageReservations()]
         if self.action in ("list", "retrieve"):
             return [IsFloorOrCustomer()]
-        return cast("list[BasePermission]", super().get_permissions())
+        return [IsAuthenticated(), IsStaff()]
 
     def create(self, request: Request, *args: object) -> Response:
         serializer = self.get_serializer(data=request.data)
