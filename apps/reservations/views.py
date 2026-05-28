@@ -1,3 +1,6 @@
+from collections.abc import Sequence
+from typing import cast
+
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -22,20 +25,21 @@ class ReservationViewSet(
     RestaurantScopedViewSetMixin[Reservation],
     viewsets.ModelViewSet[Reservation],
 ):
+    permission_classes = [IsAuthenticated]
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
     filterset_fields = ["customer", "table", "status"]
     ordering_fields = ["created_at", "updated_at", "start_at", "end_at", "guest_count"]
 
-    def get_permissions(self) -> list[BasePermission]:
+    def get_permissions(self) -> Sequence[BasePermission]:
         if self.action in ("create", "my"):
-            return [IsAuthenticated(), HasAnyRole.with_roles("customer")]
+            return [HasAnyRole.with_roles("customer")]
         if self.action in ("update", "partial_update"):
             return [CanManageReservations()]
         if self.action in ("list", "retrieve"):
-            return [IsAuthenticated(), IsFloorOrCustomer()]
-        return [IsAuthenticated()]
+            return [IsFloorOrCustomer()]
+        return cast("list[BasePermission]", super().get_permissions())
 
     def create(self, request: Request, *args: object) -> Response:
         serializer = self.get_serializer(data=request.data)
