@@ -118,7 +118,6 @@ class MenuItemViewSet(
             return self.get_paginated_response(self.get_serializer(page, many=True).data)
         return Response(self.get_serializer(items, many=True).data)
 
-    @action(detail=True, methods=["post"], url_path="toggle-like")
     @extend_schema(
         summary="Toggle like on a menu item for an anonymous client token",
         request=ToggleMenuItemLikeRequestSerializer,
@@ -132,6 +131,7 @@ class MenuItemViewSet(
             ),
         ],
     )
+    @action(detail=True, methods=["post"], url_path="toggle-like")
     def toggle_like(self, request: Request, *args: object, **kwargs: object) -> Response:
         serializer = ToggleMenuItemLikeRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

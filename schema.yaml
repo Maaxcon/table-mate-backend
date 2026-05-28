@@ -485,6 +485,7 @@ paths:
   /api/menu/items/{public_id}/toggle-like/:
     post:
       operationId: menu_items_toggle_like_create
+      summary: Toggle like on a menu item for an anonymous client token
       parameters:
       - in: path
         name: public_id
@@ -492,19 +493,26 @@ paths:
           type: string
           pattern: ^[0-9a-fA-F-]{36}$
         required: true
+      - in: query
+        name: restaurant
+        schema:
+          type: string
+          format: uuid
+        description: Restaurant public UUID
+        required: true
       tags:
       - Menu
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MenuItem'
+              $ref: '#/components/schemas/ToggleMenuItemLikeRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/MenuItem'
+              $ref: '#/components/schemas/ToggleMenuItemLikeRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/MenuItem'
+              $ref: '#/components/schemas/ToggleMenuItemLikeRequest'
         required: true
       security:
       - jwtAuth: []
@@ -515,7 +523,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MenuItem'
+                $ref: '#/components/schemas/ToggleMenuItemLikeResponse'
           description: ''
   /api/menu/items/search/:
     get:
@@ -2801,6 +2809,29 @@ components:
         * `active` - Active
         * `completed` - Completed
         * `bumped` - Bumped
+    ToggleMenuItemLikeRequest:
+      type: object
+      properties:
+        guest_token:
+          type: string
+          maxLength: 64
+      required:
+      - guest_token
+    ToggleMenuItemLikeResponse:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+        is_liked:
+          type: boolean
+        likes_count:
+          type: integer
+          minimum: 0
+      required:
+      - is_liked
+      - likes_count
+      - public_id
     TokenRefresh:
       type: object
       properties:
