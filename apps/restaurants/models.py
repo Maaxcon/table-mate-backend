@@ -7,6 +7,15 @@ from common.models import BaseModel, RestaurantScopedModel
 _WEEKDAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
 
+def _parse_hhmm(v: object, label: str) -> tuple[int, int]:
+    if not isinstance(v, str) or len(v) != 5 or v[2] != ":" or not v[:2].isdigit() or not v[3:].isdigit():
+        raise ValidationError(f"'{label}' must be HH:MM format, got {v!r}.")
+    hh, mm = int(v[:2]), int(v[3:])
+    if not (0 <= hh <= 23 and 0 <= mm <= 59):
+        raise ValidationError(f"'{label}' time out of range: {v!r}.")
+    return hh, mm
+
+
 def validate_working_hours(value: object) -> None:
     if not isinstance(value, dict):
         raise ValidationError("Must be an object.")
@@ -15,10 +24,10 @@ def validate_working_hours(value: object) -> None:
             raise ValidationError(f"Unknown day key: '{day}'. Use mon/tue/wed/thu/fri/sat/sun.")
         if not isinstance(hours, dict) or set(hours) != {"open", "close"}:
             raise ValidationError(f"'{day}' must have exactly 'open' and 'close' keys.")
-        for field in ("open", "close"):
-            v = hours[field]
-            if not isinstance(v, str) or len(v) != 5 or v[2] != ":" or not v[:2].isdigit() or not v[3:].isdigit():
-                raise ValidationError(f"'{day}.{field}' must be HH:MM format, got {v!r}.")
+        open_hhmm = _parse_hhmm(hours["open"], f"{day}.open")
+        close_hhmm = _parse_hhmm(hours["close"], f"{day}.close")
+        if open_hhmm >= close_hhmm:
+            raise ValidationError(f"'{day}.open' must be earlier than '{day}.close'.")
 
 
 class TableStatus(models.TextChoices):
