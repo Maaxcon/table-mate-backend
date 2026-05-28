@@ -55,8 +55,10 @@ def test_protected_endpoint_role_enforcement(
         assert response.status_code == status.HTTP_200_OK, f"{role} should be allowed on {url_name}"
     else:
         assert response.status_code == status.HTTP_403_FORBIDDEN, f"{role} should be denied on {url_name}"
-        assert "detail" in response.data
-        assert isinstance(response.data["detail"], str)
+        assert response.data == {
+            "detail": "You do not have permission to perform this action.",
+            "code": "permission_denied",
+        }
 
 
 @pytest.mark.django_db
