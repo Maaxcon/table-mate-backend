@@ -26,7 +26,7 @@ class CartSessionViewSet(
 ):
     permission_classes = [IsAuthenticated]
     serializer_class = CartSessionSerializer
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
     queryset = CartSession.objects.all()
 
     def safely_get_queryset(self, qs: QuerySet[CartSession]) -> QuerySet[CartSession]:

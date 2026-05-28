@@ -15,7 +15,11 @@ class CartSessionSerializer(serializers.ModelSerializer[CartSession]):
         required=True,
     )
     created_by = PublicIdRelatedField[User](read_only=True)
-    participants = PublicIdRelatedField[User](many=True, read_only=True)
+    participants = PublicIdRelatedField[User](
+        many=True,
+        queryset=User.objects.all(),
+        required=False,
+    )
 
     class Meta:
         model = CartSession
@@ -34,7 +38,6 @@ class CartSessionSerializer(serializers.ModelSerializer[CartSession]):
             "restaurant",
             "status",
             "created_by",
-            "participants",
             "created_at",
             "updated_at",
         ]
