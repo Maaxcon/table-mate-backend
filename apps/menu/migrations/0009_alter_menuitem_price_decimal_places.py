@@ -22,9 +22,4 @@ class Migration(migrations.Migration):
             name='ingredients',
             field=models.JSONField(blank=True, default=list, validators=[apps.menu.models.validate_str_list]),
         ),
-        migrations.AlterField(
-            model_name='menuitem',
-            name='price',
-            field=models.DecimalField(decimal_places=2, max_digits=10),
-        ),
     ]
