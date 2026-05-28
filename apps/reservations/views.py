@@ -30,9 +30,7 @@ class ReservationViewSet(
     ordering_fields = ["created_at", "updated_at", "start_at", "end_at", "guest_count"]
 
     def get_permissions(self) -> Sequence[BasePermission]:
-        if self.action in ("create", "my"):
-            return [CanManageReservations()]
-        if self.action in ("update", "partial_update"):
+        if self.action in ("create", "my", "update", "partial_update"):
             return [CanManageReservations()]
         if self.action in ("list", "retrieve"):
             return [IsNonKitchen()]
