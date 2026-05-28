@@ -20,3 +20,9 @@ class IsFloor(HasAnyRole):
 
 class IsCustomer(HasAnyRole):
     roles = frozenset({RoleCode.CUSTOMER})
+
+
+class IsNonKitchen(HasAnyRole):
+    """Everyone except kitchen staff — admin, waiter, and customer."""
+
+    roles = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.CUSTOMER})
