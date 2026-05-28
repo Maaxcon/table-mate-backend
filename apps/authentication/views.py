@@ -143,7 +143,7 @@ class LogoutView(APIView):
         raw_refresh = request.COOKIES.get("refresh_token")
         if raw_refresh:
             try:
-                RefreshToken(raw_refresh).blacklist()
+                RefreshToken(raw_refresh).blacklist()  # type: ignore[arg-type]
             except TokenError:
                 pass  # already expired or invalid — still clear the cookie
         response = Response(status=status.HTTP_200_OK)

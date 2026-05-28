@@ -1,3 +1,5 @@
+from typing import Any
+
 from rest_framework import serializers
 
 from apps.restaurants.models import Restaurant
@@ -87,11 +89,11 @@ class MenuSerializer(serializers.ModelSerializer[Menu]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
-class ToggleMenuItemLikeRequestSerializer(serializers.Serializer):
+class ToggleMenuItemLikeRequestSerializer(serializers.Serializer[Any]):
     guest_token = serializers.CharField(max_length=64)
 
 
-class ToggleMenuItemLikeResponseSerializer(serializers.Serializer):
+class ToggleMenuItemLikeResponseSerializer(serializers.Serializer[Any]):
     public_id = serializers.UUIDField()
     is_liked = serializers.BooleanField()
     likes_count = serializers.IntegerField(min_value=0)

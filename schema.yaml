@@ -482,6 +482,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/MenuItem'
           description: ''
+  /api/menu/items/{public_id}/toggle-like/:
+    post:
+      operationId: menu_items_toggle_like_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MenuItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MenuItem'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItem'
+          description: ''
   /api/menu/items/search/:
     get:
       operationId: menu_items_search_retrieve
@@ -1191,6 +1226,10 @@ paths:
         schema:
           type: integer
       - in: query
+        name: price_band
+        schema:
+          type: integer
+      - in: query
         name: restaurant
         schema:
           type: integer
@@ -1629,6 +1668,23 @@ components:
         description:
           type: string
           nullable: true
+        ingredients: {}
+        allergens: {}
+        weight_grams:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        image:
+          type: string
+          format: uri
+          nullable: true
+        likes_count:
+          type: integer
+          readOnly: true
+        is_liked:
+          type: boolean
+          readOnly: true
         price:
           type: string
           format: decimal
@@ -1650,6 +1706,8 @@ components:
       required:
       - category
       - created_at
+      - is_liked
+      - likes_count
       - menu
       - name
       - price
@@ -2345,8 +2403,26 @@ components:
           readOnly: true
         working_hours:
           readOnly: true
+        rating:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+          readOnly: true
+        eta_min_minutes:
+          type: integer
+          readOnly: true
+        eta_max_minutes:
+          type: integer
+          readOnly: true
+        price_band:
+          type: integer
+          readOnly: true
       required:
       - currency
+      - eta_max_minutes
+      - eta_min_minutes
+      - price_band
+      - rating
       - timezone
       - working_hours
     Reservation:
@@ -2470,6 +2546,22 @@ components:
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
         working_hours: {}
+        rating:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+        eta_min_minutes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        eta_max_minutes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        price_band:
+          type: integer
+          maximum: 4
+          minimum: 1
         created_at:
           type: string
           format: date-time
@@ -2744,6 +2836,10 @@ components:
           maxLength: 32
         role:
           $ref: '#/components/schemas/RoleEnum'
+        restaurant_public_id:
+          type: string
+          nullable: true
+          readOnly: true
         is_active:
           type: boolean
         created_at:
@@ -2758,6 +2854,7 @@ components:
       - created_at
       - email
       - public_id
+      - restaurant_public_id
       - updated_at
   securitySchemes:
     cookieAuth:

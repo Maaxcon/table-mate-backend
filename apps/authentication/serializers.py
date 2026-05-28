@@ -32,7 +32,7 @@ class UserSerializer(serializers.ModelSerializer[User]):
     restaurant_public_id = serializers.SerializerMethodField()
 
     def get_restaurant_public_id(self, obj: User) -> str | None:
-        if obj.restaurant_id is not None:
+        if obj.restaurant is not None:
             return str(obj.restaurant.public_id)
         return None
 
