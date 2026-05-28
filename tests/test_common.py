@@ -59,7 +59,7 @@ class TestExceptionHandlerEndToEnd:
         request = APIRequestFactory().get("/")
         response = view(request)
         assert response.status_code == 403
-        assert response.data == {"detail": "not allowed"}
+        assert response.data == {"detail": "not allowed", "code": "permission_denied"}
 
     def test_handler_returns_none_for_unhandled_non_drf_error(self) -> None:
         context: dict[str, object] = {"view": None, "args": (), "kwargs": {}, "request": HttpRequest()}
