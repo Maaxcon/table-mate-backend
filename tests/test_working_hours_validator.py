@@ -43,11 +43,10 @@ def test_rejects_minutes_out_of_range() -> None:
         validate_working_hours({"mon": {"open": "09:60", "close": "22:00"}})
 
 
-def test_rejects_inverted_range() -> None:
-    with pytest.raises(ValidationError, match="earlier than"):
-        validate_working_hours({"mon": {"open": "22:00", "close": "09:00"}})
+def test_allows_overnight_hours() -> None:
+    validate_working_hours({"mon": {"open": "22:00", "close": "02:00"}})
 
 
 def test_rejects_equal_open_close() -> None:
-    with pytest.raises(ValidationError, match="earlier than"):
+    with pytest.raises(ValidationError, match="cannot be equal"):
         validate_working_hours({"mon": {"open": "09:00", "close": "09:00"}})

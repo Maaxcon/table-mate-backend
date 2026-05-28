@@ -26,8 +26,8 @@ def validate_working_hours(value: object) -> None:
             raise ValidationError(f"'{day}' must have exactly 'open' and 'close' keys.")
         open_hhmm = _parse_hhmm(hours["open"], f"{day}.open")
         close_hhmm = _parse_hhmm(hours["close"], f"{day}.close")
-        if open_hhmm >= close_hhmm:
-            raise ValidationError(f"'{day}.open' must be earlier than '{day}.close'.")
+        if open_hhmm == close_hhmm:
+            raise ValidationError(f"'{day}.open' and '{day}.close' cannot be equal.")
 
 
 class TableStatus(models.TextChoices):
