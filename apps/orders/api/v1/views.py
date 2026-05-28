@@ -11,7 +11,6 @@ from rest_framework.serializers import Serializer
 
 from apps.authentication.models import User
 from apps.orders.models import CartItem, CartSession
-from apps.orders.selectors import is_cart_participant
 from apps.orders.services import add_item_to_cart, create_cart_session, remove_item_from_cart
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.exceptions import DomainError
@@ -100,12 +99,6 @@ class CartSessionItemViewSet(
         session = self._get_session()
 
         user = cast(User, request.user)
-        if not is_cart_participant(user, session):
-            return Response(
-                {"detail": "Only cart participants may add items."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         item = add_item_to_cart(
             session=session,
             menu_item_id=str(serializer.validated_data["menu_item"].public_id),
@@ -121,12 +114,6 @@ class CartSessionItemViewSet(
         session = self._get_session()
 
         user = cast(User, request.user)
-        if not is_cart_participant(user, session):
-            return Response(
-                {"detail": "Only cart participants may remove items."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         remove_item_from_cart(
             session=session,
             item_id=self.kwargs["pk"],
