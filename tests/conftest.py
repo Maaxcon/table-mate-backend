@@ -100,7 +100,7 @@ class AuthContext(NamedTuple):
 def api(user_factory: Callable[..., Any]) -> Callable[..., AuthContext]:
     def _api(role: str = RoleCode.CUSTOMER, restaurant_id: int | None = None, **kwargs: Any) -> AuthContext:
         user = user_factory(role=role, **kwargs)
-        user.save()
+        user.save()  # user_factory uses build() — persist before issuing JWT
         client = APIClient()
         if restaurant_id is not None:
             access, _ = issue_tokens_with_restaurant(user, restaurant_id)
