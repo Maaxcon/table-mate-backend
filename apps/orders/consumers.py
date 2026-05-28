@@ -9,7 +9,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 
 from common.channels import authenticate_websocket, cart_group_name
 
-from .models import Session
+from .models import CartSession
 
 
 def _make_cart_event(event_name: str, payload: dict) -> dict:  # type: ignore[type-arg]
@@ -84,8 +84,8 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
 
 @database_sync_to_async  # type: ignore[untyped-decorator]
-def _fetch_session(session_id: uuid.UUID, restaurant_id: int) -> Session | None:
+def _fetch_session(session_id: uuid.UUID, restaurant_id: int) -> CartSession | None:
     try:
-        return Session.objects.get(public_id=session_id, restaurant_id=restaurant_id)
-    except Session.DoesNotExist:
+        return CartSession.objects.get(public_id=session_id, restaurant_id=restaurant_id)
+    except CartSession.DoesNotExist:
         return None
