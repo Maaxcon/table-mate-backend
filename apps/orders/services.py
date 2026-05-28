@@ -47,7 +47,7 @@ def add_item_to_cart(
         menu_item=menu_item,
         quantity=quantity,
         added_by=user,
-        comment=comment or "",
+        comment=comment,
         restaurant_id=session.restaurant_id,
     )
     return item
