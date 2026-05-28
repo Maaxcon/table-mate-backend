@@ -1676,8 +1676,16 @@ components:
         description:
           type: string
           nullable: true
-        ingredients: {}
-        allergens: {}
+        ingredients:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        allergens:
+          type: array
+          items:
+            type: string
+          readOnly: true
         weight_grams:
           type: integer
           maximum: 2147483647
@@ -1712,8 +1720,10 @@ components:
           format: date-time
           readOnly: true
       required:
+      - allergens
       - category
       - created_at
+      - ingredients
       - is_liked
       - likes_count
       - menu
@@ -2394,6 +2404,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/PublicRestaurantSettings'
           readOnly: true
+          nullable: true
       required:
       - address
       - name
@@ -2416,6 +2427,7 @@ components:
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
           readOnly: true
+          nullable: true
         eta_min_minutes:
           type: integer
           readOnly: true
@@ -2558,6 +2570,7 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+          nullable: true
         eta_min_minutes:
           type: integer
           maximum: 32767

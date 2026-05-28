@@ -28,6 +28,8 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     menu: PublicIdRelatedField[Menu] = PublicIdRelatedField(read_only=True)
     category: PublicIdRelatedField[MenuCategory] = PublicIdRelatedField(read_only=True)
+    ingredients = serializers.ListField(child=serializers.CharField(), read_only=True)
+    allergens = serializers.ListField(child=serializers.CharField(), read_only=True)
     likes_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
 
