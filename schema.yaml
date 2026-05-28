@@ -550,6 +550,205 @@ paths:
               schema:
                 $ref: '#/components/schemas/Menu'
           description: ''
+  /api/orders/cart/sessions/:
+    get:
+      operationId: orders_cart_sessions_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCartSessionList'
+          description: ''
+    post:
+      operationId: orders_cart_sessions_create
+      tags:
+      - Cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartSession'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CartSession'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CartSession'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartSession'
+          description: ''
+  /api/orders/cart/sessions/{id}/:
+    get:
+      operationId: orders_cart_sessions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartSession'
+          description: ''
+    patch:
+      operationId: orders_cart_sessions_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCartSession'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCartSession'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCartSession'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartSession'
+          description: ''
+  /api/orders/cart/sessions/{session_pk}/items/:
+    get:
+      operationId: orders_cart_sessions_items_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCartItemList'
+          description: ''
+    post:
+      operationId: orders_cart_sessions_items_create
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCartItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AddCartItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AddCartItem'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddCartItem'
+          description: ''
+  /api/orders/cart/sessions/{session_pk}/items/{id}/:
+    delete:
+      operationId: orders_cart_sessions_items_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/orders/order-items/:
     get:
       operationId: orders_order_items_list
@@ -1348,6 +1547,119 @@ paths:
           description: ''
 components:
   schemas:
+    AddCartItem:
+      type: object
+      properties:
+        menu_item:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        comment:
+          type: string
+          default: ''
+      required:
+      - menu_item
+      - quantity
+    CartItem:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        cart_session:
+          type: string
+          format: uuid
+          readOnly: true
+        menu_item:
+          type: string
+          format: uuid
+          readOnly: true
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        added_by:
+          type: string
+          format: uuid
+          readOnly: true
+        comment:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - added_by
+      - cart_session
+      - created_at
+      - menu_item
+      - public_id
+      - quantity
+      - restaurant
+      - updated_at
+    CartSession:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        reservation:
+          type: string
+          format: uuid
+        status:
+          allOf:
+          - $ref: '#/components/schemas/CartSessionStatusEnum'
+          readOnly: true
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+        participants:
+          type: array
+          items:
+            type: string
+            format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - created_by
+      - public_id
+      - reservation
+      - restaurant
+      - status
+      - updated_at
+    CartSessionStatusEnum:
+      enum:
+      - active
+      - closed
+      type: string
+      description: |-
+        * `active` - Active
+        * `closed` - Closed
     CreatedBySourceEnum:
       enum:
       - staff
@@ -1815,6 +2127,52 @@ components:
         * `submitted` - Submitted
         * `completed` - Completed
         * `cancelled` - Cancelled
+    PaginatedCartItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+    PaginatedCartSessionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartSession'
     PaginatedEditorTableList:
       type: object
       required:
@@ -2137,6 +2495,41 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ticket'
+    PatchedCartSession:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        reservation:
+          type: string
+          format: uuid
+        status:
+          allOf:
+          - $ref: '#/components/schemas/CartSessionStatusEnum'
+          readOnly: true
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+        participants:
+          type: array
+          items:
+            type: string
+            format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     PatchedEditorTable:
       type: object
       properties:
