@@ -8,6 +8,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from apps.authentication.models import RoleCode
 from apps.authentication.permissions import IsFloor
 from apps.restaurants.models import Table
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
@@ -50,7 +51,7 @@ class EditorTableViewSet(
     def get_permissions(self) -> list[BasePermission]:
         if self.action == "available":
             return [IsAuthenticated()]
-        return [IsAuthenticated(), HasAnyRole.with_roles("admin", "waiter")]
+        return [IsAuthenticated(), HasAnyRole.with_roles(RoleCode.ADMIN, RoleCode.WAITER)]
 
     @extend_schema(
         responses=EditorTableSerializer(many=True),
