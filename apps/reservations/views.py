@@ -8,7 +8,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.authentication.permissions import IsFloorOrCustomer, IsStaff
+from apps.authentication.permissions import IsNonKitchen, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.permissions import HasAnyRole
 
@@ -37,7 +37,7 @@ class ReservationViewSet(
         if self.action in ("update", "partial_update"):
             return [CanManageReservations()]
         if self.action in ("list", "retrieve"):
-            return [IsFloorOrCustomer()]
+            return [IsNonKitchen()]
         return [IsAuthenticated(), IsStaff()]
 
     def create(self, request: Request, *args: object) -> Response:

@@ -22,7 +22,7 @@ class IsCustomer(HasAnyRole):
     roles = frozenset({RoleCode.CUSTOMER})
 
 
-class IsFloorOrCustomer(HasAnyRole):
-    """Floor staff and customers; admin is always included."""
+class IsNonKitchen(HasAnyRole):
+    """Everyone except kitchen staff — admin, waiter, and customer."""
 
     roles = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.CUSTOMER})

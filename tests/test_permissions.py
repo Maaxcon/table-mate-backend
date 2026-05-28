@@ -9,8 +9,8 @@ from apps.authentication.permissions import (
     IsAdmin,
     IsCustomer,
     IsFloor,
-    IsFloorOrCustomer,
     IsKitchen,
+    IsNonKitchen,
     IsStaff,
 )
 
@@ -20,7 +20,7 @@ PERM_CLASSES: dict[type[Any], frozenset[str]] = {
     IsFloor: frozenset({RoleCode.ADMIN, RoleCode.WAITER}),
     IsKitchen: frozenset({RoleCode.ADMIN, RoleCode.COOK}),
     IsCustomer: frozenset({RoleCode.CUSTOMER}),
-    IsFloorOrCustomer: frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.CUSTOMER}),
+    IsNonKitchen: frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.CUSTOMER}),
 }
 
 ROLES: list[str] = [RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER]
