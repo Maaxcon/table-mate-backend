@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
@@ -14,7 +15,8 @@ def create_cart_session(
     reservation_id: str,
     user: User,
 ) -> CartSession:
-    reservation = Reservation.objects.get(
+    reservation = get_object_or_404(
+        Reservation,
         public_id=reservation_id,
         restaurant_id=restaurant_id,
     )
@@ -38,7 +40,8 @@ def add_item_to_cart(
     if not is_cart_participant(user, session):
         raise PermissionDenied("Only cart participants may add items.")
 
-    menu_item = MenuItem.objects.get(
+    menu_item = get_object_or_404(
+        MenuItem,
         public_id=menu_item_id,
         restaurant_id=session.restaurant_id,
     )
@@ -62,7 +65,8 @@ def remove_item_from_cart(
     if not is_cart_participant(user, session):
         raise PermissionDenied("Only cart participants may remove items.")
 
-    item = CartItem.objects.get(
+    item = get_object_or_404(
+        CartItem,
         public_id=item_id,
         cart_session=session,
         restaurant_id=session.restaurant_id,
