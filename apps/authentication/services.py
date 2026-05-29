@@ -90,6 +90,8 @@ def issue_tokens(user: User) -> tuple[str, str]:
     refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role
     refresh["token_version"] = user.token_version
+    if user.restaurant_id is not None:
+        refresh["restaurant_id"] = user.restaurant_id
     return str(refresh.access_token), str(refresh)
 
 
