@@ -74,8 +74,8 @@ class CartSessionItemViewSet(
         qs = qs.filter(cart_session__participants=user)
         session_pk = self.kwargs.get("session_pk")
         if session_pk:
-            return qs.filter(cart_session__public_id=session_pk)
-        return qs
+            qs = qs.filter(cart_session__public_id=session_pk)
+        return qs.select_related("menu_item", "cart_session")
 
     def _get_restaurant_id(self) -> int:
         rid = get_restaurant_id_from_auth(self.request)
