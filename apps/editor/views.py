@@ -8,6 +8,8 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from apps.authentication.models import RoleCode
+from apps.authentication.permissions import IsFloor
 from apps.restaurants.models import Table
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.permissions import HasAnyRole
@@ -19,6 +21,7 @@ from .serializers import EditorTableSerializer, LayoutSerializer
 
 @extend_schema(tags=["Editor"])
 class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModelViewSet[Layout]):
+    permission_classes = [IsFloor]
     queryset = Layout.objects.all()
     serializer_class = LayoutSerializer
     filterset_fields = ["version", "published_at", "published_by"]
@@ -48,7 +51,7 @@ class EditorTableViewSet(
     def get_permissions(self) -> list[BasePermission]:
         if self.action == "available":
             return [IsAuthenticated()]
-        return [IsAuthenticated(), HasAnyRole.with_roles("admin", "waiter")]
+        return [IsAuthenticated(), HasAnyRole.with_roles(RoleCode.ADMIN, RoleCode.WAITER)]
 
     @extend_schema(
         responses=EditorTableSerializer(many=True),

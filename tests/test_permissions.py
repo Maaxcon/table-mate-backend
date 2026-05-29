@@ -5,13 +5,22 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework.test import APIRequestFactory
 
 from apps.authentication.models import RoleCode
-from apps.authentication.permissions import IsAdmin, IsCustomer, IsFloor, IsKitchen
+from apps.authentication.permissions import (
+    IsAdmin,
+    IsCustomer,
+    IsFloor,
+    IsKitchen,
+    IsNonKitchen,
+    IsStaff,
+)
 
 PERM_CLASSES: dict[type[Any], frozenset[str]] = {
     IsAdmin: frozenset({RoleCode.ADMIN}),
+    IsStaff: frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK}),
     IsFloor: frozenset({RoleCode.ADMIN, RoleCode.WAITER}),
     IsKitchen: frozenset({RoleCode.ADMIN, RoleCode.COOK}),
     IsCustomer: frozenset({RoleCode.CUSTOMER}),
+    IsNonKitchen: frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.CUSTOMER}),
 }
 
 ROLES: list[str] = [RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER]

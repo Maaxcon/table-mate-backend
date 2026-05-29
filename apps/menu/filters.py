@@ -24,7 +24,7 @@ class MenuItemFilter(django_filters.FilterSet):  # type: ignore[misc]
         menu_uuid = self.form.cleaned_data.get("menu")
         if menu_uuid is not None:
             queryset = (
-                MenuItem.objects.filter(menu__public_id=menu_uuid)
+                queryset.filter(menu__public_id=menu_uuid)
                 .select_related("category")
                 .order_by("category__sort_order", "sort_order")
             )

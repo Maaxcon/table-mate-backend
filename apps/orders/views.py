@@ -1,6 +1,7 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 
+from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin
 
 from .models import Order, OrderItem, Session, Ticket
@@ -17,6 +18,7 @@ class SessionViewSet(
     RestaurantScopedViewSetMixin[Session],
     viewsets.ReadOnlyModelViewSet[Session],
 ):
+    permission_classes = [IsFloor]
     queryset = Session.objects.all()
     serializer_class = SessionSerializer
     filterset_fields = ["table", "reservation", "opened_by", "status", "currency"]
@@ -28,6 +30,7 @@ class OrderViewSet(
     RestaurantScopedViewSetMixin[Order],
     viewsets.ReadOnlyModelViewSet[Order],
 ):
+    permission_classes = [IsStaff]
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
     filterset_fields = [
@@ -47,6 +50,7 @@ class TicketViewSet(
     RestaurantScopedViewSetMixin[Ticket],
     viewsets.ReadOnlyModelViewSet[Ticket],
 ):
+    permission_classes = [IsStaff]
     queryset = Ticket.objects.all()
     serializer_class = TicketSerializer
     filterset_fields = ["session", "order", "status"]
@@ -64,6 +68,7 @@ class OrderItemViewSet(
     RestaurantScopedViewSetMixin[OrderItem],
     viewsets.ReadOnlyModelViewSet[OrderItem],
 ):
+    permission_classes = [IsStaff]
     queryset = OrderItem.objects.all()
     serializer_class = OrderItemSerializer
     filterset_fields = [

@@ -16,13 +16,14 @@ from factory.faker import Faker
 from rest_framework.test import APIClient
 
 from apps.authentication.models import RoleCode
+from apps.authentication.services import issue_tokens_with_restaurant
 from apps.menu.models import Menu, MenuCategory, MenuItem
-from apps.restaurants.models import Restaurant, Table, TableStatus
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table, TableStatus
 
 if TYPE_CHECKING:
-    from django.contrib.auth.models import AbstractUser
+    from apps.authentication.models import User as _User
 
-    User = AbstractUser
+    User = _User
 else:
     from django.contrib.auth import get_user_model
 
@@ -48,6 +49,30 @@ class RestaurantFactory(DjangoModelFactory[Restaurant]):
 
     name = Sequence(lambda n: f"Restaurant {n}")
     address = "123 Main St"
+
+
+class RestaurantSettingsFactory(DjangoModelFactory[RestaurantSettings]):
+    class Meta:
+        model = RestaurantSettings
+
+    restaurant = SubFactory(RestaurantFactory)
+    timezone = "Europe/Kyiv"
+    currency = "UAH"
+    locale = "uk"
+    default_tax_rate = Decimal("0.1000")
+    default_service_charge = Decimal("0.0500")
+    working_hours = {
+        "mon": {"open": "09:00", "close": "22:00"},
+        "tue": {"open": "09:00", "close": "22:00"},
+        "wed": {"open": "09:00", "close": "22:00"},
+        "thu": {"open": "09:00", "close": "22:00"},
+        "fri": {"open": "09:00", "close": "23:00"},
+        "sat": {"open": "10:00", "close": "23:00"},
+        "sun": {"open": "10:00", "close": "21:00"},
+    }
+    eta_min_minutes = 20
+    eta_max_minutes = 30
+    price_band = 2
 
 
 class MenuFactory(DjangoModelFactory[Menu]):
@@ -97,10 +122,15 @@ class AuthContext(NamedTuple):
 
 @pytest.fixture
 def api(user_factory: Callable[..., Any]) -> Callable[..., AuthContext]:
-    def _api(role: str = RoleCode.CUSTOMER, **kwargs: Any) -> AuthContext:
+    def _api(role: str = RoleCode.CUSTOMER, restaurant_id: int | None = None, **kwargs: Any) -> AuthContext:
         user = user_factory(role=role, **kwargs)
+        user.save()  # user_factory uses build() — persist before issuing JWT
         client = APIClient()
-        client.force_authenticate(user=user)
+        if restaurant_id is not None:
+            access, _ = issue_tokens_with_restaurant(user, restaurant_id)
+            client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        else:
+            client.force_authenticate(user=user)
 
         return AuthContext(client=client, user=user)
 
@@ -111,7 +141,8 @@ def api(user_factory: Callable[..., Any]) -> Callable[..., AuthContext]:
 def api_factory() -> Callable[..., AuthContext]:
     def _factory(user: Any, restaurant_id: int) -> AuthContext:
         client = APIClient()
-        client.force_authenticate(user=user, token={"restaurant_id": str(restaurant_id)})  # type: ignore[arg-type]
+        access, _ = issue_tokens_with_restaurant(user, restaurant_id)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
 
         return AuthContext(client=client, user=user)
 
@@ -167,3 +198,8 @@ def item(menu: Menu, category: MenuCategory, restaurant: Restaurant) -> MenuItem
             sort_order=1,
         ),
     )
+
+
+@pytest.fixture
+def restaurant_settings(restaurant: Restaurant) -> RestaurantSettings:
+    return RestaurantSettingsFactory(restaurant=restaurant)
