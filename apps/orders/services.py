@@ -4,7 +4,7 @@ __all__ = [
     "remove_item_from_cart",
 ]
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
@@ -74,12 +74,25 @@ def add_item_to_cart(
         if menu_item is None:
             raise MenuItemNotFoundError(f"Menu item {menu_item_id} not found.")
 
-        item, created = CartItem.objects.get_or_create(
-            cart_session=session,
-            menu_item=menu_item,
-            restaurant_id=session.restaurant_id,
-            defaults={"quantity": quantity, "added_by": user, "comment": comment},
-        )
+        try:
+            with transaction.atomic():
+                item, created = CartItem.objects.get_or_create(
+                    cart_session=session,
+                    menu_item=menu_item,
+                    restaurant_id=session.restaurant_id,
+                    defaults={"quantity": quantity, "added_by": user, "comment": comment},
+                )
+        except IntegrityError:
+            item = (
+                CartItem.objects.select_for_update()
+                .filter(
+                    cart_session=session,
+                    menu_item=menu_item,
+                    restaurant_id=session.restaurant_id,
+                )
+                .get()
+            )
+            created = False
         if not created:
             CartItem.objects.filter(pk=item.pk).update(
                 quantity=F("quantity") + quantity,
