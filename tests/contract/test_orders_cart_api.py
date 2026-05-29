@@ -138,24 +138,21 @@ class TestCartSessionRetrieve:
 
 
 @pytest.mark.django_db(databases=["default"])
-class TestCartSessionAddParticipant:
-    def test_participants_read_only_via_api(
+class TestCartSessionPatchNotAllowed:
+    def test_patch_returns_405(
         self, api: Callable[..., AuthContext], reservation: Reservation, restaurant: Restaurant
     ) -> None:
         auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
         session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
         session.participants.add(auth.user)
 
-        user2 = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
         url = reverse("cart-session-detail", kwargs={"pk": session.public_id})
         response = auth.client.patch(
             url,
-            {"participants": [str(auth.user.public_id), str(user2.user.public_id)]},
+            {"reservation": str(reservation.public_id)},
             content_type="application/json",
         )
-        assert response.status_code == status.HTTP_200_OK
-        session.refresh_from_db()
-        assert session.participants.count() == 1
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
 
 @pytest.mark.django_db(databases=["default"])

@@ -6,7 +6,7 @@ urlpatterns = [
     path("sessions/", CartSessionViewSet.as_view({"get": "list", "post": "create"}), name="cart-session-list"),
     path(
         "sessions/<uuid:pk>/",
-        CartSessionViewSet.as_view({"get": "retrieve", "patch": "partial_update"}),
+        CartSessionViewSet.as_view({"get": "retrieve"}),
         name="cart-session-detail",
     ),
     path(

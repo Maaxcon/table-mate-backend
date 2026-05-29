@@ -25,7 +25,7 @@ class CartSessionViewSet(
 ):
     permission_classes = [IsAuthenticated]
     serializer_class = CartSessionSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "head", "options"]
     queryset = CartSession.objects.all()
     lookup_url_kwarg = "pk"  # type: ignore[misc]
 
