@@ -63,6 +63,7 @@ class CartSessionItemViewSet(
     queryset = CartItem.objects.all()
     permission_classes = [IsAuthenticated]
     http_method_names = ["get", "post", "delete", "head", "options"]
+    lookup_url_kwarg = "pk"  # type: ignore[misc]
 
     def get_serializer_class(self) -> type[Serializer[Any]]:
         if self.action == "create":
