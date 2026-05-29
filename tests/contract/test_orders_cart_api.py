@@ -9,13 +9,21 @@ from django.test import Client
 from django.urls import reverse
 from rest_framework import status
 
-from apps.authentication.models import RoleCode
+from apps.authentication.models import RoleCode, User
 from apps.menu.models import MenuItem
 from apps.orders.models import CartItem, CartSession, CartSessionStatus
-from apps.reservations.models import Reservation
+from apps.reservations.models import Reservation, ReservationParticipant
 from apps.restaurants.models import Restaurant, Table
 
 from ..conftest import AuthContext, MenuItemFactory
+
+
+def add_reservation_participant(reservation: Reservation, user: User) -> None:
+    ReservationParticipant.objects.get_or_create(
+        reservation=reservation,
+        restaurant=reservation.restaurant,
+        user=user,
+    )
 
 
 @pytest.fixture
@@ -57,6 +65,7 @@ class TestCartSessionCreate:
         self, api: Callable[..., AuthContext], reservation: Reservation, restaurant: Restaurant
     ) -> None:
         auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        add_reservation_participant(reservation, auth.user)
         response = auth.client.post(
             self.url,
             {"reservation": str(reservation.public_id)},
@@ -67,6 +76,23 @@ class TestCartSessionCreate:
         assert data["status"] == "active"
         assert data["reservation"] == str(reservation.public_id)
         assert data["participants"] == [str(auth.user.public_id)]
+
+    def test_create_session_non_participant_returns_403(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        seeded = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        add_reservation_participant(reservation, seeded.user)
+
+        intruder = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        response = intruder.client.post(
+            self.url,
+            {"reservation": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_create_session_invalid_reservation_returns_400(
         self, api: Callable[..., AuthContext], restaurant: Restaurant
@@ -386,10 +412,18 @@ class TestCartTwoUserScenario:
         user1 = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
         user2 = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
 
-        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=user1.user)
-        session.participants.add(user1.user, user2.user)
+        add_reservation_participant(reservation, user1.user)
+        add_reservation_participant(reservation, user2.user)
 
-        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        session_resp = user1.client.post(
+            reverse("cart-session-list"),
+            {"reservation": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert session_resp.status_code == status.HTTP_201_CREATED
+        session_id = session_resp.json()["public_id"]
+
+        url = reverse("cart-item-list", kwargs={"session_pk": session_id})
 
         resp1 = user1.client.post(
             url,
@@ -403,7 +437,7 @@ class TestCartTwoUserScenario:
         assert resp2.status_code == status.HTTP_200_OK
         assert resp2.json()["count"] == 1
 
-        delete_url = reverse("cart-item-detail", kwargs={"session_pk": session.public_id, "pk": item_id})
+        delete_url = reverse("cart-item-detail", kwargs={"session_pk": session_id, "pk": item_id})
         resp3 = user2.client.delete(delete_url)
         assert resp3.status_code == status.HTTP_204_NO_CONTENT
 
@@ -418,10 +452,18 @@ class TestCartTwoUserScenario:
         user2 = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
         intruder = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
 
-        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=user1.user)
-        session.participants.add(user1.user, user2.user)
+        add_reservation_participant(reservation, user1.user)
+        add_reservation_participant(reservation, user2.user)
 
-        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        session_resp = user1.client.post(
+            reverse("cart-session-list"),
+            {"reservation": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert session_resp.status_code == status.HTTP_201_CREATED
+        session_id = session_resp.json()["public_id"]
+
+        url = reverse("cart-item-list", kwargs={"session_pk": session_id})
         response = intruder.client.post(
             url,
             {"menu_item": str(cart_item.public_id), "quantity": 1},
@@ -429,13 +471,14 @@ class TestCartTwoUserScenario:
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-        item = CartItem.objects.create(
-            cart_session=session,
-            menu_item=cart_item,
-            quantity=1,
-            added_by=user1.user,
-            restaurant=restaurant,
+        owner_add = user1.client.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
         )
-        delete_url = reverse("cart-item-detail", kwargs={"session_pk": session.public_id, "pk": item.public_id})
+        assert owner_add.status_code == status.HTTP_201_CREATED
+        item_id = owner_add.json()["public_id"]
+
+        delete_url = reverse("cart-item-detail", kwargs={"session_pk": session_id, "pk": item_id})
         response = intruder.client.delete(delete_url)
         assert response.status_code == status.HTTP_403_FORBIDDEN

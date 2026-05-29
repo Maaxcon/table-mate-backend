@@ -45,6 +45,12 @@ class Reservation(RestaurantScopedModel):
         default=ReservationStatus.PENDING,
     )
     notes = models.TextField(null=True, blank=True)
+    participants = models.ManyToManyField(
+        "authentication.User",
+        through="reservations.ReservationParticipant",
+        related_name="participating_reservations",
+        blank=True,
+    )
 
     class Meta:
         ordering = ["start_at", "id"]
@@ -76,3 +82,32 @@ class Reservation(RestaurantScopedModel):
 
     def __str__(self) -> str:
         return f"Reservation {self.public_id}"
+
+
+class ReservationParticipant(RestaurantScopedModel):
+    reservation = models.ForeignKey(
+        "reservations.Reservation",
+        on_delete=models.CASCADE,
+        related_name="reservation_participants",
+    )
+    user = models.ForeignKey(
+        "authentication.User",
+        on_delete=models.CASCADE,
+        related_name="reservation_participations",
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["reservation", "user"],
+                name="reservations_participant_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["restaurant", "id"],
+                name="reservations_participant_rest_uniq",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ReservationParticipant {self.public_id}"
