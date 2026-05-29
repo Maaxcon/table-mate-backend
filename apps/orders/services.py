@@ -1,13 +1,11 @@
 from django.db import transaction
-from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
-from apps.menu.models import MenuItem
-from apps.reservations.models import Reservation
+from common.exceptions import CartItemNotFoundError, MenuItemNotFoundError, ReservationNotFoundError
 
 from .models import CartItem, CartSession
-from .selectors import is_cart_participant
+from .selectors import get_cart_item, get_menu_item, get_reservation, is_cart_participant
 
 
 def create_cart_session(
@@ -16,11 +14,10 @@ def create_cart_session(
     reservation_id: str,
     user: User,
 ) -> CartSession:
-    reservation = get_object_or_404(
-        Reservation,
-        public_id=reservation_id,
-        restaurant_id=restaurant_id,
-    )
+    reservation = get_reservation(restaurant_id, reservation_id)
+    if reservation is None:
+        raise ReservationNotFoundError(f"Reservation {reservation_id} not found.")
+
     with transaction.atomic():
         session = CartSession.objects.create(
             restaurant_id=restaurant_id,
@@ -43,11 +40,10 @@ def add_item_to_cart(
         if not is_cart_participant(user, session):
             raise PermissionDenied("Only cart participants may add items.")
 
-        menu_item = get_object_or_404(
-            MenuItem,
-            public_id=menu_item_id,
-            restaurant_id=session.restaurant_id,
-        )
+        menu_item = get_menu_item(session.restaurant_id, menu_item_id)
+        if menu_item is None:
+            raise MenuItemNotFoundError(f"Menu item {menu_item_id} not found.")
+
         item = CartItem.objects.create(
             cart_session=session,
             menu_item=menu_item,
@@ -69,10 +65,8 @@ def remove_item_from_cart(
         if not is_cart_participant(user, session):
             raise PermissionDenied("Only cart participants may remove items.")
 
-        item = get_object_or_404(
-            CartItem,
-            public_id=item_id,
-            cart_session=session,
-            restaurant_id=session.restaurant_id,
-        )
+        item = get_cart_item(session.restaurant_id, item_id, session)
+        if item is None:
+            raise CartItemNotFoundError(f"Cart item {item_id} not found.")
+
         item.delete()

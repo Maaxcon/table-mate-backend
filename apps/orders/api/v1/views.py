@@ -1,7 +1,6 @@
 from typing import Any, cast
 
 from django.db.models import QuerySet
-from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -11,9 +10,10 @@ from rest_framework.serializers import Serializer
 
 from apps.authentication.models import User
 from apps.orders.models import CartItem, CartSession
+from apps.orders.selectors import get_cart_session
 from apps.orders.services import add_item_to_cart, create_cart_session, remove_item_from_cart
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
-from common.exceptions import DomainError
+from common.exceptions import CartSessionNotFoundError, DomainError
 
 from .serializers import AddCartItemSerializer, CartItemSerializer, CartSessionSerializer
 
@@ -84,13 +84,11 @@ class CartSessionItemViewSet(
         return rid
 
     def _get_session(self) -> CartSession:
-        session_pk = self.kwargs.get("session_pk")
+        session_pk = cast(str, self.kwargs["session_pk"])
         restaurant_id = self._get_restaurant_id()
-        session = get_object_or_404(
-            CartSession,
-            public_id=session_pk,
-            restaurant_id=restaurant_id,
-        )
+        session = get_cart_session(restaurant_id=restaurant_id, session_pk=session_pk)
+        if session is None:
+            raise CartSessionNotFoundError(f"Cart session {session_pk} not found.")
         return session
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
