@@ -5,7 +5,7 @@ from .models import Restaurant, RestaurantSettings, Table
 
 @admin.register(Restaurant)
 class RestaurantAdmin(admin.ModelAdmin):
-    list_display = ["name", "address", "phone"]
+    list_display = ["name", "address", "phone", "telegram_url", "facebook_url"]
 
 
 @admin.register(RestaurantSettings)
