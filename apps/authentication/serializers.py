@@ -39,6 +39,13 @@ class CustomerContextSerializer(serializers.Serializer[None]):
 
 
 class UserSerializer(serializers.ModelSerializer[User]):
+    restaurant_public_id = serializers.SerializerMethodField()
+
+    def get_restaurant_public_id(self, obj: User) -> str | None:
+        if obj.restaurant is not None:
+            return str(obj.restaurant.public_id)
+        return None
+
     class Meta:
         model = User
         fields = [
@@ -48,6 +55,7 @@ class UserSerializer(serializers.ModelSerializer[User]):
             "last_name",
             "phone",
             "role",
+            "restaurant_public_id",
             "is_active",
             "created_at",
             "updated_at",

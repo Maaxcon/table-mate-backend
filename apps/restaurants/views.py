@@ -1,15 +1,28 @@
 from drf_spectacular.utils import extend_schema
-from rest_framework import viewsets
+from rest_framework import mixins, viewsets
+from rest_framework.permissions import AllowAny
 
 from apps.authentication.permissions import IsAdmin, IsFloor, IsStaff
-from common.api import RestaurantScopedViewSetMixin
+from common.api import PublicLookupMixin, RestaurantScopedViewSetMixin
 
 from .models import Restaurant, RestaurantSettings, Table
 from .serializers import (
+    PublicRestaurantSerializer,
     RestaurantSerializer,
     RestaurantSettingsSerializer,
     TableSerializer,
 )
+
+
+@extend_schema(tags=["Restaurants"])
+class PublicRestaurantViewSet(
+    PublicLookupMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet[Restaurant],
+):
+    queryset = Restaurant.objects.select_related("settings").all()
+    serializer_class = PublicRestaurantSerializer
+    permission_classes = [AllowAny]
 
 
 @extend_schema(tags=["Restaurants"])
@@ -32,8 +45,8 @@ class RestaurantSettingsViewSet(
     permission_classes = [IsAdmin]
     queryset = RestaurantSettings.objects.all()
     serializer_class = RestaurantSettingsSerializer
-    filterset_fields = ["restaurant", "timezone", "currency", "locale"]
-    ordering_fields = ["created_at", "updated_at", "timezone", "currency", "locale"]
+    filterset_fields = ["restaurant", "timezone", "currency", "locale", "price_band"]
+    ordering_fields = ["created_at", "updated_at", "timezone", "currency", "locale", "rating", "price_band"]
 
 
 @extend_schema(tags=["Restaurants"])

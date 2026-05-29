@@ -89,7 +89,10 @@ class TestPublicMenuItems:
         assert len(results) >= 1
         assert results[0]["name"] == "Steak"
         assert results[0]["price"] == "29.9900"
+        assert isinstance(results[0]["allergens"], list)
         assert results[0]["is_available"] is True
+        assert results[0]["likes_count"] == 0
+        assert results[0]["is_liked"] is False
         assert results[0]["public_id"] == str(item.public_id)
 
     def test_filter_by_category(
@@ -285,3 +288,75 @@ class TestMenuItemSearch:
         data = response.json()
         assert len(data["results"]) == 1
         assert data["results"][0]["name"] == "Burger"
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestMenuItemLikes:
+    def test_toggle_like_adds_and_removes_like(
+        self, api_client: Client, restaurant: Restaurant, item: MenuItem
+    ) -> None:
+        toggle_url = (
+            reverse("menu-item-toggle-like", kwargs={"public_id": str(item.public_id)})
+            + f"?restaurant={restaurant.public_id}"
+        )
+        list_url = reverse("menu-item-list")
+        guest_token = "guest-like-token-1"
+
+        like_response: Any = api_client.post(
+            toggle_url,
+            data={"guest_token": guest_token},
+            content_type="application/json",
+        )
+        assert like_response.status_code == status.HTTP_200_OK
+        like_data = like_response.json()
+        assert like_data["is_liked"] is True
+        assert like_data["likes_count"] == 1
+
+        list_response: Any = api_client.get(
+            list_url,
+            {"restaurant": str(restaurant.public_id), "guest_token": guest_token},
+        )
+        assert list_response.status_code == status.HTTP_200_OK
+        list_item = list_response.json()["results"][0]
+        assert list_item["public_id"] == str(item.public_id)
+        assert list_item["likes_count"] == 1
+        assert list_item["is_liked"] is True
+
+        unlike_response: Any = api_client.post(
+            toggle_url,
+            data={"guest_token": guest_token},
+            content_type="application/json",
+        )
+        assert unlike_response.status_code == status.HTTP_200_OK
+        unlike_data = unlike_response.json()
+        assert unlike_data["is_liked"] is False
+        assert unlike_data["likes_count"] == 0
+
+    def test_like_state_is_personalized_by_guest_token(
+        self, api_client: Client, restaurant: Restaurant, item: MenuItem
+    ) -> None:
+        toggle_url = (
+            reverse("menu-item-toggle-like", kwargs={"public_id": str(item.public_id)})
+            + f"?restaurant={restaurant.public_id}"
+        )
+        list_url = reverse("menu-item-list")
+        api_client.post(
+            toggle_url,
+            data={"guest_token": "guest-a"},
+            content_type="application/json",
+        )
+
+        response_for_a: Any = api_client.get(
+            list_url,
+            {"restaurant": str(restaurant.public_id), "guest_token": "guest-a"},
+        )
+        response_for_b: Any = api_client.get(
+            list_url,
+            {"restaurant": str(restaurant.public_id), "guest_token": "guest-b"},
+        )
+        assert response_for_a.status_code == status.HTTP_200_OK
+        assert response_for_b.status_code == status.HTTP_200_OK
+        assert response_for_a.json()["results"][0]["is_liked"] is True
+        assert response_for_a.json()["results"][0]["likes_count"] == 1
+        assert response_for_b.json()["results"][0]["is_liked"] is False
+        assert response_for_b.json()["results"][0]["likes_count"] == 1
