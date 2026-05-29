@@ -26,6 +26,12 @@ class CartItem(RestaurantScopedModel):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(quantity__gte=1),
+                name="orders_cartitem_quantity_gte_1",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"CartItem {self.public_id}"
