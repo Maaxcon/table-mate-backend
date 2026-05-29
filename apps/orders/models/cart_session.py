@@ -39,6 +39,10 @@ class CartSession(RestaurantScopedModel):
                 condition=models.Q(status__in=CartSessionStatus.values),
                 name="orders_cartsession_status_valid",
             ),
+            models.UniqueConstraint(
+                fields=["restaurant", "id"],
+                name="orders_cartsession_rest_uniq",
+            ),
         ]
 
     def __str__(self) -> str:

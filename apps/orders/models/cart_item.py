@@ -35,6 +35,10 @@ class CartItem(RestaurantScopedModel):
                 fields=["cart_session", "menu_item"],
                 name="orders_cartitem_unique_session_item",
             ),
+            models.UniqueConstraint(
+                fields=["restaurant", "id"],
+                name="orders_cartitem_rest_uniq",
+            ),
         ]
 
     def __str__(self) -> str:
