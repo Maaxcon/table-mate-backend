@@ -39,6 +39,7 @@ class Restaurant(BaseModel):
     name = models.CharField(max_length=255)
     address = models.TextField()
     phone = models.CharField(max_length=32, blank=True, default="")
+    cover_image = models.ImageField(upload_to="restaurants/covers/", null=True, blank=True)
 
     class Meta:
         ordering = ["id"]

@@ -30,8 +30,8 @@ class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
 
     class Meta:
         model = Restaurant
-        fields = ["public_id", "name", "address", "phone", "settings"]
-        read_only_fields = ["public_id", "name", "address", "phone", "settings"]
+        fields = ["public_id", "name", "address", "phone", "cover_image", "settings"]
+        read_only_fields = ["public_id", "name", "address", "phone", "cover_image", "settings"]
 
 
 class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
