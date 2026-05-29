@@ -31,7 +31,7 @@ class CartSessionViewSet(
 
     def safely_get_queryset(self, qs: QuerySet[CartSession]) -> QuerySet[CartSession]:
         user = cast(User, self.request.user)
-        return qs.filter(participants=user)
+        return qs.filter(participants=user).prefetch_related("participants")
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = self.get_serializer(data=request.data)
