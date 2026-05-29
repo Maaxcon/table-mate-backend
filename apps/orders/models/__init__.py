@@ -2,6 +2,10 @@ from django.db import models
 
 from common.models import RestaurantScopedModel
 
+from .cart_item import CartItem as CartItem
+from .cart_session import CartSession as CartSession
+from .cart_session import CartSessionStatus as CartSessionStatus
+
 
 class SessionStatus(models.TextChoices):
     OPEN = "open", "Open"
@@ -285,8 +289,3 @@ class OrderItem(RestaurantScopedModel):
 
     def __str__(self) -> str:
         return f"Order item {self.public_id}"
-
-
-from .cart_item import CartItem as CartItem  # noqa: E402
-from .cart_session import CartSession as CartSession  # noqa: E402
-from .cart_session import CartSessionStatus as CartSessionStatus  # noqa: E402
