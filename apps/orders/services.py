@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 
@@ -20,12 +21,13 @@ def create_cart_session(
         public_id=reservation_id,
         restaurant_id=restaurant_id,
     )
-    session = CartSession.objects.create(
-        restaurant_id=restaurant_id,
-        reservation=reservation,
-        created_by=user,
-    )
-    session.participants.add(user)
+    with transaction.atomic():
+        session = CartSession.objects.create(
+            restaurant_id=restaurant_id,
+            reservation=reservation,
+            created_by=user,
+        )
+        session.participants.add(user)
     return session
 
 
@@ -37,22 +39,23 @@ def add_item_to_cart(
     user: User,
     comment: str | None = None,
 ) -> CartItem:
-    if not is_cart_participant(user, session):
-        raise PermissionDenied("Only cart participants may add items.")
+    with transaction.atomic():
+        if not is_cart_participant(user, session):
+            raise PermissionDenied("Only cart participants may add items.")
 
-    menu_item = get_object_or_404(
-        MenuItem,
-        public_id=menu_item_id,
-        restaurant_id=session.restaurant_id,
-    )
-    item = CartItem.objects.create(
-        cart_session=session,
-        menu_item=menu_item,
-        quantity=quantity,
-        added_by=user,
-        comment=comment,
-        restaurant_id=session.restaurant_id,
-    )
+        menu_item = get_object_or_404(
+            MenuItem,
+            public_id=menu_item_id,
+            restaurant_id=session.restaurant_id,
+        )
+        item = CartItem.objects.create(
+            cart_session=session,
+            menu_item=menu_item,
+            quantity=quantity,
+            added_by=user,
+            comment=comment,
+            restaurant_id=session.restaurant_id,
+        )
     return item
 
 
@@ -62,13 +65,14 @@ def remove_item_from_cart(
     item_id: str,
     user: User,
 ) -> None:
-    if not is_cart_participant(user, session):
-        raise PermissionDenied("Only cart participants may remove items.")
+    with transaction.atomic():
+        if not is_cart_participant(user, session):
+            raise PermissionDenied("Only cart participants may remove items.")
 
-    item = get_object_or_404(
-        CartItem,
-        public_id=item_id,
-        cart_session=session,
-        restaurant_id=session.restaurant_id,
-    )
-    item.delete()
+        item = get_object_or_404(
+            CartItem,
+            public_id=item_id,
+            cart_session=session,
+            restaurant_id=session.restaurant_id,
+        )
+        item.delete()
