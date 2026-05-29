@@ -11,7 +11,7 @@ from rest_framework import status
 
 from apps.authentication.models import RoleCode
 from apps.menu.models import MenuItem
-from apps.orders.models import CartItem, CartSession
+from apps.orders.models import CartItem, CartSession, CartSessionStatus
 from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 
@@ -199,6 +199,32 @@ class TestCartItemCreate:
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_add_item_closed_session_returns_409(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(
+            restaurant=restaurant,
+            reservation=reservation,
+            created_by=auth.user,
+            status=CartSessionStatus.CLOSED,
+        )
+        session.participants.add(auth.user)
+
+        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        response = auth.client.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_409_CONFLICT
+        data = response.json()
+        assert data["code"] == "cart_session_closed"
+
     def test_add_item_unauthenticated_returns_401(
         self,
         api_client: Client,
@@ -315,6 +341,35 @@ class TestCartItemDelete:
         url = reverse("cart-item-detail", kwargs={"session_pk": session.public_id, "pk": item.public_id})
         response = intruder.client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_delete_item_closed_session_returns_409(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(
+            restaurant=restaurant,
+            reservation=reservation,
+            created_by=auth.user,
+            status=CartSessionStatus.CLOSED,
+        )
+        session.participants.add(auth.user)
+        item = CartItem.objects.create(
+            cart_session=session,
+            menu_item=cart_item,
+            quantity=1,
+            added_by=auth.user,
+            restaurant=restaurant,
+        )
+
+        url = reverse("cart-item-detail", kwargs={"session_pk": session.public_id, "pk": item.public_id})
+        response = auth.client.delete(url)
+        assert response.status_code == status.HTTP_409_CONFLICT
+        data = response.json()
+        assert data["code"] == "cart_session_closed"
 
 
 @pytest.mark.django_db(databases=["default"])
