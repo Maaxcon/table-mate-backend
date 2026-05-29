@@ -31,11 +31,11 @@ def reservation(restaurant: Restaurant, table: Table) -> Reservation:
 
 
 @pytest.fixture
-def cart_item(restaurant: Restaurant, menu: Any, category: Any) -> MenuItem:
+def cart_item(menu: Any, category: Any) -> MenuItem:
     return cast(
         MenuItem,
         MenuItemFactory(
-            restaurant=restaurant,
+            restaurant=menu.restaurant,
             menu=menu,
             category=category,
             name="Burger",
