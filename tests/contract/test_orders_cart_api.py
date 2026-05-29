@@ -94,6 +94,21 @@ class TestCartSessionCreate:
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_create_session_without_any_participants_returns_403(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        # intentionally do not seed reservation participants
+        response = auth.client.post(
+            self.url,
+            {"reservation": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
     def test_create_session_invalid_reservation_returns_400(
         self, api: Callable[..., AuthContext], restaurant: Restaurant
     ) -> None:

@@ -41,7 +41,7 @@ def create_cart_session(
         raise ReservationNotFoundError(f"Reservation {reservation_id} not found.")
 
     allowed_participants = _resolve_allowed_reservation_participant_ids(reservation)
-    if allowed_participants and user.id not in allowed_participants:
+    if not allowed_participants or user.id not in allowed_participants:
         raise PermissionDenied("Only reservation participants may open a cart session.")
 
     with transaction.atomic():
@@ -50,8 +50,7 @@ def create_cart_session(
             reservation=reservation,
             created_by=user,
         )
-        participants_to_add = allowed_participants | {user.id}
-        session.participants.add(*participants_to_add)
+        session.participants.add(*allowed_participants)
     return session
 
 
