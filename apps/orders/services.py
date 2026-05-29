@@ -52,13 +52,15 @@ def add_item_to_cart(
         if menu_item is None:
             raise MenuItemNotFoundError(f"Menu item {menu_item_id} not found.")
 
-        item = CartItem.objects.create(
+        item, _ = CartItem.objects.update_or_create(
             cart_session=session,
             menu_item=menu_item,
-            quantity=quantity,
-            added_by=user,
-            comment=comment,
             restaurant_id=session.restaurant_id,
+            defaults={
+                "quantity": quantity,
+                "added_by": user,
+                "comment": comment,
+            },
         )
     return item
 
