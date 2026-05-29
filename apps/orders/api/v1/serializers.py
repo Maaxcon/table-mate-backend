@@ -91,7 +91,7 @@ class AddCartItemSerializer(serializers.Serializer[None]):
         required=True,
     )
     quantity = serializers.IntegerField(min_value=1)
-    comment = serializers.CharField(required=False, allow_blank=True, default="")
+    comment = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
