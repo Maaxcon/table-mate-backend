@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.permissions import HasAnyRole
 
-from .models import Reservation
+from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
 from .selectors import get_customer_reservations
 from .serializers import ReservationSerializer
@@ -60,6 +60,13 @@ class ReservationViewSet(
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+
+        status_val = serializer.validated_data.pop("status", None)
+        if status_val == ReservationStatus.CANCELLED:
+            instance.status = ReservationStatus.CANCELLED
+            instance.save(update_fields=["status"])
+            result_serializer = self.get_serializer(instance)
+            return Response(result_serializer.data)
 
         reservation = reschedule_reservation(
             reservation=instance,

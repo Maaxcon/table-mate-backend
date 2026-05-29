@@ -6,7 +6,18 @@ from apps.authentication.models import User
 from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
-from .models import Reservation
+from .models import Reservation, ReservationStatus
+
+
+class TableInfoSerializer(serializers.ModelSerializer[Table]):
+    class Meta:
+        model = Table
+        fields = [
+            "public_id",
+            "table_number",
+            "capacity",
+            "shape",
+        ]
 
 
 class ReservationSerializer(serializers.ModelSerializer[Reservation]):
@@ -16,6 +27,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         queryset=Table.objects.all(),
         required=True,
     )
+    table_info = TableInfoSerializer(source="table", read_only=True)
 
     class Meta:
         model = Reservation
@@ -24,6 +36,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "restaurant",
             "customer",
             "table",
+            "table_info",
             "guest_count",
             "start_at",
             "end_at",
@@ -36,7 +49,6 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "public_id",
             "restaurant",
             "customer",
-            "status",
             "created_at",
             "updated_at",
         ]
@@ -49,6 +61,11 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         if value.restaurant_id != restaurant_id:
             raise serializers.ValidationError("Table does not belong to this restaurant.")
         return value
+
+    def validate_status(self, value: str) -> str:
+        if value == ReservationStatus.CANCELLED:
+            return value
+        raise serializers.ValidationError("Only cancellation is allowed.")
 
     def validate(self, attrs: dict[str, object]) -> dict[str, object]:
         start_at = attrs.get("start_at")
