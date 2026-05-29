@@ -35,3 +35,9 @@ class ReservationNotFoundError(DomainError):
     default_detail = "Reservation not found."
     default_code = "reservation_not_found"
     default_status_code = HTTPStatus.NOT_FOUND
+
+
+class CartSessionClosedError(DomainError):
+    default_detail = "Cart session is closed."
+    default_code = "cart_session_closed"
+    default_status_code = HTTPStatus.CONFLICT

@@ -2,9 +2,14 @@ from django.db import transaction
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
-from common.exceptions import CartItemNotFoundError, MenuItemNotFoundError, ReservationNotFoundError
+from common.exceptions import (
+    CartItemNotFoundError,
+    CartSessionClosedError,
+    MenuItemNotFoundError,
+    ReservationNotFoundError,
+)
 
-from .models import CartItem, CartSession
+from .models import CartItem, CartSession, CartSessionStatus
 from .selectors import get_cart_item, get_menu_item, get_reservation, is_cart_participant
 
 
@@ -37,6 +42,9 @@ def add_item_to_cart(
     comment: str | None = None,
 ) -> CartItem:
     with transaction.atomic():
+        if session.status != CartSessionStatus.ACTIVE:
+            raise CartSessionClosedError("Cart session is closed.")
+
         if not is_cart_participant(user, session):
             raise PermissionDenied("Only cart participants may add items.")
 
@@ -62,6 +70,9 @@ def remove_item_from_cart(
     user: User,
 ) -> None:
     with transaction.atomic():
+        if session.status != CartSessionStatus.ACTIVE:
+            raise CartSessionClosedError("Cart session is closed.")
+
         if not is_cart_participant(user, session):
             raise PermissionDenied("Only cart participants may remove items.")
 
