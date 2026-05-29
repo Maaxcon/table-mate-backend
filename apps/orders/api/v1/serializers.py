@@ -19,8 +19,7 @@ class CartSessionSerializer(serializers.ModelSerializer[CartSession]):
     created_by = PublicIdRelatedField[User](read_only=True)
     participants = PublicIdRelatedField[User](
         many=True,
-        queryset=User.objects.all(),
-        required=False,
+        read_only=True,
     )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

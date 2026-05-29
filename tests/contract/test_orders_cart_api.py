@@ -139,7 +139,7 @@ class TestCartSessionRetrieve:
 
 @pytest.mark.django_db(databases=["default"])
 class TestCartSessionAddParticipant:
-    def test_add_participant_via_patch(
+    def test_participants_read_only_via_api(
         self, api: Callable[..., AuthContext], reservation: Reservation, restaurant: Restaurant
     ) -> None:
         auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
@@ -155,7 +155,7 @@ class TestCartSessionAddParticipant:
         )
         assert response.status_code == status.HTTP_200_OK
         session.refresh_from_db()
-        assert session.participants.count() == 2
+        assert session.participants.count() == 1
 
 
 @pytest.mark.django_db(databases=["default"])
