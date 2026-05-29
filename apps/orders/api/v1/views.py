@@ -105,7 +105,7 @@ class CartSessionItemViewSet(
             user=user,
             comment=serializer.validated_data.get("comment"),
         )
-
+        item = CartItem.objects.select_related("menu_item", "cart_session").get(pk=item.pk)
         result = CartItemSerializer(item, context=self.get_serializer_context())
         return Response(result.data, status=status.HTTP_201_CREATED)
 
