@@ -5,6 +5,8 @@ __all__ = [
 ]
 
 from django.db import transaction
+from django.db.models import F
+from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
@@ -58,16 +60,20 @@ def add_item_to_cart(
         if menu_item is None:
             raise MenuItemNotFoundError(f"Menu item {menu_item_id} not found.")
 
-        item, _ = CartItem.objects.update_or_create(
+        item, created = CartItem.objects.get_or_create(
             cart_session=session,
             menu_item=menu_item,
             restaurant_id=session.restaurant_id,
-            defaults={
-                "quantity": quantity,
-                "added_by": user,
-                "comment": comment,
-            },
+            defaults={"quantity": quantity, "added_by": user, "comment": comment},
         )
+        if not created:
+            CartItem.objects.filter(pk=item.pk).update(
+                quantity=F("quantity") + quantity,
+                added_by=user,
+                comment=comment,
+                updated_at=timezone.now(),
+            )
+            item.refresh_from_db()
     return item
 
 
