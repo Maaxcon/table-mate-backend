@@ -1,6 +1,43 @@
+from django import forms
 from django.contrib import admin
 
+from .allergens import ALLERGENS
 from .models import Menu, MenuCategory, MenuItem
+
+
+class AllergenCheckboxWidget(forms.CheckboxSelectMultiple):
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        kwargs.setdefault("choices", [(a, a) for a in ALLERGENS])
+        super().__init__(*args, **kwargs)
+
+
+class AllergenField(forms.MultipleChoiceField):
+    widget = AllergenCheckboxWidget
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        kwargs.setdefault("choices", [(a, a) for a in ALLERGENS])
+        kwargs.setdefault("required", False)
+        super().__init__(*args, **kwargs)
+
+    def prepare_value(self, value: object) -> object:
+        if isinstance(value, str):
+            import json
+            try:
+                value = json.loads(value)
+            except Exception:
+                pass
+        return value
+
+
+class MenuItemForm(forms.ModelForm):
+    allergens = AllergenField()
+
+    class Meta:
+        model = MenuItem
+        fields = "__all__"
+
+    def clean_allergens(self) -> list[str]:
+        return self.cleaned_data.get("allergens") or []
 
 
 class MenuCategoryInline(admin.TabularInline):
@@ -27,6 +64,7 @@ class MenuCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
+    form = MenuItemForm
     list_display = ["name", "restaurant", "category", "price", "is_available"]
     list_filter = ["restaurant", "category", "is_available"]
     search_fields = ["name"]
