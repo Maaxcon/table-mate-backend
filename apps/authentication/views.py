@@ -12,6 +12,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .models import RoleCode, User
 from .serializers import (
+    CustomerContextSerializer,
     CustomTokenObtainPairSerializer,
     GoogleAuthResponseSerializer,
     GoogleAuthSerializer,
@@ -110,6 +111,40 @@ class GoogleContextView(APIView):
         return response
 
 
+class CustomerContextView(APIView):
+    @extend_schema(
+        request=CustomerContextSerializer,
+        responses={
+            200: GoogleContextResponseSerializer,
+            403: OpenApiResponse(description="User is not a participant in this reservation."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        serializer = CustomerContextSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = cast(User, request.user)
+        if user.role != RoleCode.CUSTOMER:
+            return Response(
+                {"detail": "Only customers may use this endpoint."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        reservation = serializer.validated_data["reservation"]
+        is_customer = reservation.customer_id == user.id
+        is_participant = reservation.participants.filter(id=user.id).exists()
+        if not (is_customer or is_participant):
+            return Response(
+                {"detail": "You are not a participant in this reservation."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        access, refresh = issue_tokens_with_restaurant(user, reservation.restaurant_id)
+        response = Response({"access": access})
+        _set_refresh_cookie(response, refresh)
+        return response
+
+
 class CookieTokenRefreshView(TokenRefreshView):
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         refresh_token = request.COOKIES.get("refresh_token")
@@ -149,6 +184,7 @@ __all__ = [
     "MeView",
     "GoogleAuthView",
     "GoogleContextView",
+    "CustomerContextView",
     "CookieTokenRefreshView",
     "LogoutView",
 ]

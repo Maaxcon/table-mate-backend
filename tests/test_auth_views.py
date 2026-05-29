@@ -1,10 +1,14 @@
+from datetime import UTC, datetime, timedelta
+from typing import cast
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from rest_framework.test import APIClient
 
-from apps.authentication.models import RoleCode
+from apps.authentication.models import RoleCode, User
 from apps.authentication.services import issue_tokens, issue_tokens_with_restaurant
+from apps.reservations.models import Reservation, ReservationStatus
 from apps.restaurants.models import Restaurant
 from tests.conftest import UserFactory
 
@@ -133,13 +137,88 @@ class TestGoogleContextView:
         assert response.status_code == 400
 
     def test_full_token_contains_restaurant_id(self) -> None:
-        from rest_framework_simplejwt.tokens import AccessToken
+        from rest_framework_simplejwt.tokens import AccessToken, Token
 
         restaurant = Restaurant.objects.create(name="Test Restaurant")
         user = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
         access, _ = issue_tokens_with_restaurant(user, restaurant.pk)
 
-        assert AccessToken(access).payload["restaurant_id"] == restaurant.pk
+        token = AccessToken(token=cast(Token, access))
+        assert token.payload["restaurant_id"] == restaurant.pk
+
+
+@pytest.mark.django_db
+class TestCustomerContextView:
+    url = "/api/auth/customer/context/"
+
+    def _create_reservation(self, *, restaurant: Restaurant, customer: User) -> Reservation:
+        start = datetime.now(UTC) + timedelta(hours=1)
+        return Reservation.objects.create(
+            restaurant=restaurant,
+            customer=customer,
+            guest_count=2,
+            start_at=start,
+            end_at=start + timedelta(hours=2),
+            status=ReservationStatus.CONFIRMED,
+        )
+
+    def test_customer_participant_gets_restaurant_token(self) -> None:
+        restaurant = Restaurant.objects.create(name="Test Restaurant")
+        user = UserFactory.create(role=RoleCode.CUSTOMER)
+        reservation = self._create_reservation(restaurant=restaurant, customer=user)
+        access, _ = issue_tokens(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post(self.url, {"reservation": str(reservation.public_id)}, format="json")
+
+        assert response.status_code == 200
+        assert "access" in response.data
+        assert "refresh_token" in response.cookies
+
+    def test_reservation_participant_gets_token(self) -> None:
+        restaurant = Restaurant.objects.create(name="Test Restaurant")
+        owner = UserFactory.create(role=RoleCode.CUSTOMER)
+        participant = UserFactory.create(role=RoleCode.CUSTOMER)
+        reservation = self._create_reservation(restaurant=restaurant, customer=owner)
+        reservation.participants.add(participant)
+        access, _ = issue_tokens(participant)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post(self.url, {"reservation": str(reservation.public_id)}, format="json")
+
+        assert response.status_code == 200
+
+    def test_non_participant_returns_403(self) -> None:
+        restaurant = Restaurant.objects.create(name="Test Restaurant")
+        owner = UserFactory.create(role=RoleCode.CUSTOMER)
+        stranger = UserFactory.create(role=RoleCode.CUSTOMER)
+        reservation = self._create_reservation(restaurant=restaurant, customer=owner)
+        access, _ = issue_tokens(stranger)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post(self.url, {"reservation": str(reservation.public_id)}, format="json")
+
+        assert response.status_code == 403
+
+    def test_staff_cannot_use_customer_endpoint(self) -> None:
+        restaurant = Restaurant.objects.create(name="Test Restaurant")
+        staff = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
+        reservation = self._create_reservation(restaurant=restaurant, customer=UserFactory.create())
+        access, _ = issue_tokens(staff)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post(self.url, {"reservation": str(reservation.public_id)}, format="json")
+
+        assert response.status_code == 403
+
+    def test_unauthenticated_returns_401(self) -> None:
+        response = APIClient().post(self.url, {"reservation": str(uuid4())}, format="json")
+
+        assert response.status_code == 401
 
 
 @pytest.mark.django_db

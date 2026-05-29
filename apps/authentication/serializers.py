@@ -4,6 +4,9 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.reservations.models import Reservation
+from common.api import PublicIdRelatedField
+
 from .models import RoleCode, User
 
 
@@ -26,6 +29,13 @@ class GoogleContextResponseSerializer(serializers.Serializer[None]):
 
 
 _STAFF_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
+
+
+class CustomerContextSerializer(serializers.Serializer[None]):
+    reservation = PublicIdRelatedField[Reservation](
+        queryset=Reservation.objects.select_related("restaurant").all(),
+        required=True,
+    )
 
 
 class UserSerializer(serializers.ModelSerializer[User]):

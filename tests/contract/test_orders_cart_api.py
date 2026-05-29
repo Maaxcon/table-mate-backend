@@ -21,7 +21,6 @@ from ..conftest import AuthContext, MenuItemFactory
 def add_reservation_participant(reservation: Reservation, user: User) -> None:
     ReservationParticipant.objects.get_or_create(
         reservation=reservation,
-        restaurant=reservation.restaurant,
         user=user,
     )
 

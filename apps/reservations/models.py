@@ -5,7 +5,7 @@ from django.db import models
 from django.db.models import F, Func, Q
 
 from apps.authentication.models import RoleCode
-from common.models import RestaurantScopedModel
+from common.models import BaseModel, RestaurantScopedModel
 
 
 class TsTzRange(Func):
@@ -84,7 +84,7 @@ class Reservation(RestaurantScopedModel):
         return f"Reservation {self.public_id}"
 
 
-class ReservationParticipant(RestaurantScopedModel):
+class ReservationParticipant(BaseModel):
     reservation = models.ForeignKey(
         "reservations.Reservation",
         on_delete=models.CASCADE,
@@ -102,10 +102,6 @@ class ReservationParticipant(RestaurantScopedModel):
             models.UniqueConstraint(
                 fields=["reservation", "user"],
                 name="reservations_participant_unique",
-            ),
-            models.UniqueConstraint(
-                fields=["restaurant", "id"],
-                name="reservations_participant_rest_uniq",
             ),
         ]
 

@@ -4,6 +4,35 @@ info:
   version: 0.1.0
   description: Table Mate backend API
 paths:
+  /api/auth/customer/context/:
+    post:
+      operationId: auth_customer_context_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerContext'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomerContext'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomerContext'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleContextResponse'
+          description: ''
+        '403':
+          description: User is not a participant in this reservation.
   /api/auth/google/:
     post:
       operationId: auth_google_create
@@ -616,38 +645,6 @@ paths:
         required: true
       tags:
       - Cart
-      security:
-      - jwtAuth: []
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CartSession'
-          description: ''
-    patch:
-      operationId: orders_cart_sessions_partial_update
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Cart
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedCartSession'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedCartSession'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedCartSession'
       security:
       - jwtAuth: []
       - cookieAuth: []
@@ -1558,7 +1555,7 @@ components:
           minimum: 1
         comment:
           type: string
-          default: ''
+          nullable: true
       required:
       - menu_item
       - quantity
@@ -1566,14 +1563,6 @@ components:
       type: object
       properties:
         public_id:
-          type: string
-          format: uuid
-          readOnly: true
-        restaurant:
-          type: string
-          format: uuid
-          readOnly: true
-        cart_session:
           type: string
           format: uuid
           readOnly: true
@@ -1585,13 +1574,21 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        comment:
+          type: string
+          nullable: true
         added_by:
           type: string
           format: uuid
           readOnly: true
-        comment:
+        cart_session:
           type: string
-          nullable: true
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1636,6 +1633,7 @@ components:
           items:
             type: string
             format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1647,6 +1645,7 @@ components:
       required:
       - created_at
       - created_by
+      - participants
       - public_id
       - reservation
       - restaurant
@@ -1693,6 +1692,14 @@ components:
       - email
       - password
       - refresh
+    CustomerContext:
+      type: object
+      properties:
+        reservation:
+          type: string
+          format: uuid
+      required:
+      - reservation
     EditorTable:
       type: object
       properties:
@@ -2495,41 +2502,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ticket'
-    PatchedCartSession:
-      type: object
-      properties:
-        public_id:
-          type: string
-          format: uuid
-          readOnly: true
-        restaurant:
-          type: string
-          format: uuid
-          readOnly: true
-        reservation:
-          type: string
-          format: uuid
-        status:
-          allOf:
-          - $ref: '#/components/schemas/CartSessionStatusEnum'
-          readOnly: true
-        created_by:
-          type: string
-          format: uuid
-          readOnly: true
-        participants:
-          type: array
-          items:
-            type: string
-            format: uuid
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
     PatchedEditorTable:
       type: object
       properties:
