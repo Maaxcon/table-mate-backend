@@ -65,12 +65,12 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
         model = CartItem
         fields = [
             "public_id",
-            "restaurant",
-            "cart_session",
             "menu_item",
             "quantity",
-            "added_by",
             "comment",
+            "added_by",
+            "cart_session",
+            "restaurant",
             "created_at",
             "updated_at",
         ]
