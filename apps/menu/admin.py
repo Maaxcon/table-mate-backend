@@ -21,16 +21,6 @@ class AllergenField(forms.MultipleChoiceField):
         kwargs.setdefault("required", False)
         super().__init__(*args, **kwargs)
 
-    def prepare_value(self, value: object) -> object:
-        if isinstance(value, str):
-            import json
-
-            try:
-                value = json.loads(value)
-            except Exception:  # nosec B110
-                pass
-        return value
-
 
 class MenuItemForm(forms.ModelForm):  # type: ignore[type-arg]
     allergens = AllergenField()
