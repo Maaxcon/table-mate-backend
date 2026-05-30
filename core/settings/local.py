@@ -3,7 +3,7 @@ from .base import *  # noqa: F401,F403
 DEBUG = True
 
 REST_FRAMEWORK = {
-    **REST_FRAMEWORK,  # type: ignore[name-defined]  # noqa: F405
+    **REST_FRAMEWORK,  # noqa: F405
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "apps.authentication.authentication.TokenVersionJWTAuthentication",
     ],

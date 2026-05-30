@@ -6,20 +6,19 @@ import apps.menu.models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('menu', '0008_menuitem_allergens'),
+        ("menu", "0008_menuitem_allergens"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='menuitem',
-            name='allergens',
+            model_name="menuitem",
+            name="allergens",
             field=models.JSONField(blank=True, default=list, validators=[apps.menu.models.validate_str_list]),
         ),
         migrations.AlterField(
-            model_name='menuitem',
-            name='ingredients',
+            model_name="menuitem",
+            name="ingredients",
             field=models.JSONField(blank=True, default=list, validators=[apps.menu.models.validate_str_list]),
         ),
     ]

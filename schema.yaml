@@ -23,7 +23,6 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -53,7 +52,6 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -70,7 +68,6 @@ paths:
       - auth
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -82,7 +79,6 @@ paths:
       - auth
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -177,7 +173,6 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -199,7 +194,6 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -259,7 +253,6 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -281,7 +274,6 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -313,7 +305,6 @@ paths:
               $ref: '#/components/schemas/PatchedEditorTable'
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -351,7 +342,6 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -384,7 +374,6 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -407,7 +396,6 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -450,7 +438,6 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -473,7 +460,6 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -516,7 +502,6 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -532,7 +517,6 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -561,7 +545,6 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -584,7 +567,6 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -653,7 +635,6 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -675,7 +656,6 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -769,7 +749,6 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -791,7 +770,6 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -847,7 +825,6 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -869,7 +846,6 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -919,7 +895,6 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -941,7 +916,6 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -999,7 +973,6 @@ paths:
       - Payments
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1021,7 +994,6 @@ paths:
       - Payments
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1071,7 +1043,6 @@ paths:
       - Reservations
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1097,7 +1068,6 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '201':
           content:
@@ -1119,7 +1089,6 @@ paths:
       - Reservations
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1151,7 +1120,6 @@ paths:
               $ref: '#/components/schemas/PatchedReservation'
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1201,7 +1169,6 @@ paths:
       - Reservations
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1249,7 +1216,6 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1271,7 +1237,6 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1299,7 +1264,6 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1321,7 +1285,6 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1344,7 +1307,6 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1386,7 +1348,6 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1408,7 +1369,6 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -2400,6 +2360,19 @@ components:
         phone:
           type: string
           readOnly: true
+        cover_image:
+          type: string
+          format: uri
+          readOnly: true
+          nullable: true
+        telegram_url:
+          type: string
+          format: uri
+          readOnly: true
+        facebook_url:
+          type: string
+          format: uri
+          readOnly: true
         settings:
           allOf:
           - $ref: '#/components/schemas/PublicRestaurantSettings'
@@ -2407,10 +2380,13 @@ components:
           nullable: true
       required:
       - address
+      - cover_image
+      - facebook_url
       - name
       - phone
       - public_id
       - settings
+      - telegram_url
     PublicRestaurantSettings:
       type: object
       properties:
@@ -2901,10 +2877,6 @@ components:
       - restaurant_public_id
       - updated_at
   securitySchemes:
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: sessionid
     jwtAuth:
       type: http
       scheme: bearer

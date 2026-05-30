@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('restaurants', '0007_add_cover_image_to_restaurant'),
+        ("restaurants", "0007_add_cover_image_to_restaurant"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='restaurant',
-            name='facebook_url',
-            field=models.URLField(blank=True, default='', max_length=255),
+            model_name="restaurant",
+            name="facebook_url",
+            field=models.URLField(blank=True, default="", max_length=255),
         ),
         migrations.AddField(
-            model_name='restaurant',
-            name='telegram_url',
-            field=models.URLField(blank=True, default='', max_length=255),
+            model_name="restaurant",
+            name="telegram_url",
+            field=models.URLField(blank=True, default="", max_length=255),
         ),
     ]

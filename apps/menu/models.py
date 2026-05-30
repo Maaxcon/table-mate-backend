@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from common.models import BaseModel, RestaurantScopedModel
+
 from .allergens import ALLERGENS
 
 
