@@ -1630,6 +1630,7 @@ components:
           type: string
           format: uuid
           readOnly: true
+          nullable: true
         name:
           type: string
           maxLength: 255
