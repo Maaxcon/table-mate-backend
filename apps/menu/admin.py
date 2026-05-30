@@ -48,12 +48,6 @@ class MenuCategoryInline(admin.TabularInline):  # type: ignore[type-arg]
     extra = 0
 
 
-class MenuItemInline(admin.TabularInline):  # type: ignore[type-arg]
-    model = MenuItem
-    fields = ["name", "category", "price", "is_available", "sort_order", "image"]
-    extra = 0
-
-
 @admin.register(Menu)
 class MenuAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ["name", "restaurant", "is_active"]
