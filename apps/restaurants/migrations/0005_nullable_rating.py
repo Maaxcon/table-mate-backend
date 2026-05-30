@@ -7,20 +7,26 @@ import apps.restaurants.models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('restaurants', '0004_restaurantsettings_eta_max_minutes_and_more'),
+        ("restaurants", "0004_restaurantsettings_eta_max_minutes_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='restaurantsettings',
-            name='rating',
-            field=models.DecimalField(blank=True, decimal_places=2, default=None, max_digits=3, null=True, validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(5)]),
+            model_name="restaurantsettings",
+            name="rating",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=2,
+                default=None,
+                max_digits=3,
+                null=True,
+                validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(5)],
+            ),
         ),
         migrations.AlterField(
-            model_name='restaurantsettings',
-            name='working_hours',
+            model_name="restaurantsettings",
+            name="working_hours",
             field=models.JSONField(default=dict, validators=[apps.restaurants.models.validate_working_hours]),
         ),
     ]
