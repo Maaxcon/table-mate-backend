@@ -27,6 +27,22 @@ class Receipt(BaseModel):
         on_delete=models.PROTECT,
         related_name="receipts",
     )
+    # Traceability to the source order/payment. Nullable so receipts can also
+    # be created by hand in the admin (e.g. for seeding or corrections).
+    order = models.OneToOneField(
+        "orders.Order",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="receipt",
+    )
+    payment = models.ForeignKey(
+        "payments.Payment",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="receipts",
+    )
     order_number = models.CharField(max_length=40)
     visited_at = models.DateTimeField()
     currency = models.CharField(max_length=3, default="UAH")
