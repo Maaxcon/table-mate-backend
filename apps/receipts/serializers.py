@@ -11,6 +11,7 @@ class ReceiptItemSerializer(serializers.ModelSerializer[ReceiptItem]):
 
 class ReceiptSerializer(serializers.ModelSerializer[Receipt]):
     items = ReceiptItemSerializer(many=True, read_only=True)
+    restaurant_public_id = serializers.CharField(source="restaurant.public_id", read_only=True)
     restaurant_name = serializers.CharField(source="restaurant.name", read_only=True)
     restaurant_address = serializers.CharField(source="restaurant.address", read_only=True)
     restaurant_phone = serializers.CharField(source="restaurant.phone", read_only=True)
@@ -23,6 +24,7 @@ class ReceiptSerializer(serializers.ModelSerializer[Receipt]):
         fields = [
             "public_id",
             "order_number",
+            "restaurant_public_id",
             "restaurant_name",
             "restaurant_address",
             "restaurant_phone",
