@@ -95,7 +95,7 @@ class Command(BaseCommand):
                 restaurant=restaurant,
                 order_number=data["order_number"],
                 visited_at=data["visited_at"],
-                currency="USD",
+                currency="UAH",
                 table_label=data["table_label"],
                 server_name=data["server_name"],
                 guests=data["guests"],

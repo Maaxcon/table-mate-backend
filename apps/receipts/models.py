@@ -29,7 +29,7 @@ class Receipt(BaseModel):
     )
     order_number = models.CharField(max_length=40)
     visited_at = models.DateTimeField()
-    currency = models.CharField(max_length=3, default="USD")
+    currency = models.CharField(max_length=3, default="UAH")
     table_label = models.CharField(max_length=40, blank=True, default="")
     server_name = models.CharField(max_length=80, blank=True, default="")
     guests = models.PositiveIntegerField(default=1)
