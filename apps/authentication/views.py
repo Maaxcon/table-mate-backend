@@ -18,6 +18,7 @@ from .serializers import (
     GoogleAuthSerializer,
     GoogleContextResponseSerializer,
     GoogleContextSerializer,
+    MeUpdateSerializer,
     UserSerializer,
 )
 from .services import google_authenticate, issue_access_token, issue_tokens, issue_tokens_with_restaurant
@@ -38,11 +39,24 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
 
-class MeView(generics.RetrieveAPIView[User]):
-    serializer_class = UserSerializer
+class MeView(generics.RetrieveUpdateAPIView[User]):
+    http_method_names = ["get", "patch", "head", "options"]
 
     def get_object(self) -> User:
         return self.request.user  # type: ignore[return-value]
+
+    def get_serializer_class(self) -> type[UserSerializer] | type[MeUpdateSerializer]:
+        if self.request.method == "PATCH":
+            return MeUpdateSerializer
+        return UserSerializer
+
+    def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        # Return the full profile so the client can refresh its state in one round-trip.
+        return Response(UserSerializer(instance).data)
 
 
 class GoogleAuthView(APIView):

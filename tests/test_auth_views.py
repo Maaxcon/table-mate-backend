@@ -253,3 +253,68 @@ class TestMeView:
         response = client.get(self.url)
 
         assert response.status_code == 401
+1
+
+@pytest.mark.django_db
+class TestMeUpdate:
+    url = "/api/auth/me/"
+
+    def _client(self, user: object) -> APIClient:
+        access, _ = issue_tokens(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        return client
+
+    def test_updates_name_and_phone(self) -> None:
+        user = UserFactory.create(role=RoleCode.CUSTOMER, first_name="Old", last_name="Name")
+        client = self._client(user)
+
+        response = client.patch(
+            self.url,
+            {"first_name": "New", "last_name": "Person", "phone": "+10000000000"},
+            format="json",
+        )
+
+        assert response.status_code == 200
+        assert response.data["first_name"] == "New"
+        assert response.data["last_name"] == "Person"
+        assert response.data["phone"] == "+10000000000"
+        user.refresh_from_db()
+        assert user.first_name == "New"
+        assert user.phone == "+10000000000"
+
+    def test_updates_email(self) -> None:
+        user = UserFactory.create(role=RoleCode.CUSTOMER, email="before@example.com")
+        client = self._client(user)
+
+        response = client.patch(self.url, {"email": "after@example.com"}, format="json")
+
+        assert response.status_code == 200
+        user.refresh_from_db()
+        assert user.email == "after@example.com"
+
+    def test_cannot_change_role(self) -> None:
+        user = UserFactory.create(role=RoleCode.CUSTOMER)
+        client = self._client(user)
+
+        response = client.patch(self.url, {"role": RoleCode.ADMIN}, format="json")
+
+        assert response.status_code == 200
+        user.refresh_from_db()
+        # role is not editable — it stays customer.
+        assert user.role == RoleCode.CUSTOMER
+
+    def test_duplicate_email_rejected(self) -> None:
+        UserFactory.create(email="taken@example.com")
+        user = UserFactory.create(role=RoleCode.CUSTOMER, email="mine@example.com")
+        client = self._client(user)
+
+        response = client.patch(self.url, {"email": "taken@example.com"}, format="json")
+
+        assert response.status_code == 400
+        user.refresh_from_db()
+        assert user.email == "mine@example.com"
+
+    def test_unauthenticated_returns_401(self) -> None:
+        response = APIClient().patch(self.url, {"first_name": "X"}, format="json")
+        assert response.status_code == 401
