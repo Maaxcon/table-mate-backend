@@ -60,12 +60,30 @@ class Receipt(BaseModel):
 
 class ReceiptItem(BaseModel):
     receipt = models.ForeignKey(Receipt, on_delete=models.CASCADE, related_name="items")
-    name = models.CharField(max_length=120)
+    # Optional link to a real dish from the restaurant's menu. Name and price
+    # are snapshotted below so the receipt stays correct even if the menu changes.
+    menu_item = models.ForeignKey(
+        "menu.MenuItem",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="receipt_items",
+    )
+    name = models.CharField(max_length=120, blank=True)
     quantity = models.PositiveIntegerField(default=1)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
 
     class Meta:
         ordering = ["id"]
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        # Copy name/price from the chosen menu item when left blank.
+        if self.menu_item is not None:
+            if not self.name:
+                self.name = self.menu_item.name
+            if not self.unit_price:
+                self.unit_price = Decimal(self.menu_item.price).quantize(Decimal("0.01"))
+        super().save(*args, **kwargs)  # type: ignore[arg-type]
 
     def __str__(self) -> str:
         return f"{self.quantity}× {self.name}"
