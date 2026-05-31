@@ -253,7 +253,7 @@ class TestMeView:
         response = client.get(self.url)
 
         assert response.status_code == 401
-1
+
 
 @pytest.mark.django_db
 class TestMeUpdate:
@@ -283,7 +283,7 @@ class TestMeUpdate:
         assert user.first_name == "New"
         assert user.phone == "+10000000000"
 
-    def test_updates_email(self) -> None:
+    def test_email_is_read_only(self) -> None:
         user = UserFactory.create(role=RoleCode.CUSTOMER, email="before@example.com")
         client = self._client(user)
 
@@ -291,7 +291,8 @@ class TestMeUpdate:
 
         assert response.status_code == 200
         user.refresh_from_db()
-        assert user.email == "after@example.com"
+        # Email is the Google identity — it must not change here.
+        assert user.email == "before@example.com"
 
     def test_cannot_change_role(self) -> None:
         user = UserFactory.create(role=RoleCode.CUSTOMER)
@@ -303,17 +304,6 @@ class TestMeUpdate:
         user.refresh_from_db()
         # role is not editable — it stays customer.
         assert user.role == RoleCode.CUSTOMER
-
-    def test_duplicate_email_rejected(self) -> None:
-        UserFactory.create(email="taken@example.com")
-        user = UserFactory.create(role=RoleCode.CUSTOMER, email="mine@example.com")
-        client = self._client(user)
-
-        response = client.patch(self.url, {"email": "taken@example.com"}, format="json")
-
-        assert response.status_code == 400
-        user.refresh_from_db()
-        assert user.email == "mine@example.com"
 
     def test_unauthenticated_returns_401(self) -> None:
         response = APIClient().patch(self.url, {"first_name": "X"}, format="json")

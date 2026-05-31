@@ -57,17 +57,17 @@ class MeUpdateSerializer(serializers.ModelSerializer[User]):
     """Fields a user may edit about themselves.
 
     Deliberately excludes role, is_active and restaurant so a customer cannot
-    escalate their own privileges. Email is unique; the model's unique
-    constraint is validated automatically and excludes the current user.
+    escalate their own privileges. Email is NOT editable: it is the Google
+    sign-in identity, so changing it would lock the user out / create a
+    duplicate account on the next login.
     """
 
     class Meta:
         model = User
-        fields = ["first_name", "last_name", "phone", "email"]
+        fields = ["first_name", "last_name", "phone"]
         extra_kwargs = {
             "first_name": {"required": False},
             "last_name": {"required": False},
-            "email": {"required": False},
         }
 
 
