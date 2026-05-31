@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.contrib import admin
+from django.db.models import QuerySet
 from django.http import HttpRequest
 
 from apps.menu.models import MenuItem
@@ -77,6 +78,16 @@ class ReceiptAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
             {"fields": ["payment_method", "payment_status"]},
         ),
     ]
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Receipt]:
+        # Prefetch items (used by subtotal/total) and related FKs to avoid N+1
+        # queries when rendering the list and computed columns.
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("customer", "restaurant")
+            .prefetch_related("items")
+        )
 
     @admin.display(description="Subtotal")
     def subtotal_display(self, obj: Receipt) -> str:
