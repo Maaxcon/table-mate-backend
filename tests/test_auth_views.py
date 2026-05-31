@@ -308,3 +308,17 @@ class TestMeUpdate:
     def test_unauthenticated_returns_401(self) -> None:
         response = APIClient().patch(self.url, {"first_name": "X"}, format="json")
         assert response.status_code == 401
+
+
+@pytest.mark.django_db
+class TestAuthThrottling:
+    url = "/api/auth/google/"
+
+    def test_login_endpoint_is_rate_limited(self) -> None:
+        # "auth" scope is 10/min; the 11th request from the same IP is blocked.
+        client = APIClient()
+        payload = {"code": "x", "redirect_uri": "http://localhost:3000"}
+        statuses = [client.post(self.url, payload, format="json").status_code for _ in range(11)]
+
+        assert 429 not in statuses[:10]
+        assert statuses[-1] == 429

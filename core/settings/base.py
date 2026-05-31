@@ -116,6 +116,13 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "common.api.exception_handler.custom_exception_handler",
+    # ScopedRateThrottle only limits views that set `throttle_scope`; every
+    # other view is unaffected.
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {
+        "auth": "10/min",  # login / Google sign-in (anti brute-force, per IP)
+        "me_write": "30/min",  # profile updates
+    },
 }
 
 SPECTACULAR_SETTINGS = {
