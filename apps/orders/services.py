@@ -125,36 +125,36 @@ def submit_order(
     user: User,
     notes: str | None = None,
 ) -> Order:
-    table = Table.objects.select_for_update().filter(public_id=table_id, restaurant_id=restaurant_id).first()
-    if table is None:
-        raise TableNotFoundError()
-
     menu_item_ids = [e["menu_item_id"] for e in items_data]
-    fetched_items: QuerySet[MenuItem] = MenuItem.objects.filter(
-        public_id__in=menu_item_ids,
-        restaurant_id=restaurant_id,
-    ).select_for_update()
-
-    fetched_map: dict[str, MenuItem] = {}
-    for mi in fetched_items:
-        fetched_map[str(mi.public_id)] = mi
-
-    missing = [str(mid) for mid in menu_item_ids if str(mid) not in fetched_map]
-    if missing:
-        raise MenuItemUnavailableError(f"Menu items not found: {missing}")
-
-    unavailable = [str(mi) for mi in fetched_map if not fetched_map[mi].is_available]
-    if unavailable:
-        raise MenuItemUnavailableError(f"Menu items unavailable: {unavailable}")
-
-    settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
-    currency = settings.currency if settings else "UAH"
-    tax_rate = settings.default_tax_rate if settings else Decimal("0")
-
     max_guest_slot = max(e["guest_slot"] for e in items_data)
     guest_count = max(max_guest_slot + 1, 1)
 
     with transaction.atomic():
+        table = Table.objects.select_for_update().filter(public_id=table_id, restaurant_id=restaurant_id).first()
+        if table is None:
+            raise TableNotFoundError()
+
+        fetched_items: QuerySet[MenuItem] = MenuItem.objects.filter(
+            public_id__in=menu_item_ids,
+            restaurant_id=restaurant_id,
+        ).select_for_update()
+
+        fetched_map: dict[str, MenuItem] = {}
+        for mi in fetched_items:
+            fetched_map[str(mi.public_id)] = mi
+
+        missing = [str(mid) for mid in menu_item_ids if str(mid) not in fetched_map]
+        if missing:
+            raise MenuItemUnavailableError(f"Menu items not found: {missing}")
+
+        unavailable = [str(mi) for mi in fetched_map if not fetched_map[mi].is_available]
+        if unavailable:
+            raise MenuItemUnavailableError(f"Menu items unavailable: {unavailable}")
+
+        settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
+        currency = settings.currency if settings else "UAH"
+        tax_rate = settings.default_tax_rate if settings else Decimal("0")
+
         session = _find_or_create_session(
             restaurant_id=restaurant_id,
             table=table,
