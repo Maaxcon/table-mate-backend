@@ -20,14 +20,15 @@ class ReceiptItemInline(admin.TabularInline):  # type: ignore[type-arg]
         return f"{obj.line_total:.2f}"
 
     def get_formset(self, request: HttpRequest, obj: Receipt | None = None, **kwargs: Any) -> Any:
-        # Remember which restaurant this receipt belongs to (change page only),
-        # so the dish dropdown can be limited to that restaurant's menu.
-        self._restaurant_id = obj.restaurant_id if obj else None
+        # Remember which restaurant this receipt belongs to (change page only) so
+        # the dish dropdown can be limited to that restaurant's menu. Stored on the
+        # request, not self: admin instances are shared across threads/requests.
+        request._receipt_restaurant_id = obj.restaurant_id if obj else None  # type: ignore[attr-defined]
         return super().get_formset(request, obj, **kwargs)
 
     def formfield_for_foreignkey(self, db_field: Any, request: HttpRequest, **kwargs: Any) -> Any:
         if db_field.name == "menu_item":
-            restaurant_id = getattr(self, "_restaurant_id", None)
+            restaurant_id = getattr(request, "_receipt_restaurant_id", None)
             qs = MenuItem.objects.all()
             kwargs["queryset"] = (
                 qs.filter(restaurant_id=restaurant_id) if restaurant_id else qs.none()
