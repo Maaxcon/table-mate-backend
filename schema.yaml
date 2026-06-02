@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: TableMate Platform API
-  version: 1.0.0
-  description: Real-time multi-tenant restaurant operational ecosystem backend.
+  title: Table Mate API
+  version: 0.1.0
+  description: Table Mate backend API
 paths:
   /api/auth/customer/context/:
     post:
@@ -23,6 +23,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -51,7 +52,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -81,7 +82,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -98,7 +99,7 @@ paths:
       - auth
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -110,38 +111,13 @@ paths:
       - auth
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
-          description: ''
-    patch:
-      operationId: auth_me_partial_update
-      tags:
-      - auth
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedMeUpdate'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedMeUpdate'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedMeUpdate'
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeUpdate'
           description: ''
   /api/auth/refresh/:
     post:
@@ -163,8 +139,6 @@ paths:
             schema:
               $ref: '#/components/schemas/TokenRefresh'
         required: true
-      security:
-      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -192,8 +166,6 @@ paths:
             schema:
               $ref: '#/components/schemas/CustomTokenObtainPair'
         required: true
-      security:
-      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -234,7 +206,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -256,7 +228,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -316,7 +288,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -338,7 +310,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -370,7 +342,7 @@ paths:
               $ref: '#/components/schemas/PatchedEditorTable'
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -408,7 +380,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -441,7 +413,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -464,7 +436,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -507,7 +479,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -530,7 +502,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -573,7 +545,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -589,7 +561,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -618,7 +590,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -641,7 +613,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -670,6 +642,7 @@ paths:
       - Cart
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -695,6 +668,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
@@ -716,6 +690,7 @@ paths:
       - Cart
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -749,6 +724,7 @@ paths:
       - Cart
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -781,6 +757,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
@@ -808,6 +785,7 @@ paths:
       - Cart
       security:
       - jwtAuth: []
+      - cookieAuth: []
       responses:
         '204':
           description: No response body
@@ -871,7 +849,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -893,7 +871,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -987,7 +965,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1009,7 +987,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1065,7 +1043,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1087,7 +1065,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1137,7 +1115,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1159,7 +1137,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1217,7 +1195,7 @@ paths:
       - Payments
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1239,38 +1217,13 @@ paths:
       - Payments
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Payment'
-          description: ''
-  /api/receipts/my/:
-    get:
-      operationId: receipts_my_list
-      description: The signed-in user's own receipt history, newest first.
-      parameters:
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      tags:
-      - Receipts
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Receipt'
           description: ''
   /api/reservations/reservations/:
     get:
@@ -1314,7 +1267,7 @@ paths:
       - Reservations
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1340,7 +1293,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '201':
           content:
@@ -1362,7 +1315,7 @@ paths:
       - Reservations
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1394,7 +1347,7 @@ paths:
               $ref: '#/components/schemas/PatchedReservation'
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1444,7 +1397,7 @@ paths:
       - Reservations
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1492,7 +1445,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1514,7 +1467,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1542,7 +1495,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1564,7 +1517,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       - {}
       responses:
         '200':
@@ -1587,7 +1540,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1629,7 +1582,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1651,7 +1604,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
-      - jwt_Auth: []
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1941,26 +1894,6 @@ components:
       - restaurant
       - updated_at
       - version
-    MeUpdate:
-      type: object
-      description: |-
-        Fields a user may edit about themselves.
-
-        Deliberately excludes role, is_active and restaurant so a customer cannot
-        escalate their own privileges. Email is NOT editable: it is the Google
-        sign-in identity, so changing it would lock the user out / create a
-        duplicate account on the next login.
-      properties:
-        first_name:
-          type: string
-          maxLength: 150
-        last_name:
-          type: string
-          maxLength: 150
-        phone:
-          type: string
-          nullable: true
-          maxLength: 32
     Menu:
       type: object
       properties:
@@ -2056,7 +1989,6 @@ components:
           type: string
           format: uuid
           readOnly: true
-          nullable: true
         name:
           type: string
           maxLength: 255
@@ -2710,26 +2642,6 @@ components:
           type: string
           format: date-time
           readOnly: true
-    PatchedMeUpdate:
-      type: object
-      description: |-
-        Fields a user may edit about themselves.
-
-        Deliberately excludes role, is_active and restaurant so a customer cannot
-        escalate their own privileges. Email is NOT editable: it is the Google
-        sign-in identity, so changing it would lock the user out / create a
-        duplicate account on the next login.
-      properties:
-        first_name:
-          type: string
-          maxLength: 150
-        last_name:
-          type: string
-          maxLength: 150
-        phone:
-          type: string
-          nullable: true
-          maxLength: 32
     PatchedReservation:
       type: object
       properties:
@@ -2821,14 +2733,6 @@ components:
       - public_id
       - restaurant
       - updated_at
-    PaymentMethodEnum:
-      enum:
-      - card
-      - cash
-      type: string
-      description: |-
-        * `card` - Card
-        * `cash` - Cash
     PaymentStatusEnum:
       enum:
       - unpaid
@@ -2861,19 +2765,6 @@ components:
         phone:
           type: string
           readOnly: true
-        cover_image:
-          type: string
-          format: uri
-          readOnly: true
-          nullable: true
-        telegram_url:
-          type: string
-          format: uri
-          readOnly: true
-        facebook_url:
-          type: string
-          format: uri
-          readOnly: true
         settings:
           allOf:
           - $ref: '#/components/schemas/PublicRestaurantSettings'
@@ -2881,13 +2772,10 @@ components:
           nullable: true
       required:
       - address
-      - cover_image
-      - facebook_url
       - name
       - phone
       - public_id
       - settings
-      - telegram_url
     PublicRestaurantSettings:
       type: object
       properties:
@@ -2922,107 +2810,6 @@ components:
       - rating
       - timezone
       - working_hours
-    Receipt:
-      type: object
-      properties:
-        public_id:
-          type: string
-          format: uuid
-          readOnly: true
-        order_number:
-          type: string
-          maxLength: 40
-        restaurant_public_id:
-          type: string
-          readOnly: true
-        restaurant_name:
-          type: string
-          readOnly: true
-        restaurant_address:
-          type: string
-          readOnly: true
-        restaurant_phone:
-          type: string
-          readOnly: true
-        restaurant_image:
-          type: string
-          nullable: true
-          readOnly: true
-        visited_at:
-          type: string
-          format: date-time
-        currency:
-          type: string
-          maxLength: 3
-        table_label:
-          type: string
-          maxLength: 40
-        server_name:
-          type: string
-          maxLength: 80
-        guests:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/ReceiptItem'
-          readOnly: true
-        subtotal:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          readOnly: true
-        tax:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-        service_charge:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-        tip:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-        total:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          readOnly: true
-        payment_method:
-          $ref: '#/components/schemas/PaymentMethodEnum'
-        payment_status:
-          type: string
-          maxLength: 20
-      required:
-      - items
-      - order_number
-      - public_id
-      - restaurant_address
-      - restaurant_image
-      - restaurant_name
-      - restaurant_phone
-      - restaurant_public_id
-      - subtotal
-      - total
-      - visited_at
-    ReceiptItem:
-      type: object
-      properties:
-        name:
-          type: string
-          maxLength: 120
-        quantity:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        unit_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
-          nullable: true
     Reservation:
       type: object
       properties:
@@ -3479,6 +3266,10 @@ components:
       - restaurant_public_id
       - updated_at
   securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
     jwtAuth:
       type: http
       scheme: bearer
