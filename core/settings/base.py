@@ -150,14 +150,27 @@ CORS_ALLOWED_ORIGINS = env.list(
 )
 CORS_ALLOW_CREDENTIALS = True
 
+REDIS_URL = env.str("REDIS_URL", default="redis://localhost:6379/0")
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [
-                env.str("REDIS_URL", default="redis://localhost:6379/0"),
-            ],
+            "hosts": [REDIS_URL],
         },
+    }
+}
+
+# DRF throttling stores its request counters in the default cache. Without a
+# shared backend it falls back to per-process LocMemCache, so each worker keeps
+# its own counter and the effective limit becomes (rate x worker_count) per IP —
+# defeating the anti-brute-force intent of the "auth" scope. Redis is already a
+# hard dependency (channels), so reuse it as a process-shared cache.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "KEY_PREFIX": "tablemate",
     }
 }
 
