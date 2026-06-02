@@ -7,28 +7,40 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('menu', '0006_add_image_to_menuitem'),
-        ('restaurants', '0003_add_phone_to_restaurant'),
+        ("menu", "0006_add_image_to_menuitem"),
+        ("restaurants", "0003_add_phone_to_restaurant"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='MenuItemLike',
+            name="MenuItemLike",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('public_id', models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('guest_token', models.CharField(max_length=64)),
-                ('menu_item', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='likes', to='menu.menuitem')),
-                ('restaurant', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to='restaurants.restaurant')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("public_id", models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("guest_token", models.CharField(max_length=64)),
+                (
+                    "menu_item",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="likes", to="menu.menuitem"
+                    ),
+                ),
+                (
+                    "restaurant",
+                    models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to="restaurants.restaurant"),
+                ),
             ],
             options={
-                'ordering': ['menu_item_id', 'id'],
-                'indexes': [models.Index(fields=['restaurant', 'menu_item'], name='menu_item_like_rest_item_idx'), models.Index(fields=['guest_token'], name='menu_item_like_guest_idx')],
-                'constraints': [models.UniqueConstraint(fields=('menu_item', 'guest_token'), name='menu_item_like_unique')],
+                "ordering": ["menu_item_id", "id"],
+                "indexes": [
+                    models.Index(fields=["restaurant", "menu_item"], name="menu_item_like_rest_item_idx"),
+                    models.Index(fields=["guest_token"], name="menu_item_like_guest_idx"),
+                ],
+                "constraints": [
+                    models.UniqueConstraint(fields=("menu_item", "guest_token"), name="menu_item_like_unique")
+                ],
             },
         ),
     ]

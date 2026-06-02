@@ -5,34 +5,44 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('restaurants', '0003_add_phone_to_restaurant'),
+        ("restaurants", "0003_add_phone_to_restaurant"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='restaurantsettings',
-            name='eta_max_minutes',
+            model_name="restaurantsettings",
+            name="eta_max_minutes",
             field=models.PositiveSmallIntegerField(default=30),
         ),
         migrations.AddField(
-            model_name='restaurantsettings',
-            name='eta_min_minutes',
+            model_name="restaurantsettings",
+            name="eta_min_minutes",
             field=models.PositiveSmallIntegerField(default=20),
         ),
         migrations.AddField(
-            model_name='restaurantsettings',
-            name='price_band',
-            field=models.PositiveSmallIntegerField(default=2, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(4)]),
+            model_name="restaurantsettings",
+            name="price_band",
+            field=models.PositiveSmallIntegerField(
+                default=2,
+                validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(4)],
+            ),
         ),
         migrations.AddField(
-            model_name='restaurantsettings',
-            name='rating',
-            field=models.DecimalField(decimal_places=2, default=4.8, max_digits=3, validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(5)]),
+            model_name="restaurantsettings",
+            name="rating",
+            field=models.DecimalField(
+                decimal_places=2,
+                default=4.8,
+                max_digits=3,
+                validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(5)],
+            ),
         ),
         migrations.AddConstraint(
-            model_name='restaurantsettings',
-            constraint=models.CheckConstraint(condition=models.Q(('eta_min_minutes__lte', models.F('eta_max_minutes'))), name='restaurant_settings_eta_range_valid'),
+            model_name="restaurantsettings",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("eta_min_minutes__lte", models.F("eta_max_minutes"))),
+                name="restaurant_settings_eta_range_valid",
+            ),
         ),
     ]

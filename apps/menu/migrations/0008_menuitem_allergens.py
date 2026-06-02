@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('menu', '0007_menuitemlike'),
+        ("menu", "0007_menuitemlike"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='menuitem',
-            name='allergens',
+            model_name="menuitem",
+            name="allergens",
             field=models.JSONField(blank=True, default=list),
         ),
     ]

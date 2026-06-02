@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('menu', '0004_add_ingredients_to_menuitem'),
+        ("menu", "0004_add_ingredients_to_menuitem"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='menuitem',
-            name='weight_grams',
+            model_name="menuitem",
+            name="weight_grams",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
     ]

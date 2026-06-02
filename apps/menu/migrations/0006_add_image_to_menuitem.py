@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('menu', '0005_add_weight_grams_to_menuitem'),
+        ("menu", "0005_add_weight_grams_to_menuitem"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='menuitem',
-            name='image',
-            field=models.ImageField(blank=True, null=True, upload_to='menu_items/'),
+            model_name="menuitem",
+            name="image",
+            field=models.ImageField(blank=True, null=True, upload_to="menu_items/"),
         ),
     ]
