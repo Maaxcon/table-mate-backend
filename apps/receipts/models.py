@@ -114,4 +114,7 @@ class ReceiptItem(BaseModel):
 
     @property
     def line_total(self) -> Decimal:
-        return self.unit_price * self.quantity
+        # unit_price is nullable on the model but save() coalesces None to 0.00,
+        # so a persisted row always has a value; guard for unsaved instances.
+        price = self.unit_price if self.unit_price is not None else Decimal("0.00")
+        return price * self.quantity
