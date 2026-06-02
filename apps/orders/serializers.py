@@ -1,3 +1,5 @@
+from typing import Any
+
 from rest_framework import serializers
 
 from apps.authentication.models import User
@@ -87,6 +89,27 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
             "updated_at",
         ]
         read_only_fields = ["public_id", "created_at", "updated_at"]
+
+
+class CreateOrderItemSerializer(serializers.Serializer[None]):
+    menu_item_id = serializers.UUIDField()
+    quantity = serializers.IntegerField(min_value=1)
+    guest_slot = serializers.IntegerField(min_value=0)
+    comment = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class CreateOrderFromCartSerializer(serializers.Serializer[None]):
+    table_id = serializers.UUIDField()
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    items = CreateOrderItemSerializer(many=True, allow_empty=False)
+
+    def validate_items(self, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not value:
+            raise serializers.ValidationError("At least one item is required.")
+        return value
+
+    def validate_table_id(self, value: str) -> str:
+        return str(value)
 
 
 class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):

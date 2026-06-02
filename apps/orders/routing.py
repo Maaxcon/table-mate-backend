@@ -1,7 +1,6 @@
-from django.urls import path
+# ws/cart/ routing removed — cart is now offline-first.
+# ws/hall/ routing lives in apps/editor/routing.py
 
-from .consumers import CartConsumer
+from django.urls import URLPattern, URLResolver
 
-websocket_urlpatterns = [
-    path("ws/cart/<uuid:session_id>/", CartConsumer.as_asgi()),
-]
+websocket_urlpatterns: list[URLPattern | URLResolver] = []

@@ -1,16 +1,26 @@
-from drf_spectacular.utils import extend_schema
-from rest_framework import viewsets
+from typing import Any, cast
 
+from drf_spectacular.utils import extend_schema
+from rest_framework import status, viewsets
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.authentication.models import User
 from apps.authentication.permissions import IsFloor, IsStaff
-from common.api import RestaurantScopedViewSetMixin
+from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
+from common.idempotency import IdempotencyKeyMixin
 
 from .models import Order, OrderItem, Session, Ticket
 from .serializers import (
+    CreateOrderFromCartSerializer,
     OrderItemSerializer,
     OrderSerializer,
     SessionSerializer,
     TicketSerializer,
 )
+from .services import submit_order
 
 
 @extend_schema(tags=["Orders"])
@@ -81,3 +91,57 @@ class OrderItemViewSet(
         "is_wasted",
     ]
     ordering_fields = ["created_at", "updated_at", "guest_slot", "status", "voided_at"]
+
+
+@extend_schema(tags=["Orders"])
+class OrderSubmitView(IdempotencyKeyMixin, APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = CreateOrderFromCartSerializer
+
+    @extend_schema(
+        request=CreateOrderFromCartSerializer,
+        responses={201: OrderSerializer},
+    )
+    def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        idempotency_key = self.validate_idempotency_key(request)
+        if idempotency_key is not None:
+            cached = self.get_cached_response(idempotency_key)
+            if cached is not None:
+                return cached
+
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is None:
+            return Response(
+                {"detail": "Restaurant context required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = CreateOrderFromCartSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = cast(User, request.user)
+        items_data = [
+            {
+                "menu_item_id": entry["menu_item_id"],
+                "quantity": entry["quantity"],
+                "guest_slot": entry["guest_slot"],
+                "comment": entry.get("comment", ""),
+            }
+            for entry in serializer.validated_data["items"]
+        ]
+
+        order = submit_order(
+            restaurant_id=restaurant_id,
+            table_id=str(serializer.validated_data["table_id"]),
+            items_data=items_data,
+            user=user,
+            notes=serializer.validated_data.get("notes"),
+        )
+
+        result = OrderSerializer(order, context={"request": request})
+        response = Response(result.data, status=status.HTTP_201_CREATED)
+
+        if idempotency_key is not None:
+            self.cache_response(idempotency_key, response)
+
+        return response
