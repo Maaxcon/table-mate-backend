@@ -24,6 +24,7 @@ from .serializers import (
 class PublicRestaurantViewSet(
     PublicLookupMixin,
     mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
     viewsets.GenericViewSet[Restaurant],
 ):
     queryset = Restaurant.objects.select_related("settings").all()
