@@ -42,10 +42,14 @@ def search_menu_items(
     restaurant_id: int,
     guest_token: str | None = None,
 ) -> QuerySet[MenuItem]:
-    qs = MenuItem.objects.filter(
-        restaurant_id=restaurant_id,
-        is_available=True,
-    ).filter(
-        Q(name__icontains=query) | Q(description__icontains=query),
-    ).select_related("category")
+    qs = (
+        MenuItem.objects.filter(
+            restaurant_id=restaurant_id,
+            is_available=True,
+        )
+        .filter(
+            Q(name__icontains=query) | Q(description__icontains=query),
+        )
+        .select_related("category")
+    )
     return _with_like_annotations(qs, guest_token=guest_token)

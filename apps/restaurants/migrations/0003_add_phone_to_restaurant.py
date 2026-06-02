@@ -6,30 +6,29 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('restaurants', '0002_alter_restaurant_public_id_and_more'),
+        ("restaurants", "0002_alter_restaurant_public_id_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='restaurant',
-            name='phone',
-            field=models.CharField(blank=True, default='', max_length=32),
+            model_name="restaurant",
+            name="phone",
+            field=models.CharField(blank=True, default="", max_length=32),
         ),
         migrations.AlterField(
-            model_name='restaurant',
-            name='public_id',
+            model_name="restaurant",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
         migrations.AlterField(
-            model_name='restaurantsettings',
-            name='public_id',
+            model_name="restaurantsettings",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
         migrations.AlterField(
-            model_name='table',
-            name='public_id',
+            model_name="table",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
     ]

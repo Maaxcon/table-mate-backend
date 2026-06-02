@@ -50,9 +50,7 @@ class PublicRestaurantQueryMixin:
             setattr(request, _CACHE_ATTR, None)
             return None
         try:
-            restaurant_id: int | None = Restaurant.objects.values_list("id", flat=True).get(
-                public_id=public_id
-            )
+            restaurant_id: int | None = Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
         except (Restaurant.DoesNotExist, ValueError):
             restaurant_id = None
         setattr(request, _CACHE_ATTR, restaurant_id)

@@ -6,30 +6,29 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('menu', '0003_alter_menu_public_id_alter_menucategory_public_id_and_more'),
+        ("menu", "0003_alter_menu_public_id_alter_menucategory_public_id_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='menuitem',
-            name='ingredients',
+            model_name="menuitem",
+            name="ingredients",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AlterField(
-            model_name='menu',
-            name='public_id',
+            model_name="menu",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
         migrations.AlterField(
-            model_name='menucategory',
-            name='public_id',
+            model_name="menucategory",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
         migrations.AlterField(
-            model_name='menuitem',
-            name='public_id',
+            model_name="menuitem",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
     ]

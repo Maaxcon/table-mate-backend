@@ -3,10 +3,20 @@ from django.db import models
 
 from common.models import BaseModel, RestaurantScopedModel
 
+from .allergens import ALLERGENS
+
 
 def validate_str_list(value: object) -> None:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ValidationError("Must be a list of strings.")
+
+
+def validate_allergens(value: object) -> None:
+    if not isinstance(value, list):
+        raise ValidationError("Must be a list.")
+    invalid = [v for v in value if v not in ALLERGENS]
+    if invalid:
+        raise ValidationError(f"Invalid allergens: {invalid}. Choose from: {ALLERGENS}")
 
 
 class Menu(RestaurantScopedModel):
@@ -58,7 +68,7 @@ class MenuItem(RestaurantScopedModel):
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     ingredients = models.JSONField(default=list, blank=True, validators=[validate_str_list])
-    allergens = models.JSONField(default=list, blank=True, validators=[validate_str_list])
+    allergens = models.JSONField(default=list, blank=True, validators=[validate_allergens])
     weight_grams = models.PositiveIntegerField(null=True, blank=True)
     image = models.ImageField(upload_to="menu_items/", null=True, blank=True)
     price = models.DecimalField(max_digits=14, decimal_places=4)
@@ -83,6 +93,13 @@ class MenuItem(RestaurantScopedModel):
                 name="menu_menuitem_rest_uniq",
             ),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.category is not None and self.menu_id and self.category.menu_id != self.menu_id:
+            raise ValidationError(
+                {"category": "Category must belong to the same menu as this item."}
+            )
 
     def __str__(self) -> str:
         return self.name

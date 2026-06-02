@@ -6,6 +6,7 @@ from rest_framework import generics, status
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import BaseThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -18,6 +19,7 @@ from .serializers import (
     GoogleAuthSerializer,
     GoogleContextResponseSerializer,
     GoogleContextSerializer,
+    MeUpdateSerializer,
     UserSerializer,
 )
 from .services import google_authenticate, issue_access_token, issue_tokens, issue_tokens_with_restaurant
@@ -36,18 +38,40 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_scope = "auth"
 
 
-class MeView(generics.RetrieveAPIView[User]):
-    serializer_class = UserSerializer
+class MeView(generics.RetrieveUpdateAPIView[User]):
+    http_method_names = ["get", "patch", "head", "options"]
+    throttle_scope = "me_write"
+
+    def get_throttles(self) -> list[BaseThrottle]:
+        # Only rate-limit writes; GET /me/ runs on every app load.
+        if self.request.method == "PATCH":
+            return super().get_throttles()
+        return []
 
     def get_object(self) -> User:
         return self.request.user  # type: ignore[return-value]
+
+    def get_serializer_class(self) -> type[UserSerializer] | type[MeUpdateSerializer]:
+        if self.request.method == "PATCH":
+            return MeUpdateSerializer
+        return UserSerializer
+
+    def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        # Return the full profile so the client can refresh its state in one round-trip.
+        return Response(UserSerializer(instance).data)
 
 
 class GoogleAuthView(APIView):
     permission_classes = [AllowAny]
     serializer_class = GoogleAuthSerializer
+    throttle_scope = "auth"
 
     @extend_schema(
         request=GoogleAuthSerializer,

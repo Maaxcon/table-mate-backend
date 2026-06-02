@@ -53,6 +53,24 @@ class UserSerializer(serializers.ModelSerializer[User]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
+class MeUpdateSerializer(serializers.ModelSerializer[User]):
+    """Fields a user may edit about themselves.
+
+    Deliberately excludes role, is_active and restaurant so a customer cannot
+    escalate their own privileges. Email is NOT editable: it is the Google
+    sign-in identity, so changing it would lock the user out / create a
+    duplicate account on the next login.
+    """
+
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "phone"]
+        extra_kwargs = {
+            "first_name": {"required": False},
+            "last_name": {"required": False},
+        }
+
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     restaurant_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     access = serializers.CharField(read_only=True)
