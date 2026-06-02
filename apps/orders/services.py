@@ -26,7 +26,6 @@ from .models import (
     TicketStatus,
 )
 
-_TWO_PLACES = Decimal("0.01")
 _FOUR_PLACES = Decimal("0.0001")
 
 
