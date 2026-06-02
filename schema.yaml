@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Table Mate API
-  version: 0.1.0
-  description: Table Mate backend API
+  title: TableMate Platform API
+  version: 1.0.0
+  description: Real-time multi-tenant restaurant operational ecosystem backend.
 paths:
   /api/auth/google/:
     post:
@@ -23,6 +23,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -52,6 +53,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -68,6 +70,7 @@ paths:
       - auth
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -79,6 +82,7 @@ paths:
       - auth
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -103,6 +107,7 @@ paths:
               $ref: '#/components/schemas/PatchedMeUpdate'
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -130,6 +135,8 @@ paths:
             schema:
               $ref: '#/components/schemas/TokenRefresh'
         required: true
+      security:
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -157,6 +164,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CustomTokenObtainPair'
         required: true
+      security:
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -197,6 +206,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -218,6 +228,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -277,6 +288,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -298,6 +310,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -329,6 +342,7 @@ paths:
               $ref: '#/components/schemas/PatchedEditorTable'
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -366,6 +380,7 @@ paths:
       - Editor
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -398,6 +413,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -420,6 +436,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -462,6 +479,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -484,6 +502,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -526,6 +545,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -541,6 +561,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -569,6 +590,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -591,6 +613,7 @@ paths:
       - Menu
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -659,6 +682,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -680,6 +704,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -773,6 +798,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -794,6 +820,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -849,6 +876,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -870,6 +898,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -919,6 +948,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -940,6 +970,7 @@ paths:
       - Orders
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -997,6 +1028,7 @@ paths:
       - Payments
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1018,6 +1050,7 @@ paths:
       - Payments
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1040,6 +1073,7 @@ paths:
       - Receipts
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1091,6 +1125,7 @@ paths:
       - Reservations
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1116,6 +1151,7 @@ paths:
         required: true
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '201':
           content:
@@ -1137,6 +1173,7 @@ paths:
       - Reservations
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1168,6 +1205,7 @@ paths:
               $ref: '#/components/schemas/PatchedReservation'
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1217,6 +1255,7 @@ paths:
       - Reservations
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1264,6 +1303,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1285,6 +1325,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1312,6 +1353,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1333,6 +1375,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       - {}
       responses:
         '200':
@@ -1355,6 +1398,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1396,6 +1440,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:
@@ -1417,6 +1462,7 @@ paths:
       - Restaurants
       security:
       - jwtAuth: []
+      - jwt_Auth: []
       responses:
         '200':
           content:

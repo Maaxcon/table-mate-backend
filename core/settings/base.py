@@ -125,16 +125,6 @@ REST_FRAMEWORK = {
     },
 }
 
-SPECTACULAR_SETTINGS = {
-    "TITLE": "TableMate Platform API",
-    "DESCRIPTION": "Real-time multi-tenant restaurant operational ecosystem backend.",
-    "VERSION": "1.0.0",
-    "SERVE_INCLUDE_SCHEMA": False,
-    "OAS_VERSION": "3.0.3",
-    "SECURITY": [{"jwt_Auth": []}],
-    "EXCEPTION_HANDLER": "common.api.exception_handler.custom_exception_handler",
-}
-
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
@@ -175,10 +165,13 @@ CACHES = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Table Mate API",
-    "DESCRIPTION": "Table Mate backend API",
-    "VERSION": "0.1.0",
+    "TITLE": "TableMate Platform API",
+    "DESCRIPTION": "Real-time multi-tenant restaurant operational ecosystem backend.",
+    "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "OAS_VERSION": "3.0.3",
+    "SECURITY": [{"jwt_Auth": []}],
+    "EXCEPTION_HANDLER": "common.api.exception_handler.custom_exception_handler",
     "ENUM_NAME_OVERRIDES": {
         "TableStatus": "apps.restaurants.models.TableStatus",
         "ReservationStatus": "apps.reservations.models.ReservationStatus",
