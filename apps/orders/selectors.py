@@ -30,7 +30,11 @@ def is_cart_participant(user: User, session: CartSession) -> bool:
 
 
 def get_cart_session(restaurant_id: int, session_pk: str) -> CartSession | None:
-    return CartSession.objects.filter(public_id=session_pk, restaurant_id=restaurant_id).first()
+    return (
+        CartSession.objects.select_related("restaurant")
+        .filter(public_id=session_pk, restaurant_id=restaurant_id)
+        .first()
+    )
 
 
 def get_cart_item(restaurant_id: int, item_id: str, session: CartSession) -> CartItem | None:

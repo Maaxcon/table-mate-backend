@@ -99,7 +99,13 @@ def add_item_to_cart(
                 comment=comment,
                 updated_at=timezone.now(),
             )
-            item.refresh_from_db()
+            item.refresh_from_db(fields=["quantity", "comment", "added_by_id", "updated_at"])
+
+        item.menu_item = menu_item
+        item.cart_session = session
+        if "restaurant" in session.__dict__:
+            item.restaurant = session.__dict__["restaurant"]
+        item.added_by = user
     return item
 
 
