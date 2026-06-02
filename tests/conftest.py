@@ -107,6 +107,16 @@ class MenuItemFactory(DjangoModelFactory[MenuItem]):
     is_available = True
 
 
+@pytest.fixture(autouse=True)
+def _clear_cache() -> Any:
+    # Reset rate-limit (throttle) counters between tests so they don't leak.
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
+
+
 @pytest.fixture
 def user_factory() -> Callable[..., Any]:
     def _factory(role: str = RoleCode.CUSTOMER, **kwargs: Any) -> Any:

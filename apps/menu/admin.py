@@ -2,6 +2,7 @@ from typing import Any
 
 from django import forms
 from django.contrib import admin
+from django.http import HttpRequest
 
 from .allergens import ALLERGENS
 from .models import Menu, MenuCategory, MenuItem
@@ -55,3 +56,18 @@ class MenuItemAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ["name", "restaurant", "category", "price", "is_available"]
     list_filter = ["restaurant", "category", "is_available"]
     search_fields = ["name"]
+
+    def get_form(
+        self, request: HttpRequest, obj: MenuItem | None = None, change: bool = False, **kwargs: Any
+    ) -> Any:
+        # Stored on the request, not self: admin instances are shared across
+        # threads/requests, so self-state can leak between concurrent edits.
+        request._menuitem_menu_id = obj.menu_id if obj else None  # type: ignore[attr-defined]
+        return super().get_form(request, obj, change=change, **kwargs)
+
+    def formfield_for_foreignkey(self, db_field: Any, request: HttpRequest, **kwargs: Any) -> Any:
+        if db_field.name == "category":
+            menu_id = getattr(request, "_menuitem_menu_id", None)
+            qs = MenuCategory.objects.all()
+            kwargs["queryset"] = qs.filter(menu_id=menu_id) if menu_id else qs
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
