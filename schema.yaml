@@ -23,7 +23,6 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -624,7 +623,6 @@ paths:
       - Cart
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -650,7 +648,6 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '201':
           content:
@@ -672,7 +669,6 @@ paths:
       - Cart
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -706,7 +702,6 @@ paths:
       - Cart
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '200':
           content:
@@ -739,7 +734,6 @@ paths:
         required: true
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '201':
           content:
@@ -767,7 +761,6 @@ paths:
       - Cart
       security:
       - jwtAuth: []
-      - cookieAuth: []
       responses:
         '204':
           description: No response body
