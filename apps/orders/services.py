@@ -68,6 +68,7 @@ def add_item_to_cart(
 
         if not is_cart_participant(user, session):
             raise PermissionDenied("Only cart participants may add items.")
+        session.participants.add(user)
 
         menu_item = get_menu_item(session.restaurant_id, menu_item_id)
         if menu_item is None:
@@ -121,6 +122,7 @@ def remove_item_from_cart(
 
         if not is_cart_participant(user, session):
             raise PermissionDenied("Only cart participants may remove items.")
+        session.participants.add(user)
 
         item = get_cart_item(session.restaurant_id, item_id, session)
         if item is None:

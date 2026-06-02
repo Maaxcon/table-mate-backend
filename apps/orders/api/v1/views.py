@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -31,7 +31,11 @@ class CartSessionViewSet(
 
     def safely_get_queryset(self, qs: QuerySet[CartSession]) -> QuerySet[CartSession]:
         user = cast(User, self.request.user)
-        return qs.filter(participants=user).prefetch_related("participants")
+        return (
+            qs.filter(Q(participants=user) | Q(reservation__participants=user) | Q(reservation__customer=user))
+            .prefetch_related("participants")
+            .distinct()
+        )
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = self.get_serializer(data=request.data)
@@ -72,11 +76,15 @@ class CartSessionItemViewSet(
 
     def safely_get_queryset(self, qs: QuerySet[CartItem]) -> QuerySet[CartItem]:
         user = cast(User, self.request.user)
-        qs = qs.filter(cart_session__participants=user)
+        qs = qs.filter(
+            Q(cart_session__participants=user)
+            | Q(cart_session__reservation__participants=user)
+            | Q(cart_session__reservation__customer=user)
+        )
         session_pk = self.kwargs.get("session_pk")
         if session_pk:
             qs = qs.filter(cart_session__public_id=session_pk)
-        return qs.select_related("menu_item", "cart_session")
+        return qs.select_related("menu_item", "cart_session").distinct()
 
     def _get_restaurant_id(self) -> int:
         rid = get_restaurant_id_from_auth(self.request)
