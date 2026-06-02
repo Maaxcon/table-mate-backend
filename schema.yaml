@@ -906,6 +906,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/Session'
           description: ''
+  /api/orders/submit/:
+    post:
+      operationId: orders_submit_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderFromCart'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CreateOrderFromCart'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateOrderFromCart'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
   /api/orders/tickets/:
     get:
       operationId: orders_tickets_list
@@ -1472,6 +1499,41 @@ paths:
           description: ''
 components:
   schemas:
+    CreateOrderFromCart:
+      type: object
+      properties:
+        table_id:
+          type: string
+          format: uuid
+        notes:
+          type: string
+          default: ''
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateOrderItem'
+      required:
+      - items
+      - table_id
+    CreateOrderItem:
+      type: object
+      properties:
+        menu_item_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        guest_slot:
+          type: integer
+          minimum: 0
+        comment:
+          type: string
+          default: ''
+      required:
+      - guest_slot
+      - menu_item_id
+      - quantity
     CreatedBySourceEnum:
       enum:
       - staff
