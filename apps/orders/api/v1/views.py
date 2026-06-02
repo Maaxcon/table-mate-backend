@@ -92,6 +92,7 @@ class CartSessionItemViewSet(
             raise CartSessionNotFoundError(f"Cart session {session_pk} not found.")
         return session
 
+    @extend_schema(responses={201: CartItemSerializer})
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
