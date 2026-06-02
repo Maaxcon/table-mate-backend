@@ -6,6 +6,7 @@ from typing import Any
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -26,6 +27,8 @@ def _make_hall_event(event_name: str, payload: dict[str, Any]) -> dict[str, Any]
 def broadcast_order_on_submit(sender: type[Order], instance: Order, **kwargs: Any) -> None:
     if instance.status != OrderStatus.SUBMITTED:
         return
+    if not kwargs.get("created"):
+        return
 
     channel_layer = get_channel_layer()
     if channel_layer is None:
@@ -44,7 +47,10 @@ def broadcast_order_on_submit(sender: type[Order], instance: Order, **kwargs: An
         },
     )
 
-    async_to_sync(channel_layer.group_send)(
-        group_name,
-        {"type": "hall.event", "event": event},
-    )
+    def _send() -> None:
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {"type": "hall.event", "event": event},
+        )
+
+    transaction.on_commit(_send)
