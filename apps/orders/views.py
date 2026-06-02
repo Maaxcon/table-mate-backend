@@ -105,7 +105,7 @@ class OrderSubmitView(IdempotencyKeyMixin, APIView):
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         idempotency_key = self.validate_idempotency_key(request)
         if idempotency_key is not None:
-            cached = self.get_cached_response(idempotency_key)
+            cached = self.get_cached_response(idempotency_key, request)
             if cached is not None:
                 return cached
 
@@ -142,6 +142,6 @@ class OrderSubmitView(IdempotencyKeyMixin, APIView):
         response = Response(result.data, status=status.HTTP_201_CREATED)
 
         if idempotency_key is not None:
-            self.cache_response(idempotency_key, response)
+            self.cache_response(idempotency_key, response, request)
 
         return response
