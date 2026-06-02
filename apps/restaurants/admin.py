@@ -6,6 +6,7 @@ from .models import Restaurant, RestaurantSettings, Table
 @admin.register(Restaurant)
 class RestaurantAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ["name", "address", "phone", "telegram_url", "facebook_url"]
+    search_fields = ["name", "address"]
 
 
 @admin.register(RestaurantSettings)
