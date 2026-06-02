@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 from django.core.cache import cache
+from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -21,7 +22,9 @@ class IdempotencyKeyMixin:
         try:
             val = uuid.UUID(raw)
         except (ValueError, AttributeError):
-            return None
+            raise ValidationError(
+                {"idempotency_key": "Invalid Idempotency-Key format. Must be a valid UUIDv4."}
+            ) from None
         return str(val)
 
     def get_cached_response(self, key: str) -> Response | None:
