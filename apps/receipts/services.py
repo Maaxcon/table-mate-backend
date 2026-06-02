@@ -57,34 +57,40 @@ def create_receipt_from_order(order: Order) -> Receipt | None:
     Returns the existing receipt if one was already generated (idempotent),
     or None when the order has no customer to attribute it to.
     """
-    existing = Receipt.objects.filter(order=order).first()
-    if existing is not None:
-        return existing
-
     customer = _resolve_customer(order)
     if customer is None:
+        # No receipt can exist without a customer, so an unresolvable customer
+        # also means there is nothing to return idempotently.
         return None
 
     session = order.session
     payment = _payment_for(order)
 
-    receipt = Receipt.objects.create(
-        customer=customer,
-        restaurant_id=order.restaurant_id,
+    # get_or_create closes the TOCTOU gap: if the same order reaches COMPLETED
+    # twice concurrently, the order OneToOne constraint makes the losing insert
+    # raise IntegrityError internally, which get_or_create swallows and re-reads
+    # the winning row — no error-log noise and no duplicate items below.
+    receipt, created = Receipt.objects.get_or_create(
         order=order,
-        payment=payment,
-        order_number=f"TM-{order.created_at:%Y%m%d}-{order.id}",
-        visited_at=session.started_at or order.created_at,
-        currency=order.currency,
-        table_label=f"Table {session.table.table_number}" if session.table_id else "",
-        server_name=_full_name(session.opened_by),
-        guests=session.guest_count,
-        tax=_money(order.tax_total),
-        service_charge=_money(order.service_charge),
-        tip=_money(order.tip_total),
-        payment_method=_payment_method(payment),
-        payment_status=_payment_status_label(order),
+        defaults={
+            "customer": customer,
+            "restaurant_id": order.restaurant_id,
+            "payment": payment,
+            "order_number": f"TM-{order.created_at:%Y%m%d}-{order.id}",
+            "visited_at": session.started_at or order.created_at,
+            "currency": order.currency,
+            "table_label": f"Table {session.table.table_number}" if session.table_id else "",
+            "server_name": _full_name(session.opened_by),
+            "guests": session.guest_count,
+            "tax": _money(order.tax_total),
+            "service_charge": _money(order.service_charge),
+            "tip": _money(order.tip_total),
+            "payment_method": _payment_method(payment),
+            "payment_status": _payment_status_label(order),
+        },
     )
+    if not created:
+        return receipt
 
     items = order.items.exclude(status=OrderItemStatus.VOIDED).exclude(is_wasted=True)
     for item in items.select_related("menu_item"):
