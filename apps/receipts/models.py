@@ -87,18 +87,26 @@ class ReceiptItem(BaseModel):
     )
     name = models.CharField(max_length=120, blank=True)
     quantity = models.PositiveIntegerField(default=1)
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    # Nullable so an unset price (None) can be auto-filled from the menu while a
+    # deliberate 0.00 (a comped or genuinely free item) is preserved.
+    unit_price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, default=None
+    )
 
     class Meta:
         ordering = ["id"]
 
     def save(self, *args: object, **kwargs: object) -> None:
-        # Copy name/price from the chosen menu item when left blank.
+        # Copy name/price from the chosen menu item when left unset. Only None
+        # (never provided) is auto-filled — a 0.00 stays free on purpose.
         if self.menu_item is not None:
             if not self.name:
                 self.name = self.menu_item.name
-            if not self.unit_price:
+            if self.unit_price is None:
                 self.unit_price = Decimal(self.menu_item.price).quantize(Decimal("0.01"))
+        # Never persist NULL: an item with no menu item and no price is free.
+        if self.unit_price is None:
+            self.unit_price = Decimal("0.00")
         super().save(*args, **kwargs)  # type: ignore[arg-type]
 
     def __str__(self) -> str:
