@@ -10,8 +10,13 @@ from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode
 from apps.authentication.permissions import IsFloor
-from apps.restaurants.models import Table
-from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
+from apps.restaurants.models import Restaurant, Table
+from common.api import (
+    PublicLookupMixin,
+    PublicRestaurantQueryMixin,
+    RestaurantScopedViewSetMixin,
+    get_restaurant_id_from_auth,
+)
 from common.permissions import HasAnyRole
 
 from .models import Layout
@@ -30,7 +35,8 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
 
 @extend_schema(tags=["Editor"])
 class EditorTableViewSet(
-    RestaurantScopedViewSetMixin[Table],
+    PublicLookupMixin,
+    PublicRestaurantQueryMixin,
     viewsets.ModelViewSet[Table],
 ):
     queryset = Table.objects.all()
@@ -45,13 +51,29 @@ class EditorTableViewSet(
         "status",
     ]
 
-    def safely_get_queryset(self, qs: QuerySet[Table]) -> QuerySet[Table]:
+    def get_queryset(self) -> QuerySet[Table]:
+        qs = super().get_queryset()
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        if restaurant_id is not None:
+            qs = qs.filter(restaurant_id=restaurant_id)
         return qs.filter(active=True)
 
     def get_permissions(self) -> list[BasePermission]:
         if self.action == "available":
-            return [IsAuthenticated()]
+            return []
         return [IsAuthenticated(), HasAnyRole.with_roles(RoleCode.ADMIN, RoleCode.WAITER)]
+
+    def _resolve_restaurant_id(self, request: Request) -> int | None:
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is not None:
+            return restaurant_id
+        public_id = request.query_params.get(self.restaurant_query_param)
+        if public_id:
+            try:
+                return Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
+            except Restaurant.DoesNotExist:
+                pass
+        return None
 
     @extend_schema(
         responses=EditorTableSerializer(many=True),
@@ -59,11 +81,17 @@ class EditorTableViewSet(
             OpenApiParameter(name="start_at", type=str, required=True, description="ISO 8601 datetime"),
             OpenApiParameter(name="end_at", type=str, required=True, description="ISO 8601 datetime"),
             OpenApiParameter(name="guest_count", type=int, required=False),
+            OpenApiParameter(
+                name="restaurant",
+                type=str,
+                required=False,
+                description="Restaurant public ID for unauthenticated access",
+            ),
         ],
     )
     @action(detail=False, methods=["get"], url_path="available", filter_backends=[])
     def available(self, request: Request) -> Response:
-        restaurant_id = get_restaurant_id_from_auth(request)
+        restaurant_id = self._resolve_restaurant_id(request)
 
         if restaurant_id is None:
             return Response(

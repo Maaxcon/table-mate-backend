@@ -14,7 +14,7 @@ def get_reservations_for_table(
 ) -> QuerySet[Reservation]:
     return Reservation.objects.filter(
         table=table,
-        status=ReservationStatus.CONFIRMED,
+        status=ReservationStatus.ACTIVE,
         start_at__lt=end_at,
         end_at__gt=start_at,
     )
@@ -24,6 +24,12 @@ def get_customer_reservations(customer_id: int, restaurant_id: int) -> QuerySet[
     return Reservation.objects.filter(
         customer_id=customer_id,
         restaurant_id=restaurant_id,
+    ).select_related("table", "customer")
+
+
+def get_customer_global_reservations(customer_id: int) -> QuerySet[Reservation]:
+    return Reservation.objects.filter(
+        customer_id=customer_id,
     ).select_related("table", "customer")
 
 

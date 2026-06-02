@@ -1,26 +1,28 @@
 from collections.abc import Sequence
 
+from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.authentication.permissions import IsNonKitchen, IsStaff
-from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
+from apps.restaurants.models import Restaurant
+from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
 
 from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
-from .selectors import get_customer_reservations
+from .selectors import get_customer_global_reservations, get_customer_reservations
 from .serializers import ReservationSerializer
 from .services import create_reservation, reschedule_reservation
 
 
 @extend_schema(tags=["Reservations"])
 class ReservationViewSet(
-    RestaurantScopedViewSetMixin[Reservation],
+    PublicLookupMixin,
+    PublicRestaurantQueryMixin,
     viewsets.ModelViewSet[Reservation],
 ):
     queryset = Reservation.objects.all()
@@ -30,11 +32,17 @@ class ReservationViewSet(
     ordering_fields = ["created_at", "updated_at", "start_at", "end_at", "guest_count"]
 
     def get_permissions(self) -> Sequence[BasePermission]:
-        if self.action in ("create", "my", "update", "partial_update"):
-            return [CanManageReservations()]
-        if self.action in ("list", "retrieve"):
-            return [IsNonKitchen()]
-        return [IsStaff()]
+        return [IsAuthenticated(), CanManageReservations()]
+
+    def get_queryset(self) -> QuerySet[Reservation]:
+        qs = super().get_queryset()
+        role = getattr(self.request.user, "role", None)
+        if role and role in ("admin", "waiter"):
+            restaurant_id = get_restaurant_id_from_auth(self.request)
+            if restaurant_id is not None:
+                return qs.filter(restaurant_id=restaurant_id)
+            return qs.none()
+        return qs.filter(customer_id=self.request.user.pk)
 
     def create(self, request: Request, *args: object) -> Response:
         serializer = self.get_serializer(data=request.data)
@@ -83,7 +91,17 @@ class ReservationViewSet(
     def my(self, request: Request) -> Response:
         restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
-            raise ValidationError("Restaurant context required.")
+            public_id = request.query_params.get(self.restaurant_query_param)
+            if public_id:
+                try:
+                    restaurant = Restaurant.objects.get(public_id=public_id)
+                    restaurant_id = restaurant.id
+                except Restaurant.DoesNotExist:
+                    raise ValidationError("Restaurant not found.") from None
+            else:
+                reservations = get_customer_global_reservations(request.user.pk)  # type: ignore[arg-type]
+                serializer = self.get_serializer(reservations, many=True)
+                return Response(serializer.data)
         reservations = get_customer_reservations(request.user.pk, restaurant_id=restaurant_id)  # type: ignore[arg-type]
         serializer = self.get_serializer(reservations, many=True)
         return Response(serializer.data)

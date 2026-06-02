@@ -37,7 +37,7 @@ def _check_reservation_conflict(
     qs = Reservation.objects.filter(
         restaurant_id=restaurant_id,
         table=table,
-        status=ReservationStatus.CONFIRMED,
+        status=ReservationStatus.ACTIVE,
         start_at__lt=end_at,
         end_at__gt=start_at,
     )
@@ -79,7 +79,7 @@ def create_reservation(
         guest_count=guest_count,
         start_at=start_at,
         end_at=end_at,
-        status=ReservationStatus.CONFIRMED,
+        status=ReservationStatus.ACTIVE,
         notes=notes or "",
     )
 
@@ -91,7 +91,7 @@ def seat_walk_in_customer(table: Table, guest_count: int) -> Reservation:
     table.status = TableStatus.OCCUPIED
     table.save(update_fields=["status"])
 
-    end_at = timezone.now() + timedelta(minutes=90)
+    end_at = timezone.now() + timedelta(hours=2)
 
     reservation = Reservation.objects.create(
         table=table,
@@ -99,7 +99,7 @@ def seat_walk_in_customer(table: Table, guest_count: int) -> Reservation:
         guest_count=guest_count,
         start_at=timezone.now(),
         end_at=end_at,
-        status=ReservationStatus.CONFIRMED,
+        status=ReservationStatus.ACTIVE,
         customer=None,
     )
 

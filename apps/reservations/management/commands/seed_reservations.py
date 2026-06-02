@@ -64,7 +64,7 @@ class Command(BaseCommand):
                     "guest_count": 2,
                     "start_at": today_noon + timedelta(hours=1),
                     "end_at": today_noon + timedelta(hours=2, minutes=30),
-                    "status": ReservationStatus.CONFIRMED,
+                    "status": ReservationStatus.ACTIVE,
                     "notes": "Алергія на горіхи",
                 },
                 {
@@ -73,7 +73,7 @@ class Command(BaseCommand):
                     "guest_count": 4,
                     "start_at": today_noon + timedelta(hours=2),
                     "end_at": today_noon + timedelta(hours=3, minutes=30),
-                    "status": ReservationStatus.CONFIRMED,
+                    "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
                 {
@@ -82,7 +82,7 @@ class Command(BaseCommand):
                     "guest_count": 3,
                     "start_at": today_noon + timedelta(hours=3),
                     "end_at": today_noon + timedelta(hours=4),
-                    "status": ReservationStatus.PENDING,
+                    "status": ReservationStatus.ACTIVE,
                     "notes": "Дитячий стільчик",
                 },
                 {
@@ -91,7 +91,7 @@ class Command(BaseCommand):
                     "guest_count": 6,
                     "start_at": today_noon + timedelta(days=1, hours=0),
                     "end_at": today_noon + timedelta(days=1, hours=2),
-                    "status": ReservationStatus.CONFIRMED,
+                    "status": ReservationStatus.ACTIVE,
                     "notes": "День народження",
                 },
                 {
@@ -100,7 +100,7 @@ class Command(BaseCommand):
                     "guest_count": 2,
                     "start_at": today_noon + timedelta(days=1, hours=3),
                     "end_at": today_noon + timedelta(days=1, hours=4, minutes=30),
-                    "status": ReservationStatus.PENDING,
+                    "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
                 {
@@ -109,7 +109,7 @@ class Command(BaseCommand):
                     "guest_count": 5,
                     "start_at": today_noon - timedelta(days=2, hours=1),
                     "end_at": today_noon - timedelta(days=2),
-                    "status": ReservationStatus.COMPLETED,
+                    "status": ReservationStatus.ACTIVE,
                     "notes": "Все сподобалось",
                 },
                 {
@@ -118,7 +118,7 @@ class Command(BaseCommand):
                     "guest_count": 8,
                     "start_at": today_noon - timedelta(days=1, hours=2),
                     "end_at": today_noon - timedelta(days=1),
-                    "status": ReservationStatus.COMPLETED,
+                    "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
                 {
@@ -136,7 +136,7 @@ class Command(BaseCommand):
                     "guest_count": 2,
                     "start_at": today_noon + timedelta(days=2, hours=1),
                     "end_at": today_noon + timedelta(days=2, hours=2, minutes=30),
-                    "status": ReservationStatus.CONFIRMED,
+                    "status": ReservationStatus.ACTIVE,
                     "notes": "Веганське меню",
                 },
                 {
@@ -145,7 +145,7 @@ class Command(BaseCommand):
                     "guest_count": 3,
                     "start_at": today_noon + timedelta(days=2, hours=3),
                     "end_at": today_noon + timedelta(days=2, hours=4),
-                    "status": ReservationStatus.PENDING,
+                    "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
             ]

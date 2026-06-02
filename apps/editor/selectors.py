@@ -66,7 +66,7 @@ def get_available_tables(
 
     overlapping = Reservation.objects.filter(
         restaurant_id=restaurant_id,
-        status=ReservationStatus.CONFIRMED,
+        status=ReservationStatus.ACTIVE,
         start_at__lt=end_at,
         end_at__gt=start_at,
     ).values("table_id")
