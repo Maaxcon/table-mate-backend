@@ -3,7 +3,7 @@ from typing import Any, cast
 from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics, status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -113,6 +113,8 @@ class GoogleContextView(APIView):
 
 
 class CustomerContextView(APIView):
+    permission_classes = [IsAuthenticated]
+
     @extend_schema(
         request=CustomerContextSerializer,
         responses={
