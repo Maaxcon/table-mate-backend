@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.authentication.models import RoleCode, User
 from common.api import PublicIdRelatedField
 
 from .models import Restaurant, RestaurantSettings, Table, Zone
@@ -12,10 +13,33 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
             "public_id",
             "name",
             "address",
+            "phone",
+            "telegram_url",
+            "facebook_url",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["public_id", "created_at", "updated_at"]
+
+
+class EmployeeSerializer(serializers.ModelSerializer[User]):
+    class Meta:
+        model = User
+        fields = [
+            "public_id",
+            "email",
+            "first_name",
+            "last_name",
+            "phone",
+            "role",
+            "is_active",
+        ]
+        read_only_fields = ["public_id", "email"]
+
+    def validate_role(self, value: str) -> str:
+        if value == RoleCode.CUSTOMER:
+            raise serializers.ValidationError("An employee cannot be set to the customer role.")
+        return value
 
 
 class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):

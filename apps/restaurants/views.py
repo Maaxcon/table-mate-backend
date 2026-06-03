@@ -1,9 +1,11 @@
 from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import SAFE_METHODS, AllowAny, BasePermission
+from rest_framework.serializers import BaseSerializer
 
-from apps.authentication.permissions import IsStaff
+from apps.authentication.models import RoleCode, User
+from apps.authentication.permissions import IsAdmin, IsStaff
 from common.api import (
     PublicLookupMixin,
     PublicRestaurantQueryMixin,
@@ -11,11 +13,14 @@ from common.api import (
     get_restaurant_id_from_auth,
 )
 
+from . import services
 from .models import Restaurant, RestaurantSettings, Table, Zone
 from .serializers import (
     BookingSettingsSerializer,
+    EmployeeSerializer,
     PublicRestaurantSerializer,
     RestaurantSerializer,
+    RestaurantSettingsSerializer,
     TableSerializer,
     ZoneSerializer,
 )
@@ -36,13 +41,24 @@ class PublicRestaurantViewSet(
 @extend_schema(tags=["Restaurants"])
 class RestaurantViewSet(
     RestaurantScopedViewSetMixin[Restaurant],
-    viewsets.ReadOnlyModelViewSet[Restaurant],
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet[Restaurant],
 ):
-    permission_classes = [IsStaff]
     queryset = Restaurant.objects.all()
     serializer_class = RestaurantSerializer
     restaurant_lookup = "id"
     ordering_fields = ["created_at", "updated_at", "name"]
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_permissions(self) -> list[BasePermission]:
+        if self.request.method in SAFE_METHODS:
+            return [IsStaff()]
+        return [IsAdmin()]
+
+    def perform_update(self, serializer: BaseSerializer[Restaurant]) -> None:
+        services.update_restaurant(serializer.instance, **serializer.validated_data)
 
 
 class _PublicRestaurantScopedViewSetMixin(PublicRestaurantQueryMixin):
@@ -75,11 +91,25 @@ class ZoneViewSet(
 class RestaurantSettingsViewSet(
     PublicLookupMixin,
     _PublicRestaurantScopedViewSetMixin,
-    viewsets.ReadOnlyModelViewSet[RestaurantSettings],
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet[RestaurantSettings],
 ):
-    permission_classes = [AllowAny]
     queryset = RestaurantSettings.objects.all()
-    serializer_class = BookingSettingsSerializer
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_permissions(self) -> list[BasePermission]:
+        if self.request.method in SAFE_METHODS:
+            return [AllowAny()]
+        return [IsAdmin()]
+
+    def get_serializer_class(self) -> type[BaseSerializer[RestaurantSettings]]:
+        # Anonymous booking clients get the trimmed booking fields; admins
+        # editing settings get the full serializer.
+        if self.request.method in SAFE_METHODS:
+            return BookingSettingsSerializer
+        return RestaurantSettingsSerializer
 
     def get_queryset(self) -> QuerySet[RestaurantSettings]:
         qs = super().get_queryset()
@@ -87,6 +117,31 @@ class RestaurantSettingsViewSet(
         if restaurant_id is not None:
             return qs.filter(restaurant_id=restaurant_id)
         return qs.none()
+
+    def perform_update(self, serializer: BaseSerializer[RestaurantSettings]) -> None:
+        services.update_restaurant_settings(serializer.instance, **serializer.validated_data)
+
+
+@extend_schema(tags=["Restaurants"])
+class EmployeeViewSet(
+    RestaurantScopedViewSetMixin[User],
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet[User],
+):
+    permission_classes = [IsAdmin]
+    queryset = User.objects.all()
+    serializer_class = EmployeeSerializer
+    filterset_fields = ["role", "is_active"]
+    ordering_fields = ["role", "email", "created_at", "updated_at"]
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def safely_get_queryset(self, qs):  # type: ignore[no-untyped-def]
+        return qs.exclude(role=RoleCode.CUSTOMER)
+
+    def perform_update(self, serializer: BaseSerializer[User]) -> None:
+        services.manage_employee(serializer.instance, **serializer.validated_data)
 
 
 @extend_schema(tags=["Restaurants"])
