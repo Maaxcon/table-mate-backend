@@ -42,6 +42,31 @@ class EmployeeSerializer(serializers.ModelSerializer[User]):
         return value
 
 
+class EmployeeCreateSerializer(serializers.ModelSerializer[User]):
+    class Meta:
+        model = User
+        fields = [
+            "public_id",
+            "email",
+            "first_name",
+            "last_name",
+            "phone",
+            "role",
+            "is_active",
+        ]
+        read_only_fields = ["public_id", "is_active"]
+
+    def validate_role(self, value: str) -> str:
+        if value == RoleCode.CUSTOMER:
+            raise serializers.ValidationError("An employee cannot be set to the customer role.")
+        return value
+
+    def validate_email(self, value: str) -> str:
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+
 class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
     class Meta:
         model = RestaurantSettings
