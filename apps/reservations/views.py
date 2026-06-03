@@ -51,7 +51,8 @@ class ReservationViewSet(
         restaurant_id = get_restaurant_id_from_auth(request)
 
         if restaurant_id is None:
-            raise ValidationError("Restaurant context required.")
+            table = serializer.validated_data["table"]
+            restaurant_id = table.restaurant_id
 
         reservation = create_reservation(
             restaurant_id=restaurant_id,
