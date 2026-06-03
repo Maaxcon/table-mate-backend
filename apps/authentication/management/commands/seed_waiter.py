@@ -29,7 +29,7 @@ class Command(BaseCommand):
             return
 
         email = f"waiter@{restaurant.name.lower().replace(' ', '')}.com"
-        password = "waiter123"
+        password = "waiter123"  # nosec B105
 
         user, created = User.objects.get_or_create(
             email=email,

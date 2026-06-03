@@ -10,7 +10,7 @@ class Command(BaseCommand):
 
     def handle(self, *args: Any, **options: Any) -> None:
         email = "admin@tablemate.com"
-        password = "admin123"
+        password = "admin123"  # nosec B105
 
         if User.objects.filter(email=email).exists():
             self.stdout.write(f"Superuser {email} already exists — skipping.")
