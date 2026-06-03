@@ -1,12 +1,16 @@
+from typing import Any
+
 from django.db import transaction
 from django.db.models import QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 
 from apps.authentication.permissions import IsAdmin
 from common.api import (
@@ -24,8 +28,6 @@ from .selectors import (
     get_menu_items_by_restaurant,
     search_menu_items,
 )
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-
 from .serializers import (
     AdminMenuCategorySerializer,
     AdminMenuItemSerializer,
@@ -36,6 +38,11 @@ from .serializers import (
     ToggleMenuItemLikeRequestSerializer,
     ToggleMenuItemLikeResponseSerializer,
 )
+
+
+def _get_serializer_fields(serializer: BaseSerializer[Any]) -> Any:
+    target = getattr(serializer, "child", serializer)
+    return getattr(target, "fields", {})
 
 
 @extend_schema(tags=["Menu"])
@@ -84,7 +91,7 @@ class AdminMenuViewSet(
     restaurant_lookup = "restaurant_id"
     ordering_fields = ["name", "created_at", "updated_at"]
 
-    def perform_create(self, serializer: AdminMenuSerializer) -> None:
+    def perform_create(self, serializer: BaseSerializer[Menu]) -> None:
         # Menu belongs to the admin's restaurant, taken from the auth context.
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
 
@@ -101,13 +108,16 @@ class AdminMenuCategoryViewSet(
     filterset_class = MenuCategoryFilter
     ordering_fields = ["sort_order", "name", "created_at", "updated_at"]
 
-    def get_serializer(self, *args: object, **kwargs: object) -> AdminMenuCategorySerializer:
+    def get_serializer(self, *args: object, **kwargs: object) -> BaseSerializer[MenuCategory]:
         serializer = super().get_serializer(*args, **kwargs)
         # Restrict the selectable menu to the admin's own restaurant, so an admin
         # cannot attach a category to another restaurant's menu.
         restaurant_id = get_restaurant_id_from_auth(self.request)
-        if "menu" in serializer.fields:
-            serializer.fields["menu"].queryset = Menu.objects.filter(restaurant_id=restaurant_id)
+        fields = _get_serializer_fields(serializer)
+        if "menu" in fields:
+            fields["menu"].queryset = (
+                Menu.objects.filter(restaurant_id=restaurant_id) if restaurant_id is not None else Menu.objects.none()
+            )
         return serializer
 
 
@@ -124,18 +134,23 @@ class AdminMenuItemViewSet(
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     ordering_fields = ["sort_order", "name", "price", "created_at", "updated_at"]
 
-    def get_serializer(self, *args: object, **kwargs: object) -> AdminMenuItemSerializer:
+    def get_serializer(self, *args: object, **kwargs: object) -> BaseSerializer[MenuItem]:
         serializer = super().get_serializer(*args, **kwargs)
         restaurant_id = get_restaurant_id_from_auth(self.request)
-        if "menu" in serializer.fields:
-            serializer.fields["menu"].queryset = Menu.objects.filter(restaurant_id=restaurant_id)
-        if "category" in serializer.fields:
-            serializer.fields["category"].queryset = MenuCategory.objects.filter(
-                menu__restaurant_id=restaurant_id
+        fields = _get_serializer_fields(serializer)
+        if "menu" in fields:
+            fields["menu"].queryset = (
+                Menu.objects.filter(restaurant_id=restaurant_id) if restaurant_id is not None else Menu.objects.none()
+            )
+        if "category" in fields:
+            fields["category"].queryset = (
+                MenuCategory.objects.filter(menu__restaurant_id=restaurant_id)
+                if restaurant_id is not None
+                else MenuCategory.objects.none()
             )
         return serializer
 
-    def perform_create(self, serializer: AdminMenuItemSerializer) -> None:
+    def perform_create(self, serializer: BaseSerializer[MenuItem]) -> None:
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
 
 
