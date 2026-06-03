@@ -94,6 +94,15 @@ class MenuSerializer(serializers.ModelSerializer[Menu]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
+class AdminMenuSerializer(serializers.ModelSerializer[Menu]):
+    """Writable menu serializer for the admin panel."""
+
+    class Meta:
+        model = Menu
+        fields = ["public_id", "name", "is_active", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "created_at", "updated_at"]
+
+
 class ToggleMenuItemLikeRequestSerializer(serializers.Serializer[Any]):
     guest_token = serializers.CharField(max_length=64)
 

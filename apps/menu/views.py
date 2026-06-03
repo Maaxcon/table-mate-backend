@@ -8,7 +8,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from common.api import PublicLookupMixin, PublicRestaurantQueryMixin
+from apps.authentication.permissions import IsAdmin
+from common.api import (
+    PublicLookupMixin,
+    PublicRestaurantQueryMixin,
+    RestaurantScopedViewSetMixin,
+    get_restaurant_id_from_auth,
+)
 
 from .filters import MenuCategoryFilter, MenuItemFilter
 from .models import Menu, MenuCategory, MenuItem, MenuItemLike
@@ -19,6 +25,7 @@ from .selectors import (
     search_menu_items,
 )
 from .serializers import (
+    AdminMenuSerializer,
     MenuCategorySerializer,
     MenuItemSerializer,
     MenuSerializer,
@@ -60,6 +67,22 @@ class MenuCategoryViewSet(
         if restaurant_id is None:
             return MenuCategory.objects.none()
         return get_categories_by_restaurant(restaurant_id=restaurant_id)
+
+
+@extend_schema(tags=["Menu Admin"])
+class AdminMenuViewSet(
+    RestaurantScopedViewSetMixin[Menu],
+    viewsets.ModelViewSet[Menu],
+):
+    permission_classes = [IsAdmin]
+    queryset = Menu.objects.all()
+    serializer_class = AdminMenuSerializer
+    restaurant_lookup = "restaurant_id"
+    ordering_fields = ["name", "created_at", "updated_at"]
+
+    def perform_create(self, serializer: AdminMenuSerializer) -> None:
+        # Menu belongs to the admin's restaurant, taken from the auth context.
+        serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
 
 
 @extend_schema(tags=["Menu"])
