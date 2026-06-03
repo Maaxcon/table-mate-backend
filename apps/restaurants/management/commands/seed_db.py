@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = "Seed all demo data: restaurants, users, menu, and reservations"
+    help = "Seed all demo data: superuser, restaurants, menu, users, receipts, reservations"
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
@@ -19,7 +19,10 @@ class Command(BaseCommand):
         if options.get("restaurant_id"):
             seed_kwargs["restaurant_id"] = options["restaurant_id"]
 
-        self.stdout.write("=== Seeding restaurants ===")
+        self.stdout.write("=== Seeding superuser ===")
+        call_command("seed_superuser")
+
+        self.stdout.write("\n=== Seeding restaurants ===")
         call_command("seed_restaurants", **seed_kwargs)
 
         self.stdout.write("\n=== Seeding menu ===")
@@ -27,6 +30,9 @@ class Command(BaseCommand):
 
         self.stdout.write("\n=== Seeding users ===")
         call_command("seed_users", **seed_kwargs)
+
+        self.stdout.write("\n=== Seeding receipts ===")
+        call_command("seed_receipts")
 
         self.stdout.write("\n=== Seeding reservations ===")
         call_command("seed_reservations", **seed_kwargs)

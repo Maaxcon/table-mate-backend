@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from common.api import PublicIdRelatedField
 
-from .models import Restaurant, RestaurantSettings, Table
+from .models import Restaurant, RestaurantSettings, Table, Zone
 
 
 class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
@@ -67,8 +67,20 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
+class ZoneSerializer(serializers.ModelSerializer[Zone]):
+    class Meta:
+        model = Zone
+        fields = [
+            "public_id",
+            "name",
+            "sort_order",
+        ]
+        read_only_fields = fields
+
+
 class TableSerializer(serializers.ModelSerializer[Table]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
+    zone = ZoneSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = Table
@@ -82,6 +94,7 @@ class TableSerializer(serializers.ModelSerializer[Table]):
             "active",
             "position_x",
             "position_y",
+            "zone",
             "created_at",
             "updated_at",
         ]

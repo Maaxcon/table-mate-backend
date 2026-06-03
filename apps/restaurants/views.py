@@ -11,12 +11,13 @@ from common.api import (
     get_restaurant_id_from_auth,
 )
 
-from .models import Restaurant, RestaurantSettings, Table
+from .models import Restaurant, RestaurantSettings, Table, Zone
 from .serializers import (
     PublicRestaurantSerializer,
     RestaurantSerializer,
     RestaurantSettingsSerializer,
     TableSerializer,
+    ZoneSerializer,
 )
 
 
@@ -53,6 +54,24 @@ class _PublicRestaurantScopedViewSetMixin(PublicRestaurantQueryMixin):
 
 
 @extend_schema(tags=["Restaurants"])
+class ZoneViewSet(
+    PublicLookupMixin,
+    _PublicRestaurantScopedViewSetMixin,
+    viewsets.ReadOnlyModelViewSet[Zone],
+):
+    permission_classes = [AllowAny]
+    queryset = Zone.objects.all()
+    serializer_class = ZoneSerializer
+
+    def get_queryset(self) -> QuerySet[Zone]:
+        qs = super().get_queryset()
+        restaurant_id = self.get_restaurant_id()
+        if restaurant_id is not None:
+            return qs.filter(restaurant_id=restaurant_id)
+        return qs.none()
+
+
+@extend_schema(tags=["Restaurants"])
 class RestaurantSettingsViewSet(
     PublicLookupMixin,
     _PublicRestaurantScopedViewSetMixin,
@@ -77,9 +96,9 @@ class TableViewSet(
     viewsets.ReadOnlyModelViewSet[Table],
 ):
     permission_classes = [AllowAny]
-    queryset = Table.objects.all()
+    queryset = Table.objects.select_related("zone").all()
     serializer_class = TableSerializer
-    filterset_fields = ["status", "capacity"]
+    filterset_fields = ["status", "capacity", "zone__public_id"]
 
     def get_queryset(self) -> QuerySet[Table]:
         qs = super().get_queryset()
