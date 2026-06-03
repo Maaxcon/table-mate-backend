@@ -1,15 +1,21 @@
 from collections.abc import Sequence
+from datetime import date as date_type
+from datetime import datetime, timedelta
+from datetime import time as time_type
+from zoneinfo import ZoneInfo
 
 from django.db.models import QuerySet
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.restaurants.models import Restaurant
+from apps.authentication.models import RoleCode
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
 
 from .models import Reservation, ReservationStatus
@@ -17,6 +23,11 @@ from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
 from .serializers import ReservationSerializer
 from .services import create_reservation, reschedule_reservation
+
+
+def _parse_time(value: str) -> time_type:
+    parts = value.split(":")
+    return time_type(hour=int(parts[0]), minute=int(parts[1]))
 
 
 @extend_schema(tags=["Reservations"])
@@ -32,6 +43,8 @@ class ReservationViewSet(
     ordering_fields = ["created_at", "updated_at", "start_at", "end_at", "guest_count"]
 
     def get_permissions(self) -> Sequence[BasePermission]:
+        if self.action == "available_slots":
+            return [AllowAny()]
         return [IsAuthenticated(), CanManageReservations()]
 
     def get_queryset(self) -> QuerySet[Reservation]:
@@ -67,13 +80,17 @@ class ReservationViewSet(
         result_serializer = self.get_serializer(reservation)
         return Response(result_serializer.data, status=status.HTTP_201_CREATED)
 
-    def partial_update(self, request: Request, *args: object) -> Response:
+    def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()
+        if getattr(request.user, "role", None) == RoleCode.CUSTOMER and instance.customer_id != request.user.pk:
+            raise PermissionDenied("You can only modify your own reservations.")
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         status_val = serializer.validated_data.pop("status", None)
         if status_val == ReservationStatus.CANCELLED:
+            if instance.status != ReservationStatus.PENDING:
+                raise ValidationError("Only pending reservations can be cancelled.")
             instance.status = ReservationStatus.CANCELLED
             instance.save(update_fields=["status"])
             result_serializer = self.get_serializer(instance)
@@ -86,6 +103,93 @@ class ReservationViewSet(
 
         result_serializer = self.get_serializer(reservation)
         return Response(result_serializer.data)
+
+    @extend_schema(
+        summary="Available time slots for a table",
+        description="Returns available 30-min time slots for a table. "
+        "If date is provided, returns slots for that date only. "
+        "Otherwise returns slots for the next 14 days.",
+    )
+    @action(detail=False, methods=["get"], url_path="available-slots", permission_classes=[AllowAny])
+    def available_slots(self, request: Request) -> Response:
+        table_id = request.query_params.get("table")
+        date_str = request.query_params.get("date")
+        exclude_id = request.query_params.get("exclude")
+
+        if not table_id:
+            raise ValidationError("table query parameter is required.")
+
+        try:
+            table = Table.objects.get(public_id=table_id, active=True)
+        except Table.DoesNotExist:
+            raise ValidationError("Table not found.") from None
+
+        settings = RestaurantSettings.objects.filter(restaurant_id=table.restaurant_id).first()
+        working_hours = settings.working_hours if settings else {}
+        tz = ZoneInfo(settings.timezone) if settings else ZoneInfo("UTC")
+
+        today_local = timezone.now().astimezone(tz).date()
+
+        qs = Reservation.objects.filter(
+            table=table,
+            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+        )
+        if exclude_id:
+            qs = qs.exclude(public_id=exclude_id)
+        reservations = list(qs.values("start_at", "end_at"))
+
+        now_utc = timezone.now()
+
+        def day_slots(d: date_type) -> list[str]:
+            day_name = d.strftime("%A").lower()
+            day_config = working_hours.get(day_name)
+            if not day_config:
+                return []
+
+            open_t = _parse_time(day_config["open"])
+            close_t = _parse_time(day_config["close"])
+
+            open_minutes = open_t.hour * 60 + open_t.minute
+            close_minutes = close_t.hour * 60 + close_t.minute
+            overnight = close_minutes <= open_minutes
+            end_base = close_minutes + (24 * 60 if overnight else 0)
+
+            slots: list[str] = []
+            minute = open_minutes
+            while minute < end_base:
+                h = (minute // 60) % 24
+                m = minute % 60
+                slot_start_str = f"{h:02d}:{m:02d}"
+
+                slot_local = datetime(d.year, d.month, d.day, h, m, tzinfo=tz)
+                slot_utc = slot_local.astimezone(ZoneInfo("UTC"))
+                slot_end_utc = slot_utc + timedelta(minutes=30)
+
+                if d == today_local and slot_utc <= now_utc:
+                    minute += 30
+                    continue
+
+                overlaps = any(slot_utc < r["end_at"] and slot_end_utc > r["start_at"] for r in reservations)
+                if not overlaps:
+                    slots.append(slot_start_str)
+
+                minute += 30
+
+            return slots
+
+        result: dict[str, list[str]] = {}
+        if date_str:
+            try:
+                d = date_type.fromisoformat(date_str)
+            except ValueError:
+                raise ValidationError("Invalid date format. Use YYYY-MM-DD.") from None
+            result[date_str] = day_slots(d)
+        else:
+            for i in range(14):
+                d = today_local + timedelta(days=i)
+                result[d.isoformat()] = day_slots(d)
+
+        return Response(result)
 
     @extend_schema(responses=ReservationSerializer(many=True))
     @action(detail=False, methods=["get"], url_path="my")

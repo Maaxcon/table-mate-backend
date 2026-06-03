@@ -10,6 +10,7 @@ from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode
 from apps.authentication.permissions import IsFloor
+from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 from common.api import (
     PublicLookupMixin,
@@ -82,6 +83,12 @@ class EditorTableViewSet(
             OpenApiParameter(name="end_at", type=str, required=True, description="ISO 8601 datetime"),
             OpenApiParameter(name="guest_count", type=int, required=False),
             OpenApiParameter(
+                name="exclude",
+                type=str,
+                required=False,
+                description="Reservation public ID to exclude when checking an existing booking.",
+            ),
+            OpenApiParameter(
                 name="restaurant",
                 type=str,
                 required=False,
@@ -102,6 +109,7 @@ class EditorTableViewSet(
         start_at = request.query_params.get("start_at")
         end_at = request.query_params.get("end_at")
         guest_count = request.query_params.get("guest_count")
+        exclude_public_id = request.query_params.get("exclude")
 
         if not start_at or not end_at:
             return Response(
@@ -128,11 +136,22 @@ class EditorTableViewSet(
             gc = int(guest_count) if guest_count else None
         except ValueError:
             return Response({"detail": "guest_count must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+        current_reservation_id = None
+        if exclude_public_id:
+            current_reservation_id = (
+                Reservation.objects.filter(
+                    public_id=exclude_public_id,
+                    restaurant_id=restaurant_id,
+                )
+                .values_list("id", flat=True)
+                .first()
+            )
         tables = get_available_tables(
             restaurant_id=restaurant_id,
             start_at=start_dt,
             end_at=end_dt,
             guest_count=gc,
+            current_reservation_id=current_reservation_id,
         )
         serializer = self.get_serializer(tables, many=True)
         return Response(serializer.data)

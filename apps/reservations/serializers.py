@@ -60,6 +60,21 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             raise serializers.ValidationError("Table does not belong to this restaurant.")
         return value
 
+    def validate_guest_count(self, value: int) -> int:
+        if self.instance is not None:
+            capacity = self.instance.table.capacity if self.instance.table else None
+        elif "table" in self.initial_data:
+            try:
+                table_obj = Table.objects.get(public_id=self.initial_data["table"])
+                capacity = table_obj.capacity
+            except Table.DoesNotExist:
+                capacity = None
+        else:
+            capacity = None
+        if capacity is not None and value > capacity:
+            raise serializers.ValidationError(f"Guest count exceeds table capacity ({capacity}).")
+        return value
+
     def validate_status(self, value: str) -> str:
         if value == ReservationStatus.CANCELLED:
             return value

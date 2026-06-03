@@ -55,6 +55,7 @@ def get_available_tables(
     start_at: datetime,
     end_at: datetime,
     guest_count: int | None = None,
+    current_reservation_id: int | None = None,
 ) -> QuerySet[Table]:
     settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
 
@@ -66,15 +67,18 @@ def get_available_tables(
 
     overlapping = Reservation.objects.filter(
         restaurant_id=restaurant_id,
-        status=ReservationStatus.ACTIVE,
+        status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
         start_at__lt=end_at,
         end_at__gt=start_at,
-    ).values("table_id")
+    )
+    if current_reservation_id is not None:
+        overlapping = overlapping.exclude(id=current_reservation_id)
+    overlapping_table_ids = overlapping.values("table_id")
 
     qs = Table.objects.filter(
         restaurant_id=restaurant_id,
         active=True,
-    ).exclude(id__in=dm.Subquery(overlapping))
+    ).exclude(id__in=dm.Subquery(overlapping_table_ids))
 
     if guest_count is not None:
         qs = qs.filter(capacity__gte=guest_count)
