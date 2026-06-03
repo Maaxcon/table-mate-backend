@@ -14,7 +14,9 @@ class TsTzRange(Func):
 
 
 class ReservationStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
     ACTIVE = "active", "Active"
+    COMPLETED = "completed", "Completed"
     CANCELLED = "cancelled", "Cancelled"
 
 
@@ -40,7 +42,7 @@ class Reservation(RestaurantScopedModel):
     status = models.CharField(
         max_length=20,
         choices=ReservationStatus.choices,
-        default=ReservationStatus.ACTIVE,
+        default=ReservationStatus.PENDING,
     )
     notes = models.TextField(null=True, blank=True)
 
@@ -68,7 +70,7 @@ class Reservation(RestaurantScopedModel):
                     ),
                     ("table", RangeOperators.EQUAL),
                 ],
-                condition=Q(status=ReservationStatus.ACTIVE),
+                condition=Q(status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE]),
             ),
         ]
 
