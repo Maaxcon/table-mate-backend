@@ -58,8 +58,28 @@ def manage_employee(employee: User, **data: Any) -> User:
     return employee
 
 
+@transaction.atomic
+def create_employee(*, restaurant_id: int, email: str, role: str, **data: Any) -> User:
+    """Create a staff account tied to the admin's restaurant.
+
+    The restaurant is always supplied by the caller (from the admin's auth
+    context), never trusted from the request body, so an admin can only add
+    staff to their own restaurant. The account has no usable password — the
+    employee signs in with Google using the same email.
+    """
+    return User.objects.create_user(
+        email=email,
+        role=role,
+        restaurant_id=restaurant_id,
+        first_name=data.get("first_name", ""),
+        last_name=data.get("last_name", ""),
+        phone=data.get("phone"),
+    )
+
+
 __all__ = [
     "update_restaurant",
     "update_restaurant_settings",
     "manage_employee",
+    "create_employee",
 ]

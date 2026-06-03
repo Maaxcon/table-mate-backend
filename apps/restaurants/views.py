@@ -17,6 +17,7 @@ from . import services
 from .models import Restaurant, RestaurantSettings, Table, Zone
 from .serializers import (
     BookingSettingsSerializer,
+    EmployeeCreateSerializer,
     EmployeeSerializer,
     PublicRestaurantSerializer,
     RestaurantSerializer,
@@ -125,6 +126,7 @@ class RestaurantSettingsViewSet(
 @extend_schema(tags=["Restaurants"])
 class EmployeeViewSet(
     RestaurantScopedViewSetMixin[User],
+    mixins.CreateModelMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.UpdateModelMixin,
@@ -135,10 +137,24 @@ class EmployeeViewSet(
     serializer_class = EmployeeSerializer
     filterset_fields = ["role", "is_active"]
     ordering_fields = ["role", "email", "created_at", "updated_at"]
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_serializer_class(self) -> type[BaseSerializer[User]]:
+        if self.action == "create":
+            return EmployeeCreateSerializer
+        return EmployeeSerializer
 
     def safely_get_queryset(self, qs):  # type: ignore[no-untyped-def]
         return qs.exclude(role=RoleCode.CUSTOMER)
+
+    def perform_create(self, serializer: BaseSerializer[User]) -> None:
+        # Restaurant comes from the admin's auth context, never the request body,
+        # so an admin can only add staff to their own restaurant.
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        serializer.instance = services.create_employee(
+            restaurant_id=restaurant_id,
+            **serializer.validated_data,
+        )
 
     def perform_update(self, serializer: BaseSerializer[User]) -> None:
         services.manage_employee(serializer.instance, **serializer.validated_data)
