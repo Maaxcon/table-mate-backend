@@ -25,6 +25,7 @@ from .selectors import (
     search_menu_items,
 )
 from .serializers import (
+    AdminMenuCategorySerializer,
     AdminMenuSerializer,
     MenuCategorySerializer,
     MenuItemSerializer,
@@ -83,6 +84,28 @@ class AdminMenuViewSet(
     def perform_create(self, serializer: AdminMenuSerializer) -> None:
         # Menu belongs to the admin's restaurant, taken from the auth context.
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
+
+
+@extend_schema(tags=["Menu Admin"])
+class AdminMenuCategoryViewSet(
+    RestaurantScopedViewSetMixin[MenuCategory],
+    viewsets.ModelViewSet[MenuCategory],
+):
+    permission_classes = [IsAdmin]
+    queryset = MenuCategory.objects.all()
+    serializer_class = AdminMenuCategorySerializer
+    restaurant_lookup = "menu__restaurant_id"
+    filterset_class = MenuCategoryFilter
+    ordering_fields = ["sort_order", "name", "created_at", "updated_at"]
+
+    def get_serializer(self, *args: object, **kwargs: object) -> AdminMenuCategorySerializer:
+        serializer = super().get_serializer(*args, **kwargs)
+        # Restrict the selectable menu to the admin's own restaurant, so an admin
+        # cannot attach a category to another restaurant's menu.
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        if "menu" in serializer.fields:
+            serializer.fields["menu"].queryset = Menu.objects.filter(restaurant_id=restaurant_id)
+        return serializer
 
 
 @extend_schema(tags=["Menu"])

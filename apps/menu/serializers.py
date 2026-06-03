@@ -103,6 +103,20 @@ class AdminMenuSerializer(serializers.ModelSerializer[Menu]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
+class AdminMenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
+    """Writable category serializer. The menu is referenced by its public id and
+    must belong to the admin's restaurant (validated in the view's queryset)."""
+
+    menu: PublicIdRelatedField[Menu] = PublicIdRelatedField(
+        queryset=Menu.objects.all(),
+    )
+
+    class Meta:
+        model = MenuCategory
+        fields = ["public_id", "menu", "name", "sort_order", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "created_at", "updated_at"]
+
+
 class ToggleMenuItemLikeRequestSerializer(serializers.Serializer[Any]):
     guest_token = serializers.CharField(max_length=64)
 
