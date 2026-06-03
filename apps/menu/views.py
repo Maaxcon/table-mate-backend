@@ -24,8 +24,11 @@ from .selectors import (
     get_menu_items_by_restaurant,
     search_menu_items,
 )
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+
 from .serializers import (
     AdminMenuCategorySerializer,
+    AdminMenuItemSerializer,
     AdminMenuSerializer,
     MenuCategorySerializer,
     MenuItemSerializer,
@@ -106,6 +109,34 @@ class AdminMenuCategoryViewSet(
         if "menu" in serializer.fields:
             serializer.fields["menu"].queryset = Menu.objects.filter(restaurant_id=restaurant_id)
         return serializer
+
+
+@extend_schema(tags=["Menu Admin"])
+class AdminMenuItemViewSet(
+    RestaurantScopedViewSetMixin[MenuItem],
+    viewsets.ModelViewSet[MenuItem],
+):
+    permission_classes = [IsAdmin]
+    queryset = MenuItem.objects.all()
+    serializer_class = AdminMenuItemSerializer
+    restaurant_lookup = "restaurant_id"
+    filterset_class = MenuItemFilter
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    ordering_fields = ["sort_order", "name", "price", "created_at", "updated_at"]
+
+    def get_serializer(self, *args: object, **kwargs: object) -> AdminMenuItemSerializer:
+        serializer = super().get_serializer(*args, **kwargs)
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        if "menu" in serializer.fields:
+            serializer.fields["menu"].queryset = Menu.objects.filter(restaurant_id=restaurant_id)
+        if "category" in serializer.fields:
+            serializer.fields["category"].queryset = MenuCategory.objects.filter(
+                menu__restaurant_id=restaurant_id
+            )
+        return serializer
+
+    def perform_create(self, serializer: AdminMenuItemSerializer) -> None:
+        serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
 
 
 @extend_schema(tags=["Menu"])

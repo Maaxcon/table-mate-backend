@@ -117,6 +117,49 @@ class AdminMenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
+class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
+    """Writable menu item serializer for the admin panel. Menu and category are
+    referenced by public id and limited to the admin's restaurant in the view."""
+
+    menu: PublicIdRelatedField[Menu] = PublicIdRelatedField(queryset=Menu.objects.all())
+    category: PublicIdRelatedField[MenuCategory] = PublicIdRelatedField(
+        queryset=MenuCategory.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    ingredients = serializers.ListField(child=serializers.CharField(), required=False)
+    allergens = serializers.ListField(child=serializers.CharField(), required=False)
+
+    class Meta:
+        model = MenuItem
+        fields = [
+            "public_id",
+            "menu",
+            "category",
+            "name",
+            "description",
+            "ingredients",
+            "allergens",
+            "weight_grams",
+            "image",
+            "price",
+            "is_available",
+            "sort_order",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["public_id", "created_at", "updated_at"]
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        menu = attrs.get("menu") or getattr(self.instance, "menu", None)
+        category = attrs.get("category")
+        if category is not None and menu is not None and category.menu_id != menu.id:
+            raise serializers.ValidationError(
+                {"category": "Category must belong to the selected menu."}
+            )
+        return attrs
+
+
 class ToggleMenuItemLikeRequestSerializer(serializers.Serializer[Any]):
     guest_token = serializers.CharField(max_length=64)
 
