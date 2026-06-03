@@ -20,6 +20,15 @@ class TableInfoSerializer(serializers.ModelSerializer[Table]):
         ]
 
 
+class RestaurantInfoSerializer(serializers.ModelSerializer[Restaurant]):
+    class Meta:
+        model = Restaurant
+        fields = [
+            "public_id",
+            "name",
+        ]
+
+
 class ReservationSerializer(serializers.ModelSerializer[Reservation]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     customer: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
@@ -28,6 +37,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         required=True,
     )
     table_info = TableInfoSerializer(source="table", read_only=True)
+    restaurant_info = RestaurantInfoSerializer(source="restaurant", read_only=True)
 
     class Meta:
         model = Reservation
@@ -37,6 +47,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "customer",
             "table",
             "table_info",
+            "restaurant_info",
             "guest_count",
             "start_at",
             "end_at",

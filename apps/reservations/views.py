@@ -30,6 +30,18 @@ def _parse_time(value: str) -> time_type:
     return time_type(hour=int(parts[0]), minute=int(parts[1]))
 
 
+def _parse_non_negative_int(value: str | None, field_name: str) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise ValidationError(f"{field_name} must be a non-negative integer.") from None
+    if parsed < 0:
+        raise ValidationError(f"{field_name} must be a non-negative integer.")
+    return parsed
+
+
 @extend_schema(tags=["Reservations"])
 class ReservationViewSet(
     PublicLookupMixin,
@@ -89,8 +101,8 @@ class ReservationViewSet(
 
         status_val = serializer.validated_data.pop("status", None)
         if status_val == ReservationStatus.CANCELLED:
-            if instance.status != ReservationStatus.PENDING:
-                raise ValidationError("Only pending reservations can be cancelled.")
+            if instance.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
+                raise ValidationError("Only pending or active reservations can be cancelled.")
             instance.status = ReservationStatus.CANCELLED
             instance.save(update_fields=["status"])
             result_serializer = self.get_serializer(instance)
@@ -194,6 +206,8 @@ class ReservationViewSet(
     @extend_schema(responses=ReservationSerializer(many=True))
     @action(detail=False, methods=["get"], url_path="my")
     def my(self, request: Request) -> Response:
+        limit = _parse_non_negative_int(request.query_params.get("limit"), "limit")
+        offset = _parse_non_negative_int(request.query_params.get("offset"), "offset") or 0
         restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
             public_id = request.query_params.get(self.restaurant_query_param)
@@ -205,8 +219,16 @@ class ReservationViewSet(
                     raise ValidationError("Restaurant not found.") from None
             else:
                 reservations = get_customer_global_reservations(request.user.pk)  # type: ignore[arg-type]
+                if limit is not None:
+                    reservations = reservations[offset : offset + limit]
+                elif offset:
+                    reservations = reservations[offset:]
                 serializer = self.get_serializer(reservations, many=True)
                 return Response(serializer.data)
         reservations = get_customer_reservations(request.user.pk, restaurant_id=restaurant_id)  # type: ignore[arg-type]
+        if limit is not None:
+            reservations = reservations[offset : offset + limit]
+        elif offset:
+            reservations = reservations[offset:]
         serializer = self.get_serializer(reservations, many=True)
         return Response(serializer.data)
