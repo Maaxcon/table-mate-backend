@@ -14,8 +14,6 @@ ENDPOINTS: list[str] = [
     "layout-list",
     "reservation-list",
     "restaurant-list",
-    "restaurant-settings-list",
-    "table-list",
     "session-list",
     "order-list",
     "ticket-list",
@@ -27,14 +25,14 @@ PUBLIC_ENDPOINTS: list[str] = [
     "menu-list",
     "menu-category-list",
     "menu-item-list",
+    "restaurant-settings-list",
+    "table-list",
 ]
 
 ROLE_ALLOW_MATRIX: dict[str, set[str]] = {
     "layout-list": {RoleCode.ADMIN, RoleCode.WAITER},
     "reservation-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.CUSTOMER},
     "restaurant-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
-    "restaurant-settings-list": {RoleCode.ADMIN},
-    "table-list": {RoleCode.ADMIN, RoleCode.WAITER},
     "session-list": {RoleCode.ADMIN, RoleCode.WAITER},
     "order-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
     "ticket-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
