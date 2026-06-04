@@ -32,7 +32,7 @@ class IdempotencyKeyMixin:
             val = uuid.UUID(raw)
         except (ValueError, AttributeError):
             raise ValidationError(
-                {"idempotency_key": "Invalid Idempotency-Key format. Must be a valid UUIDv4."}
+                {"idempotency_key": "Invalid Idempotency-Key format. Must be a valid UUID."}
             ) from None
         return str(val)
 
