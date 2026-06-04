@@ -6,15 +6,17 @@ from django.db import transaction
 from django.db.models import Model, QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.views import APIView
 
 from apps.authentication.permissions import IsAdmin
+from .allergens import ALLERGENS
 from common.api import (
     PublicLookupMixin,
     PublicRestaurantQueryMixin,
@@ -344,3 +346,16 @@ class MenuItemViewSet(
         )
         response_serializer.is_valid(raise_exception=True)
         return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    tags=["Menu"],
+    responses={200: serializers.ListSerializer(child=serializers.CharField())},
+)
+class AllergenListView(APIView):
+    """The allowed allergen vocabulary — the single source of truth for clients."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        return Response(ALLERGENS)
