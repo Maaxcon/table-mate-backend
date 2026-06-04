@@ -3,10 +3,16 @@ from rest_framework import serializers
 from apps.authentication.models import RoleCode, User
 from common.api import PublicIdRelatedField
 
-from .models import Restaurant, RestaurantSettings, Table, Zone
+from .models import Restaurant, RestaurantSettings, Table, Zone, validate_working_hours
 
 
 class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
+    # Working hours live on RestaurantSettings; expose them here so the admin can
+    # edit them with the restaurant profile. The view writes them to settings.
+    working_hours = serializers.JSONField(
+        required=False, write_only=True, validators=[validate_working_hours]
+    )
+
     class Meta:
         model = Restaurant
         fields = [
@@ -16,10 +22,19 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
             "phone",
             "telegram_url",
             "facebook_url",
+            "working_hours",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["public_id", "created_at", "updated_at"]
+
+    def to_representation(self, instance: Restaurant) -> dict[str, object]:
+        data = super().to_representation(instance)
+        try:
+            data["working_hours"] = instance.settings.working_hours
+        except RestaurantSettings.DoesNotExist:
+            data["working_hours"] = {}
+        return data
 
 
 class EmployeeSerializer(serializers.ModelSerializer[User]):

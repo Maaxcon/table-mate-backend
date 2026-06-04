@@ -59,7 +59,16 @@ class RestaurantViewSet(
         return [IsAdmin()]
 
     def perform_update(self, serializer: BaseSerializer[Restaurant]) -> None:
-        services.update_restaurant(serializer.instance, **serializer.validated_data)
+        data = dict(serializer.validated_data)
+        working_hours = data.pop("working_hours", None)
+        restaurant = services.update_restaurant(serializer.instance, **data)
+        if working_hours is not None:
+            try:
+                settings = restaurant.settings
+            except RestaurantSettings.DoesNotExist:
+                settings = None
+            if settings is not None:
+                services.update_restaurant_settings(settings, working_hours=working_hours)
 
 
 class _PublicRestaurantScopedViewSetMixin(PublicRestaurantQueryMixin):
