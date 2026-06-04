@@ -1,5 +1,7 @@
+import os
 from typing import Any
 
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Model, QuerySet
 from drf_spectacular.types import OpenApiTypes
@@ -39,6 +41,16 @@ from .serializers import (
     ToggleMenuItemLikeRequestSerializer,
     ToggleMenuItemLikeResponseSerializer,
 )
+
+
+def _unique_copy_name(menu: Menu, base: str) -> str:
+    """A '(copy)' name that satisfies the unique (menu, name) constraint."""
+    name = f"{base} (copy)"
+    counter = 2
+    while MenuItem.objects.filter(menu=menu, name=name).exists():
+        name = f"{base} (copy {counter})"
+        counter += 1
+    return name
 
 
 def _bulk_reorder(viewset: Any, request: Request) -> Response:
@@ -189,6 +201,38 @@ class AdminMenuItemViewSet(
     @action(detail=False, methods=["post"])
     def reorder(self, request: Request) -> Response:
         return _bulk_reorder(self, request)
+
+    @extend_schema(request=None, responses={201: AdminMenuItemSerializer})
+    @action(detail=True, methods=["post"])
+    def duplicate(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Server-side copy of a dish, including its image file."""
+        original = self.get_object()
+        copy = MenuItem(
+            restaurant=original.restaurant,
+            menu=original.menu,
+            category=original.category,
+            name=_unique_copy_name(original.menu, original.name),
+            description=original.description,
+            ingredients=list(original.ingredients or []),
+            allergens=list(original.allergens or []),
+            weight_grams=original.weight_grams,
+            price=original.price,
+            is_available=original.is_available,
+            sort_order=original.sort_order,
+        )
+        if original.image:
+            original.image.open("rb")
+            try:
+                copy.image.save(
+                    os.path.basename(original.image.name),
+                    ContentFile(original.image.read()),
+                    save=False,
+                )
+            finally:
+                original.image.close()
+        copy.save()
+        serializer = self.get_serializer(copy)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Menu"])
