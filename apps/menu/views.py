@@ -1,7 +1,7 @@
 from typing import Any
 
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Model, QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
@@ -35,9 +35,36 @@ from .serializers import (
     MenuCategorySerializer,
     MenuItemSerializer,
     MenuSerializer,
+    ReorderEntrySerializer,
     ToggleMenuItemLikeRequestSerializer,
     ToggleMenuItemLikeResponseSerializer,
 )
+
+
+def _bulk_reorder(viewset: Any, request: Request) -> Response:
+    """Apply a list of {public_id, sort_order} to the viewset's (restaurant-scoped)
+    queryset in one atomic bulk update. Unknown/foreign ids are ignored."""
+    serializer = ReorderEntrySerializer(data=request.data, many=True)
+    serializer.is_valid(raise_exception=True)
+    entries = serializer.validated_data
+
+    objs_by_id = {
+        obj.public_id: obj
+        for obj in viewset.get_queryset().filter(
+            public_id__in=[e["public_id"] for e in entries]
+        )
+    }
+    to_update: list[Model] = []
+    for entry in entries:
+        obj = objs_by_id.get(entry["public_id"])
+        if obj is not None and obj.sort_order != entry["sort_order"]:
+            obj.sort_order = entry["sort_order"]
+            to_update.append(obj)
+
+    if to_update:
+        with transaction.atomic():
+            type(to_update[0]).objects.bulk_update(to_update, ["sort_order"])
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def _get_serializer_fields(serializer: BaseSerializer[Any]) -> Any:
@@ -120,6 +147,11 @@ class AdminMenuCategoryViewSet(
             )
         return serializer
 
+    @extend_schema(request=ReorderEntrySerializer(many=True), responses={204: None})
+    @action(detail=False, methods=["post"])
+    def reorder(self, request: Request) -> Response:
+        return _bulk_reorder(self, request)
+
 
 @extend_schema(tags=["Menu Admin"])
 class AdminMenuItemViewSet(
@@ -152,6 +184,11 @@ class AdminMenuItemViewSet(
 
     def perform_create(self, serializer: BaseSerializer[MenuItem]) -> None:
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
+
+    @extend_schema(request=ReorderEntrySerializer(many=True), responses={204: None})
+    @action(detail=False, methods=["post"])
+    def reorder(self, request: Request) -> Response:
+        return _bulk_reorder(self, request)
 
 
 @extend_schema(tags=["Menu"])

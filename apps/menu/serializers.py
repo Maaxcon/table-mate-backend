@@ -168,3 +168,10 @@ class ToggleMenuItemLikeResponseSerializer(serializers.Serializer[Any]):
     public_id = serializers.UUIDField()
     is_liked = serializers.BooleanField()
     likes_count = serializers.IntegerField(min_value=0)
+
+
+class ReorderEntrySerializer(serializers.Serializer[Any]):
+    """One {public_id, sort_order} pair for a bulk reorder request."""
+
+    public_id = serializers.UUIDField()
+    sort_order = serializers.IntegerField(min_value=0)
