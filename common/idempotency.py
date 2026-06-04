@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 from django.core.cache import cache
+from django.core.serializers.json import DjangoJSONEncoder
 from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -36,6 +37,16 @@ class IdempotencyKeyMixin:
         return str(val)
 
     def get_cached_response(self, key: str, request: Request) -> Response | None:
+        """
+        Return the cached response for an idempotency key, if one exists.
+
+        The cached response is returned regardless of whether the current
+        request body matches the original — the idempotency guarantee only
+        covers at-most-once execution for any caller-provided key.  Callers
+        that need request-body validation on cache hit (i.e. to reject a
+        reused key with a different payload) should hash the request body
+        alongside the response during cache_response and compare here.
+        """
         cache_key = _idempotency_cache_key(key, request)
         cached = cache.get(cache_key)
         if cached is None:
@@ -56,4 +67,4 @@ class IdempotencyKeyMixin:
         cache_key = _idempotency_cache_key(key, request)
         raw = response.data if response.data is not None else {}
         body: dict[str, Any] = {**raw, "_status": response.status_code}
-        cache.set(cache_key, json.dumps(body), IDEMPOTENCY_TIMEOUT)
+        cache.set(cache_key, DjangoJSONEncoder().encode(body), IDEMPOTENCY_TIMEOUT)
