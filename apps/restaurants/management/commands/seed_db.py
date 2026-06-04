@@ -37,4 +37,7 @@ class Command(BaseCommand):
         self.stdout.write("\n=== Seeding reservations ===")
         call_command("seed_reservations", **seed_kwargs)
 
+        self.stdout.write("\n=== Seeding table statuses ===")
+        call_command("seed_table_statuses", **seed_kwargs)
+
         self.stdout.write(self.style.SUCCESS("\n✓ Database seeding complete"))

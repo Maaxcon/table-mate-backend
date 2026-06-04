@@ -32,6 +32,7 @@ def validate_working_hours(value: object) -> None:
 
 class TableStatus(models.TextChoices):
     FREE = "free", "Free"
+    RESERVED = "reserved", "Reserved"
     OCCUPIED = "occupied", "Occupied"
 
 

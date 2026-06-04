@@ -281,8 +281,10 @@ paths:
           enum:
           - free
           - occupied
+          - reserved
         description: |-
           * `free` - Free
+          * `reserved` - Reserved
           * `occupied` - Occupied
       tags:
       - Editor
@@ -1474,8 +1476,10 @@ paths:
           enum:
           - free
           - occupied
+          - reserved
         description: |-
           * `free` - Free
+          * `reserved` - Reserved
           * `occupied` - Occupied
       - in: query
         name: zone__public_id
@@ -3175,10 +3179,12 @@ components:
     TableStatus:
       enum:
       - free
+      - reserved
       - occupied
       type: string
       description: |-
         * `free` - Free
+        * `reserved` - Reserved
         * `occupied` - Occupied
     Ticket:
       type: object
