@@ -1,9 +1,23 @@
+from typing import Any
+
 from rest_framework import serializers
 
 from apps.authentication.models import RoleCode, User
 from common.api import PublicIdRelatedField
 
 from .models import Restaurant, RestaurantSettings, Table, Zone, validate_working_hours
+
+
+class AdminOverviewSerializer(serializers.Serializer[Any]):
+    """Counts for the admin dashboard, scoped to the admin's restaurant."""
+
+    menus_total = serializers.IntegerField()
+    menus_active = serializers.IntegerField()
+    dishes_total = serializers.IntegerField()
+    dishes_hidden = serializers.IntegerField()
+    categories_total = serializers.IntegerField()
+    staff_total = serializers.IntegerField()
+    staff_active = serializers.IntegerField()
 
 
 class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):

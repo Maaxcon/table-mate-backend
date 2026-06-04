@@ -2,10 +2,14 @@ from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.permissions import SAFE_METHODS, AllowAny, BasePermission
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.views import APIView
 
 from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsAdmin, IsStaff
+from apps.menu.models import Menu, MenuCategory, MenuItem
 from common.api import (
     PublicLookupMixin,
     PublicRestaurantQueryMixin,
@@ -16,6 +20,7 @@ from common.api import (
 from . import services
 from .models import Restaurant, RestaurantSettings, Table, Zone
 from .serializers import (
+    AdminOverviewSerializer,
     BookingSettingsSerializer,
     EmployeeCreateSerializer,
     EmployeeSerializer,
@@ -25,6 +30,44 @@ from .serializers import (
     TableSerializer,
     ZoneSerializer,
 )
+
+
+@extend_schema(tags=["Restaurants"], responses=AdminOverviewSerializer)
+class AdminOverviewView(APIView):
+    """Aggregate counts for the admin dashboard, in one request."""
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request: Request) -> Response:
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is None:
+            return Response(
+                {
+                    "menus_total": 0,
+                    "menus_active": 0,
+                    "dishes_total": 0,
+                    "dishes_hidden": 0,
+                    "categories_total": 0,
+                    "staff_total": 0,
+                    "staff_active": 0,
+                }
+            )
+
+        menus = Menu.objects.filter(restaurant_id=restaurant_id)
+        items = MenuItem.objects.filter(restaurant_id=restaurant_id)
+        categories = MenuCategory.objects.filter(menu__restaurant_id=restaurant_id)
+        staff = User.objects.filter(restaurant_id=restaurant_id).exclude(role=RoleCode.CUSTOMER)
+
+        data = {
+            "menus_total": menus.count(),
+            "menus_active": menus.filter(is_active=True).count(),
+            "dishes_total": items.count(),
+            "dishes_hidden": items.filter(is_available=False).count(),
+            "categories_total": categories.count(),
+            "staff_total": staff.count(),
+            "staff_active": staff.filter(is_active=True).count(),
+        }
+        return Response(AdminOverviewSerializer(data).data)
 
 
 @extend_schema(tags=["Restaurants"])

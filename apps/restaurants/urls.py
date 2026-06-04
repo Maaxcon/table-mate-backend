@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AdminOverviewView,
     EmployeeViewSet,
     PublicRestaurantViewSet,
     RestaurantSettingsViewSet,
@@ -19,5 +20,6 @@ router.register("zones", ZoneViewSet, basename="zone")
 router.register("restaurants-public", PublicRestaurantViewSet, basename="restaurant-public")
 
 urlpatterns = [
+    path("admin/overview/", AdminOverviewView.as_view(), name="admin-overview"),
     path("", include(router.urls)),
 ]
