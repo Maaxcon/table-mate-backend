@@ -150,6 +150,7 @@ class Order(RestaurantScopedModel):
     tip_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     service_charge = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     notes = models.TextField(null=True, blank=True)
+    idempotency_key = models.UUIDField(null=True, blank=True, db_index=True)
 
     class Meta:
         ordering = ["-created_at", "-id"]
@@ -173,6 +174,11 @@ class Order(RestaurantScopedModel):
             models.UniqueConstraint(
                 fields=["restaurant", "id"],
                 name="orders_order_rest_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["session", "idempotency_key"],
+                name="orders_order_session_idempotency_uniq",
+                condition=models.Q(idempotency_key__isnull=False),
             ),
         ]
 

@@ -10,6 +10,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 IDEMPOTENCY_TIMEOUT: int = 60 * 60 * 24  # 24 hours
+IDEMPOTENCY_PROCESSING_TIMEOUT: int = 60 * 10  # 10 minutes
+_PROCESSING_MARKER = "::processing"
 
 
 def _idempotency_cache_key(key: str, request: Request) -> str:
@@ -41,6 +43,14 @@ class IdempotencyKeyMixin:
         data: dict[str, Any] = json.loads(cached)
         status_code = data.pop("_status", 201)
         return Response(data=data, status=status_code)
+
+    def reserve_key(self, key: str, request: Request) -> bool:
+        cache_key = _idempotency_cache_key(key, request)
+        return cache.add(cache_key, _PROCESSING_MARKER, IDEMPOTENCY_PROCESSING_TIMEOUT)
+
+    def release_key(self, key: str, request: Request) -> None:
+        cache_key = _idempotency_cache_key(key, request)
+        cache.delete(cache_key)
 
     def cache_response(self, key: str, response: Response, request: Request) -> None:
         cache_key = _idempotency_cache_key(key, request)

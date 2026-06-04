@@ -109,8 +109,16 @@ class OrderSubmitView(IdempotencyKeyMixin, APIView):
             if cached is not None:
                 return cached
 
+            if not self.reserve_key(idempotency_key, request):
+                return Response(
+                    {"detail": "Idempotency key already in use for another request."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
         restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
+            if idempotency_key is not None:
+                self.release_key(idempotency_key, request)
             return Response(
                 {"detail": "Restaurant context required."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -130,13 +138,19 @@ class OrderSubmitView(IdempotencyKeyMixin, APIView):
             for entry in serializer.validated_data["items"]
         ]
 
-        order = submit_order(
-            restaurant_id=restaurant_id,
-            table_id=str(serializer.validated_data["table_id"]),
-            items_data=items_data,
-            user=user,
-            notes=serializer.validated_data.get("notes"),
-        )
+        try:
+            order = submit_order(
+                restaurant_id=restaurant_id,
+                table_id=str(serializer.validated_data["table_id"]),
+                items_data=items_data,
+                user=user,
+                notes=serializer.validated_data.get("notes"),
+                idempotency_key=idempotency_key,
+            )
+        except Exception:
+            if idempotency_key is not None:
+                self.release_key(idempotency_key, request)
+            raise
 
         result = OrderSerializer(order, context={"request": request})
         response = Response(result.data, status=status.HTTP_201_CREATED)

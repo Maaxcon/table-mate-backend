@@ -5,7 +5,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from http import HTTPStatus
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 
@@ -123,6 +123,7 @@ def submit_order(
     items_data: list[dict[str, Any]],
     user: User,
     notes: str | None = None,
+    idempotency_key: str | None = None,
 ) -> Order:
     menu_item_ids = [e["menu_item_id"] for e in items_data]
     max_guest_slot = max(e["guest_slot"] for e in items_data)
@@ -172,18 +173,41 @@ def submit_order(
             tax_rate=tax_rate,
         )
 
-        order = Order.objects.create(
-            restaurant_id=restaurant_id,
-            session=session,
-            created_by=user,
-            created_by_source=CreatedBySource.CUSTOMER,
-            source=OrderSource.CUSTOMER_PREPAID,
-            status=OrderStatus.SUBMITTED,
-            currency=currency,
-            total_amount=totals["total_amount"],
-            tax_total=totals["tax_total"],
-            notes=notes or "",
-        )
+        if idempotency_key:
+            try:
+                with transaction.atomic():
+                    order = Order.objects.create(
+                        restaurant_id=restaurant_id,
+                        session=session,
+                        created_by=user,
+                        created_by_source=CreatedBySource.CUSTOMER,
+                        source=OrderSource.CUSTOMER_PREPAID,
+                        status=OrderStatus.SUBMITTED,
+                        currency=currency,
+                        total_amount=totals["total_amount"],
+                        tax_total=totals["tax_total"],
+                        notes=notes or "",
+                        idempotency_key=idempotency_key,
+                    )
+            except IntegrityError:
+                order = Order.objects.get(
+                    session=session,
+                    idempotency_key=idempotency_key,
+                )
+                return order
+        else:
+            order = Order.objects.create(
+                restaurant_id=restaurant_id,
+                session=session,
+                created_by=user,
+                created_by_source=CreatedBySource.CUSTOMER,
+                source=OrderSource.CUSTOMER_PREPAID,
+                status=OrderStatus.SUBMITTED,
+                currency=currency,
+                total_amount=totals["total_amount"],
+                tax_total=totals["tax_total"],
+                notes=notes or "",
+            )
 
         ticket = Ticket.objects.create(
             restaurant_id=restaurant_id,
