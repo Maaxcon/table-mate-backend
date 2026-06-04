@@ -125,6 +125,9 @@ def submit_order(
     notes: str | None = None,
     idempotency_key: str | None = None,
 ) -> Order:
+    if not items_data:
+        raise ValueError("items_data must not be empty")
+
     menu_item_ids = [e["menu_item_id"] for e in items_data]
     max_guest_slot = max(e["guest_slot"] for e in items_data)
     guest_count = max(max_guest_slot + 1, 1)
