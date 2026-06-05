@@ -36,6 +36,7 @@ from .serializers import (
     AdminMenuCategorySerializer,
     AdminMenuItemSerializer,
     AdminMenuSerializer,
+    BulkItemActionSerializer,
     MenuCategorySerializer,
     MenuItemSerializer,
     MenuSerializer,
@@ -203,6 +204,41 @@ class AdminMenuItemViewSet(
     @action(detail=False, methods=["post"])
     def reorder(self, request: Request) -> Response:
         return _bulk_reorder(self, request)
+
+    @extend_schema(request=BulkItemActionSerializer, responses={200: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=["post"])
+    def bulk(self, request: Request) -> Response:
+        """Hide/show, set the category of, or delete several dishes at once.
+        Only items in the admin's restaurant are touched; unknown ids are ignored."""
+        serializer = BulkItemActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        items = self.get_queryset().filter(public_id__in=data["ids"])
+
+        if data["action"] == "delete":
+            count, _ = items.delete()
+            return Response({"deleted": count}, status=status.HTTP_200_OK)
+
+        if data["action"] == "set_available":
+            updated = items.update(is_available=data["is_available"])
+            return Response({"updated": updated}, status=status.HTTP_200_OK)
+
+        # set_category: resolve a restaurant-owned category (or null to clear).
+        category = None
+        if data.get("category") is not None:
+            restaurant_id = get_restaurant_id_from_auth(request)
+            category = MenuCategory.objects.filter(
+                public_id=data["category"], menu__restaurant_id=restaurant_id
+            ).first()
+            if category is None:
+                raise serializers.ValidationError({"category": "Category not found."})
+            # A category can only hold dishes from its own menu.
+            if items.exclude(menu_id=category.menu_id).exists():
+                raise serializers.ValidationError(
+                    {"category": "Category must belong to the items' menu."}
+                )
+        updated = items.update(category=category)
+        return Response({"updated": updated}, status=status.HTTP_200_OK)
 
     @extend_schema(request=None, responses={201: AdminMenuItemSerializer})
     @action(detail=True, methods=["post"])

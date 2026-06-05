@@ -175,3 +175,24 @@ class ReorderEntrySerializer(serializers.Serializer[Any]):
 
     public_id = serializers.UUIDField()
     sort_order = serializers.IntegerField(min_value=0)
+
+
+class BulkItemActionSerializer(serializers.Serializer[Any]):
+    """A bulk operation over several menu items, selected by public id.
+
+    - ``set_available`` needs ``is_available``
+    - ``set_category`` needs ``category`` (may be null to clear it)
+    - ``delete`` needs nothing else
+    """
+
+    ids = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
+    action = serializers.ChoiceField(choices=["set_available", "set_category", "delete"])
+    is_available = serializers.BooleanField(required=False)
+    category = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        if attrs["action"] == "set_available" and "is_available" not in attrs:
+            raise serializers.ValidationError({"is_available": "Required for this action."})
+        if attrs["action"] == "set_category" and "category" not in attrs:
+            raise serializers.ValidationError({"category": "Required for this action."})
+        return attrs
