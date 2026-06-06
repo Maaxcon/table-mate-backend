@@ -1,6 +1,10 @@
+from typing import Any
+
 from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
+from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import SAFE_METHODS, AllowAny, BasePermission
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -112,6 +116,24 @@ class RestaurantViewSet(
                 settings = None
             if settings is not None:
                 services.update_restaurant_settings(settings, working_hours=working_hours)
+
+    @extend_schema(request=None, responses=RestaurantSerializer)
+    @action(
+        detail=True,
+        methods=["patch"],
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+    )
+    def cover(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Upload a new cover image (multipart `cover_image`), or clear it by
+        sending `cover_image` empty/null."""
+        restaurant = self.get_object()
+        file = request.FILES.get("cover_image")
+        if file is not None:
+            restaurant.cover_image = file
+        else:
+            restaurant.cover_image = None
+        restaurant.save(update_fields=["cover_image", "updated_at"])
+        return Response(RestaurantSerializer(restaurant, context=self.get_serializer_context()).data)
 
 
 class _PublicRestaurantScopedViewSetMixin(PublicRestaurantQueryMixin):

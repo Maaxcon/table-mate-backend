@@ -23,9 +23,7 @@ class AdminOverviewSerializer(serializers.Serializer[Any]):
 class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
     # Working hours live on RestaurantSettings; expose them here so the admin can
     # edit them with the restaurant profile. The view writes them to settings.
-    working_hours = serializers.JSONField(
-        required=False, write_only=True, validators=[validate_working_hours]
-    )
+    working_hours = serializers.JSONField(required=False, write_only=True, validators=[validate_working_hours])
 
     class Meta:
         model = Restaurant
@@ -37,10 +35,13 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
             "telegram_url",
             "facebook_url",
             "working_hours",
+            "cover_image",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        # cover_image is uploaded via the dedicated `cover` action, so it is
+        # read-only here (the profile PATCH ignores it).
+        read_only_fields = ["public_id", "cover_image", "created_at", "updated_at"]
 
     def to_representation(self, instance: Restaurant) -> dict[str, object]:
         data = super().to_representation(instance)
