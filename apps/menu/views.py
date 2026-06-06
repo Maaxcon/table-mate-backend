@@ -153,8 +153,12 @@ class AdminMenuItemViewSet(
     ordering_fields = ["sort_order", "name", "price", "created_at", "updated_at"]
 
     def safely_get_queryset(self, qs: QuerySet[MenuItem]) -> QuerySet[MenuItem]:
-        # Expose a likes_count for the admin (used by the dashboard charts).
-        return qs.annotate(likes_count=Count("likes", distinct=True))
+        # Expose a likes_count for the admin (used by the dashboard charts). The
+        # aggregate adds a GROUP BY, so set an explicit order to keep pagination
+        # stable (Django otherwise drops Meta.ordering and warns).
+        return qs.annotate(likes_count=Count("likes", distinct=True)).order_by(
+            "menu_id", "sort_order", "id"
+        )
 
     def get_serializer(self, *args: object, **kwargs: object) -> BaseSerializer[MenuItem]:
         serializer = super().get_serializer(*args, **kwargs)
