@@ -1,9 +1,7 @@
-import os
 from typing import Any
 
-from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import Count, Model, QuerySet
+from django.db.models import Count, QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers, status, viewsets
@@ -23,6 +21,7 @@ from common.api import (
     get_restaurant_id_from_auth,
 )
 
+from . import services
 from .allergens import ALLERGENS
 from .filters import MenuCategoryFilter, MenuItemFilter
 from .models import Menu, MenuCategory, MenuItem, MenuItemLike
@@ -46,36 +45,11 @@ from .serializers import (
 )
 
 
-def _unique_copy_name(menu: Menu, base: str) -> str:
-    """A '(copy)' name that satisfies the unique (menu, name) constraint."""
-    name = f"{base} (copy)"
-    counter = 2
-    while MenuItem.objects.filter(menu=menu, name=name).exists():
-        name = f"{base} (copy {counter})"
-        counter += 1
-    return name
-
-
-def _bulk_reorder(viewset: Any, request: Request) -> Response:
-    """Apply a list of {public_id, sort_order} to the viewset's (restaurant-scoped)
-    queryset in one atomic bulk update. Unknown/foreign ids are ignored."""
+def _reorder_view(viewset: Any, request: Request) -> Response:
+    """Validate {public_id, sort_order} entries and delegate to the reorder service."""
     serializer = ReorderEntrySerializer(data=request.data, many=True)
     serializer.is_valid(raise_exception=True)
-    entries = serializer.validated_data
-
-    objs_by_id = {
-        obj.public_id: obj for obj in viewset.get_queryset().filter(public_id__in=[e["public_id"] for e in entries])
-    }
-    to_update: list[Model] = []
-    for entry in entries:
-        obj = objs_by_id.get(entry["public_id"])
-        if obj is not None and obj.sort_order != entry["sort_order"]:
-            obj.sort_order = entry["sort_order"]
-            to_update.append(obj)
-
-    if to_update:
-        with transaction.atomic():
-            type(to_update[0]).objects.bulk_update(to_update, ["sort_order"])
+    services.reorder(viewset.get_queryset(), serializer.validated_data)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -162,7 +136,7 @@ class AdminMenuCategoryViewSet(
     @extend_schema(request=ReorderEntrySerializer(many=True), responses={204: None})
     @action(detail=False, methods=["post"])
     def reorder(self, request: Request) -> Response:
-        return _bulk_reorder(self, request)
+        return _reorder_view(self, request)
 
 
 @extend_schema(tags=["Menu Admin"])
@@ -204,75 +178,25 @@ class AdminMenuItemViewSet(
     @extend_schema(request=ReorderEntrySerializer(many=True), responses={204: None})
     @action(detail=False, methods=["post"])
     def reorder(self, request: Request) -> Response:
-        return _bulk_reorder(self, request)
+        return _reorder_view(self, request)
 
     @extend_schema(request=BulkItemActionSerializer, responses={200: OpenApiTypes.OBJECT})
     @action(detail=False, methods=["post"])
     def bulk(self, request: Request) -> Response:
-        """Hide/show, set the category of, or delete several dishes at once.
-        Only items in the admin's restaurant are touched; unknown ids are ignored."""
+        """Hide/show, set the category of, or delete several dishes at once."""
         serializer = BulkItemActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        scoped = self.get_queryset().filter(public_id__in=data["ids"])
-        # Operate on a plain queryset so update()/delete() don't trip over the
-        # likes_count aggregate annotation added in get_queryset().
-        items = MenuItem.objects.filter(pk__in=list(scoped.values_list("pk", flat=True)))
-
-        if data["action"] == "delete":
-            count, _ = items.delete()
-            return Response({"deleted": count}, status=status.HTTP_200_OK)
-
-        if data["action"] == "set_available":
-            updated = items.update(is_available=data["is_available"])
-            return Response({"updated": updated}, status=status.HTTP_200_OK)
-
-        # set_category: resolve a restaurant-owned category (or null to clear).
-        category = None
-        if data.get("category") is not None:
-            restaurant_id = get_restaurant_id_from_auth(request)
-            category = MenuCategory.objects.filter(
-                public_id=data["category"], menu__restaurant_id=restaurant_id
-            ).first()
-            if category is None:
-                raise serializers.ValidationError({"category": "Category not found."})
-            # A category can only hold dishes from its own menu.
-            if items.exclude(menu_id=category.menu_id).exists():
-                raise serializers.ValidationError({"category": "Category must belong to the items' menu."})
-        updated = items.update(category=category)
-        return Response({"updated": updated}, status=status.HTTP_200_OK)
+        result = services.bulk_update_items(
+            restaurant_id=get_restaurant_id_from_auth(request),
+            data=serializer.validated_data,
+        )
+        return Response(result, status=status.HTTP_200_OK)
 
     @extend_schema(request=None, responses={201: AdminMenuItemSerializer})
     @action(detail=True, methods=["post"])
     def duplicate(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Server-side copy of a dish, including its image file."""
-        original = self.get_object()
-        copy = MenuItem(
-            restaurant=original.restaurant,
-            menu=original.menu,
-            category=original.category,
-            name=_unique_copy_name(original.menu, original.name),
-            description=original.description,
-            ingredients=list(original.ingredients or []),
-            allergens=list(original.allergens or []),
-            weight_grams=original.weight_grams,
-            price=original.price,
-            is_available=original.is_available,
-            sort_order=original.sort_order,
-        )
-        if original.image:
-            original.image.open("rb")
-            try:
-                copy.image.save(
-                    os.path.basename(original.image.name),
-                    ContentFile(original.image.read()),
-                    save=False,
-                )
-            finally:
-                original.image.close()
-        copy.save()
-        serializer = self.get_serializer(copy)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        copy = services.duplicate_item(self.get_object())
+        return Response(self.get_serializer(copy).data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Menu"])
