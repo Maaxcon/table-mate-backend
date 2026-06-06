@@ -3770,6 +3770,8 @@ components:
           format: uri
           maxLength: 255
         working_hours:
+          allOf:
+          - $ref: '#/components/schemas/WorkingHours'
           writeOnly: true
         cover_image:
           type: string
@@ -3812,7 +3814,8 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        working_hours: {}
+        working_hours:
+          $ref: '#/components/schemas/WorkingHours'
         rating:
           type: string
           format: decimal
@@ -3963,6 +3966,8 @@ components:
           type: string
           readOnly: true
         working_hours:
+          allOf:
+          - $ref: '#/components/schemas/WorkingHours'
           readOnly: true
         rating:
           type: string
@@ -4191,6 +4196,8 @@ components:
           format: uri
           maxLength: 255
         working_hours:
+          allOf:
+          - $ref: '#/components/schemas/WorkingHours'
           writeOnly: true
         cover_image:
           type: string
@@ -4240,7 +4247,8 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        working_hours: {}
+        working_hours:
+          $ref: '#/components/schemas/WorkingHours'
         rating:
           type: string
           format: decimal
@@ -4575,6 +4583,36 @@ components:
       - public_id
       - restaurant_public_id
       - updated_at
+    WorkingHours:
+      type: object
+      description: |-
+        Schema shape for the working_hours JSON: optional mon–sun, each open/close.
+        Used only to type the OpenAPI schema; validation stays in validate_working_hours.
+      properties:
+        mon:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        tue:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        wed:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        thu:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        fri:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        sat:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        sun:
+          $ref: '#/components/schemas/WorkingHoursDay'
+    WorkingHoursDay:
+      type: object
+      properties:
+        open:
+          type: string
+        close:
+          type: string
+      required:
+      - close
+      - open
   securitySchemes:
     jwtAuth:
       type: http

@@ -1,11 +1,39 @@
 from typing import Any
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.authentication.models import RoleCode, User
 from common.api import PublicIdRelatedField
 
 from .models import Restaurant, RestaurantSettings, Table, Zone, validate_working_hours
+
+
+class WorkingHoursDaySerializer(serializers.Serializer[Any]):
+    open = serializers.CharField()
+    close = serializers.CharField()
+
+
+class WorkingHoursSerializer(serializers.Serializer[Any]):
+    """Schema shape for the working_hours JSON: optional mon–sun, each open/close.
+    Used only to type the OpenAPI schema; validation stays in validate_working_hours."""
+
+    mon = WorkingHoursDaySerializer(required=False)
+    tue = WorkingHoursDaySerializer(required=False)
+    wed = WorkingHoursDaySerializer(required=False)
+    thu = WorkingHoursDaySerializer(required=False)
+    fri = WorkingHoursDaySerializer(required=False)
+    sat = WorkingHoursDaySerializer(required=False)
+    sun = WorkingHoursDaySerializer(required=False)
+
+
+@extend_schema_field(WorkingHoursSerializer)
+class _WorkingHoursField(serializers.JSONField):
+    """JSONField that advertises the WorkingHours shape in the OpenAPI schema."""
+
+
+def working_hours_field(**kwargs: Any) -> serializers.JSONField:
+    return _WorkingHoursField(validators=[validate_working_hours], **kwargs)
 
 
 class AdminOverviewSerializer(serializers.Serializer[Any]):
@@ -23,7 +51,7 @@ class AdminOverviewSerializer(serializers.Serializer[Any]):
 class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
     # Working hours live on RestaurantSettings; expose them here so the admin can
     # edit them with the restaurant profile. The view writes them to settings.
-    working_hours = serializers.JSONField(required=False, write_only=True, validators=[validate_working_hours])
+    working_hours = working_hours_field(required=False, write_only=True)
 
     class Meta:
         model = Restaurant
@@ -98,6 +126,8 @@ class EmployeeCreateSerializer(serializers.ModelSerializer[User]):
 
 
 class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
+    working_hours = working_hours_field(read_only=True)
+
     class Meta:
         model = RestaurantSettings
         fields = ["currency", "timezone", "working_hours", "rating", "eta_min_minutes", "eta_max_minutes", "price_band"]
@@ -131,6 +161,7 @@ class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
 
 class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
+    working_hours = working_hours_field(required=False)
 
     class Meta:
         model = RestaurantSettings
