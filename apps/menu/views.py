@@ -3,7 +3,7 @@ from typing import Any
 
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import Model, QuerySet
+from django.db.models import Count, Model, QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers, status, viewsets
@@ -16,7 +16,6 @@ from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
 from apps.authentication.permissions import IsAdmin
-from .allergens import ALLERGENS
 from common.api import (
     PublicLookupMixin,
     PublicRestaurantQueryMixin,
@@ -24,6 +23,7 @@ from common.api import (
     get_restaurant_id_from_auth,
 )
 
+from .allergens import ALLERGENS
 from .filters import MenuCategoryFilter, MenuItemFilter
 from .models import Menu, MenuCategory, MenuItem, MenuItemLike
 from .selectors import (
@@ -64,10 +64,7 @@ def _bulk_reorder(viewset: Any, request: Request) -> Response:
     entries = serializer.validated_data
 
     objs_by_id = {
-        obj.public_id: obj
-        for obj in viewset.get_queryset().filter(
-            public_id__in=[e["public_id"] for e in entries]
-        )
+        obj.public_id: obj for obj in viewset.get_queryset().filter(public_id__in=[e["public_id"] for e in entries])
     }
     to_update: list[Model] = []
     for entry in entries:
@@ -181,6 +178,10 @@ class AdminMenuItemViewSet(
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     ordering_fields = ["sort_order", "name", "price", "created_at", "updated_at"]
 
+    def safely_get_queryset(self, qs: QuerySet[MenuItem]) -> QuerySet[MenuItem]:
+        # Expose a likes_count for the admin (used by the dashboard charts).
+        return qs.annotate(likes_count=Count("likes", distinct=True))
+
     def get_serializer(self, *args: object, **kwargs: object) -> BaseSerializer[MenuItem]:
         serializer = super().get_serializer(*args, **kwargs)
         restaurant_id = get_restaurant_id_from_auth(self.request)
@@ -213,7 +214,10 @@ class AdminMenuItemViewSet(
         serializer = BulkItemActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        items = self.get_queryset().filter(public_id__in=data["ids"])
+        scoped = self.get_queryset().filter(public_id__in=data["ids"])
+        # Operate on a plain queryset so update()/delete() don't trip over the
+        # likes_count aggregate annotation added in get_queryset().
+        items = MenuItem.objects.filter(pk__in=list(scoped.values_list("pk", flat=True)))
 
         if data["action"] == "delete":
             count, _ = items.delete()
@@ -234,9 +238,7 @@ class AdminMenuItemViewSet(
                 raise serializers.ValidationError({"category": "Category not found."})
             # A category can only hold dishes from its own menu.
             if items.exclude(menu_id=category.menu_id).exists():
-                raise serializers.ValidationError(
-                    {"category": "Category must belong to the items' menu."}
-                )
+                raise serializers.ValidationError({"category": "Category must belong to the items' menu."})
         updated = items.update(category=category)
         return Response({"updated": updated}, status=status.HTTP_200_OK)
 

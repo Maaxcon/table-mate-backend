@@ -129,6 +129,8 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     )
     ingredients = serializers.ListField(child=serializers.CharField(), required=False)
     allergens = serializers.ListField(child=serializers.CharField(), required=False)
+    # Annotated in AdminMenuItemViewSet.get_queryset; read-only for the dashboard.
+    likes_count = serializers.SerializerMethodField()
 
     class Meta:
         model = MenuItem
@@ -145,18 +147,21 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
             "price",
             "is_available",
             "sort_order",
+            "likes_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "likes_count", "created_at", "updated_at"]
+
+    def get_likes_count(self, obj: MenuItem) -> int:
+        value = getattr(obj, "likes_count", None)
+        return value if value is not None else 0
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         menu = attrs.get("menu") or getattr(self.instance, "menu", None)
         category = attrs.get("category")
         if category is not None and menu is not None and category.menu_id != menu.id:
-            raise serializers.ValidationError(
-                {"category": "Category must belong to the selected menu."}
-            )
+            raise serializers.ValidationError({"category": "Category must belong to the selected menu."})
         return attrs
 
 

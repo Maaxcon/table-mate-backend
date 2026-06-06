@@ -2236,6 +2236,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/Restaurant'
           description: ''
+  /api/restaurants/restaurants/{public_id}/cover/:
+    patch:
+      operationId: restaurants_restaurants_cover_partial_update
+      description: |-
+        Upload a new cover image (multipart `cover_image`), or clear it by
+        sending `cover_image` empty/null.
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+          description: ''
   /api/restaurants/tables/:
     get:
       operationId: restaurants_tables_list
@@ -2422,6 +2447,9 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        likes_count:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2432,6 +2460,7 @@ components:
           readOnly: true
       required:
       - created_at
+      - likes_count
       - menu
       - name
       - price
@@ -3577,6 +3606,9 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        likes_count:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3739,6 +3771,11 @@ components:
           maxLength: 255
         working_hours:
           writeOnly: true
+        cover_image:
+          type: string
+          format: uri
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -4155,6 +4192,11 @@ components:
           maxLength: 255
         working_hours:
           writeOnly: true
+        cover_image:
+          type: string
+          format: uri
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -4165,6 +4207,7 @@ components:
           readOnly: true
       required:
       - address
+      - cover_image
       - created_at
       - name
       - public_id
