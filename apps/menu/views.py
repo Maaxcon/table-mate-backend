@@ -19,6 +19,7 @@ from common.api import (
     PublicRestaurantQueryMixin,
     RestaurantScopedViewSetMixin,
     get_restaurant_id_from_auth,
+    require_restaurant_id_from_auth,
 )
 
 from . import services
@@ -187,11 +188,12 @@ class AdminMenuItemViewSet(
     @extend_schema(request=BulkItemActionSerializer, responses={200: OpenApiTypes.OBJECT})
     @action(detail=False, methods=["post"])
     def bulk(self, request: Request) -> Response:
-        """Hide/show, set the category of, or delete several dishes at once."""
+        """Hide/show, set the category of, or delete several dishes at once.
+        Only items in the admin's restaurant are touched; unknown ids are ignored."""
         serializer = BulkItemActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = services.bulk_update_items(
-            restaurant_id=get_restaurant_id_from_auth(request),
+            restaurant_id=require_restaurant_id_from_auth(request),
             data=serializer.validated_data,
         )
         return Response(result, status=status.HTTP_200_OK)
@@ -199,6 +201,7 @@ class AdminMenuItemViewSet(
     @extend_schema(request=None, responses={201: AdminMenuItemSerializer})
     @action(detail=True, methods=["post"])
     def duplicate(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Server-side copy of a dish, including its image file."""
         copy = services.duplicate_item(self.get_object())
         return Response(self.get_serializer(copy).data, status=status.HTTP_201_CREATED)
 

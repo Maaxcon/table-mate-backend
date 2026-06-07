@@ -4,6 +4,7 @@ from django.db.models import Manager, Model, QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
 
 _ModelT = TypeVar("_ModelT", bound=Model)
@@ -26,6 +27,19 @@ def get_restaurant_id_from_auth(request: Request) -> int | None:
         except (TypeError, ValueError, AttributeError):
             pass
     return None
+
+
+def require_restaurant_id_from_auth(request: Request) -> int:
+    """Restaurant id for write paths that cannot run without one.
+
+    Like get_restaurant_id_from_auth, but raises instead of returning None. A
+    missing restaurant_id is only reachable with a malformed/over-scoped token,
+    so it is a permission error rather than a normal empty result.
+    """
+    restaurant_id = get_restaurant_id_from_auth(request)
+    if restaurant_id is None:
+        raise PermissionDenied("No restaurant in the authentication context.")
+    return restaurant_id
 
 
 class PublicLookupMixin:

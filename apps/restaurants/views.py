@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
@@ -19,6 +19,7 @@ from common.api import (
     PublicRestaurantQueryMixin,
     RestaurantScopedViewSetMixin,
     get_restaurant_id_from_auth,
+    require_restaurant_id_from_auth,
 )
 
 from . import services
@@ -108,7 +109,7 @@ class RestaurantViewSet(
     def perform_update(self, serializer: BaseSerializer[Restaurant]) -> None:
         data = dict(serializer.validated_data)
         working_hours = data.pop("working_hours", None)
-        restaurant = services.update_restaurant(serializer.instance, **data)
+        restaurant = services.update_restaurant(cast(Restaurant, serializer.instance), **data)
         if working_hours is not None:
             try:
                 settings = restaurant.settings
@@ -194,7 +195,9 @@ class RestaurantSettingsViewSet(
         return qs.none()
 
     def perform_update(self, serializer: BaseSerializer[RestaurantSettings]) -> None:
-        services.update_restaurant_settings(serializer.instance, **serializer.validated_data)
+        services.update_restaurant_settings(
+            cast(RestaurantSettings, serializer.instance), **serializer.validated_data
+        )
 
 
 @extend_schema(tags=["Restaurants"])
@@ -224,14 +227,14 @@ class EmployeeViewSet(
     def perform_create(self, serializer: BaseSerializer[User]) -> None:
         # Restaurant comes from the admin's auth context, never the request body,
         # so an admin can only add staff to their own restaurant.
-        restaurant_id = get_restaurant_id_from_auth(self.request)
+        restaurant_id = require_restaurant_id_from_auth(self.request)
         serializer.instance = services.create_employee(
             restaurant_id=restaurant_id,
             **serializer.validated_data,
         )
 
     def perform_update(self, serializer: BaseSerializer[User]) -> None:
-        services.manage_employee(serializer.instance, **serializer.validated_data)
+        services.manage_employee(cast(User, serializer.instance), **serializer.validated_data)
 
 
 @extend_schema(tags=["Restaurants"])

@@ -72,11 +72,12 @@ def duplicate_item(item: MenuItem) -> MenuItem:
         is_available=item.is_available,
         sort_order=item.sort_order,
     )
-    if item.image:
+    if item.image and item.image.name:
+        filename = os.path.basename(item.image.name)
         item.image.open("rb")
         try:
             copy.image.save(
-                os.path.basename(item.image.name),
+                filename,
                 ContentFile(item.image.read()),
                 save=False,
             )
