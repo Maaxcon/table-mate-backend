@@ -122,6 +122,10 @@ class AdminMenuCategoryViewSet(
     filterset_class = MenuCategoryFilter
     ordering_fields = ["sort_order", "name", "created_at", "updated_at"]
 
+    def safely_get_queryset(self, qs: QuerySet[MenuCategory]) -> QuerySet[MenuCategory]:
+        # select_related avoids an N+1 from the serializer reading menu.public_id.
+        return qs.select_related("menu")
+
     def get_serializer(self, *args: object, **kwargs: object) -> BaseSerializer[MenuCategory]:
         serializer = super().get_serializer(*args, **kwargs)
         # Restrict the selectable menu to the admin's own restaurant, so an admin
@@ -154,11 +158,15 @@ class AdminMenuItemViewSet(
     ordering_fields = ["sort_order", "name", "price", "created_at", "updated_at"]
 
     def safely_get_queryset(self, qs: QuerySet[MenuItem]) -> QuerySet[MenuItem]:
-        # Expose a likes_count for the admin (used by the dashboard charts). The
-        # aggregate adds a GROUP BY, so set an explicit order to keep pagination
-        # stable (Django otherwise drops Meta.ordering and warns).
-        return qs.annotate(likes_count=Count("likes", distinct=True)).order_by(
-            "menu_id", "sort_order", "id"
+        # select_related avoids an N+1 from the serializer reading menu.public_id
+        # and category.public_id per row. Expose a likes_count for the admin
+        # (used by the dashboard charts). The aggregate adds a GROUP BY, so set an
+        # explicit order to keep pagination stable (Django otherwise drops
+        # Meta.ordering and warns).
+        return (
+            qs.select_related("menu", "category")
+            .annotate(likes_count=Count("likes", distinct=True))
+            .order_by("menu_id", "sort_order", "id")
         )
 
     def get_serializer(self, *args: object, **kwargs: object) -> BaseSerializer[MenuItem]:
