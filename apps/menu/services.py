@@ -5,7 +5,7 @@ from typing import Any
 
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Max, QuerySet
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -68,6 +68,9 @@ def bulk_update_items(*, restaurant_id: int, data: dict[str, Any]) -> dict[str, 
 
 def duplicate_item(item: MenuItem) -> MenuItem:
     """Server-side copy of a dish, including its image file."""
+    # Place the copy at the end of its menu so it gets a unique sort_order
+    # instead of tying with the source.
+    max_order = MenuItem.objects.filter(menu=item.menu).aggregate(m=Max("sort_order"))["m"]
     copy = MenuItem(
         restaurant=item.restaurant,
         menu=item.menu,
@@ -79,7 +82,7 @@ def duplicate_item(item: MenuItem) -> MenuItem:
         weight_grams=item.weight_grams,
         price=item.price,
         is_available=item.is_available,
-        sort_order=item.sort_order,
+        sort_order=(max_order or 0) + 1,
     )
     if item.image and item.image.name:
         filename = os.path.basename(item.image.name)
