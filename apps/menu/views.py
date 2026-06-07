@@ -186,7 +186,9 @@ class AdminMenuItemViewSet(
         return serializer
 
     def perform_create(self, serializer: BaseSerializer[MenuItem]) -> None:
-        serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
+        # Require the restaurant from auth so a token without one fails as a
+        # permission error, not an IntegrityError from saving restaurant_id=None.
+        serializer.save(restaurant_id=require_restaurant_id_from_auth(self.request))
 
     @extend_schema(request=ReorderEntrySerializer(many=True), responses={204: None})
     @action(detail=False, methods=["post"])
