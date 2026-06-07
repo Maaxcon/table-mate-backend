@@ -37,7 +37,9 @@ def bulk_update_items(*, restaurant_id: int, data: dict[str, Any]) -> dict[str, 
     items = MenuItem.objects.filter(restaurant_id=restaurant_id, public_id__in=data["ids"])
 
     if data["action"] == "delete":
-        count, _ = items.delete()
+        # Count up front: delete() returns cascaded rows too (e.g. likes).
+        count = items.count()
+        items.delete()
         return {"deleted": count}
 
     if data["action"] == "set_available":
