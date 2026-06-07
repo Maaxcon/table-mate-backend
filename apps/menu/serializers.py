@@ -159,7 +159,9 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         menu = attrs.get("menu") or getattr(self.instance, "menu", None)
-        category = attrs.get("category")
+        # Fall back to the existing category when the PATCH doesn't touch it, so
+        # changing only the menu still re-checks the current category.
+        category = attrs["category"] if "category" in attrs else getattr(self.instance, "category", None)
         if category is not None and menu is not None and category.menu_id != menu.id:
             raise serializers.ValidationError({"category": "Category must belong to the selected menu."})
         return attrs
