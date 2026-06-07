@@ -6,6 +6,7 @@ from typing import Any
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import QuerySet
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Menu, MenuCategory, MenuItem
@@ -19,16 +20,19 @@ def reorder(queryset: QuerySet[Any], entries: list[dict[str, Any]]) -> None:
         obj.public_id: obj
         for obj in queryset.filter(public_id__in=[e["public_id"] for e in entries])
     }
+    # bulk_update bypasses save(), so refresh updated_at by hand.
+    now = timezone.now()
     to_update: list[Any] = []
     for entry in entries:
         obj = objs_by_id.get(entry["public_id"])
         if obj is not None and obj.sort_order != entry["sort_order"]:
             obj.sort_order = entry["sort_order"]
+            obj.updated_at = now
             to_update.append(obj)
 
     if to_update:
         with transaction.atomic():
-            type(to_update[0]).objects.bulk_update(to_update, ["sort_order"])
+            type(to_update[0]).objects.bulk_update(to_update, ["sort_order", "updated_at"])
 
 
 def bulk_update_items(*, restaurant_id: int, data: dict[str, Any]) -> dict[str, int]:
@@ -42,8 +46,11 @@ def bulk_update_items(*, restaurant_id: int, data: dict[str, Any]) -> dict[str, 
         items.delete()
         return {"deleted": count}
 
+    # update() bypasses save(), so set updated_at explicitly to keep it fresh.
     if data["action"] == "set_available":
-        return {"updated": items.update(is_available=data["is_available"])}
+        return {
+            "updated": items.update(is_available=data["is_available"], updated_at=timezone.now())
+        }
 
     # set_category: resolve a restaurant-owned category (or null to clear).
     category = None
@@ -56,7 +63,7 @@ def bulk_update_items(*, restaurant_id: int, data: dict[str, Any]) -> dict[str, 
         # A category can only hold dishes from its own menu.
         if items.exclude(menu_id=category.menu_id).exists():
             raise serializers.ValidationError({"category": "Category must belong to the items' menu."})
-    return {"updated": items.update(category=category)}
+    return {"updated": items.update(category=category, updated_at=timezone.now())}
 
 
 def duplicate_item(item: MenuItem) -> MenuItem:
