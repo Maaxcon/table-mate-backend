@@ -54,7 +54,7 @@ def manage_employee(employee: User, **data: Any) -> User:
     """Update an existing employee (role, active state, profile fields)."""
     changed = _apply_fields(employee, data, EMPLOYEE_UPDATABLE)
     if changed:
-        employee.save(update_fields=changed)
+        employee.save(update_fields=[*changed, "updated_at"])
     return employee
 
 
