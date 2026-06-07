@@ -1,5 +1,6 @@
 from typing import Any, cast
 
+from django.db import transaction
 from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
@@ -109,14 +110,16 @@ class RestaurantViewSet(
     def perform_update(self, serializer: BaseSerializer[Restaurant]) -> None:
         data = dict(serializer.validated_data)
         working_hours = data.pop("working_hours", None)
-        restaurant = services.update_restaurant(cast(Restaurant, serializer.instance), **data)
-        if working_hours is not None:
-            try:
-                settings = restaurant.settings
-            except RestaurantSettings.DoesNotExist:
-                settings = None
-            if settings is not None:
-                services.update_restaurant_settings(settings, working_hours=working_hours)
+        # Profile and working-hours writes share one transaction so a failure on
+        # the second one doesn't leave a half-applied PATCH. A missing settings
+        # row is an invariant violation, so we let DoesNotExist surface (500)
+        # instead of silently dropping the working_hours update.
+        with transaction.atomic():
+            restaurant = services.update_restaurant(cast(Restaurant, serializer.instance), **data)
+            if working_hours is not None:
+                services.update_restaurant_settings(
+                    restaurant.settings, working_hours=working_hours
+                )
 
     @extend_schema(request=None, responses=RestaurantSerializer)
     @action(
