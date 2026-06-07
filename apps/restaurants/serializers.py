@@ -181,7 +181,7 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "rating", "created_at", "updated_at"]
 
 
 class ZoneSerializer(serializers.ModelSerializer[Zone]):
