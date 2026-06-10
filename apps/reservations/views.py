@@ -173,7 +173,8 @@ class ReservationViewSet(
                 m = minute % 60
                 slot_start_str = f"{h:02d}:{m:02d}"
 
-                slot_local = datetime(d.year, d.month, d.day, h, m, tzinfo=tz)
+                slot_date = d + timedelta(days=1) if minute >= 24 * 60 else d
+                slot_local = datetime(slot_date.year, slot_date.month, slot_date.day, h, m, tzinfo=tz)
                 slot_utc = slot_local.astimezone(ZoneInfo("UTC"))
                 slot_end_utc = slot_utc + timedelta(minutes=30)
 
