@@ -83,6 +83,8 @@ def issue_access_token(user: User) -> str:
     token = AccessToken.for_user(user)
     token["role"] = user.role
     token["token_version"] = user.token_version
+    if user.restaurant_id is not None:
+        token["restaurant_id"] = user.restaurant_id
     return str(token)
 
 
