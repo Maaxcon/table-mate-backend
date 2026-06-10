@@ -110,6 +110,7 @@ class GoogleContextView(APIView):
         responses={
             200: GoogleContextResponseSerializer,
             400: OpenApiResponse(description="User is not a member of this restaurant."),
+            404: OpenApiResponse(description="Restaurant not found."),
         },
     )
     def post(self, request: Request) -> Response:
@@ -123,8 +124,8 @@ class GoogleContextView(APIView):
             )
             if resolved is None:
                 return Response(
-                    {"detail": "You do not have access to this restaurant."},
-                    status=status.HTTP_403_FORBIDDEN,
+                    {"detail": "Restaurant not found."},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
             restaurant_id: int = resolved
         else:
