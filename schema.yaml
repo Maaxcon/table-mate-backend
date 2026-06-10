@@ -702,6 +702,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedOrderItemList'
           description: ''
+    post:
+      operationId: orders_order_items_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrderItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrderItem'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+          description: ''
   /api/orders/order-items/{public_id}/:
     get:
       operationId: orders_order_items_retrieve
@@ -714,6 +740,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+          description: ''
+    patch:
+      operationId: orders_order_items_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderItem'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -818,6 +876,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedOrderList'
           description: ''
+    post:
+      operationId: orders_orders_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Order'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Order'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Order'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
   /api/orders/orders/{public_id}/:
     get:
       operationId: orders_orders_retrieve
@@ -830,6 +914,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+    patch:
+      operationId: orders_orders_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrder'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrder'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrder'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -896,6 +1012,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSessionList'
           description: ''
+    post:
+      operationId: orders_sessions_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Session'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Session'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Session'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
   /api/orders/sessions/{public_id}/:
     get:
       operationId: orders_sessions_retrieve
@@ -908,6 +1050,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
+    patch:
+      operationId: orders_sessions_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSession'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSession'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSession'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -968,6 +1142,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedTicketList'
           description: ''
+    post:
+      operationId: orders_tickets_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
   /api/orders/tickets/{public_id}/:
     get:
       operationId: orders_tickets_retrieve
@@ -980,6 +1180,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+    patch:
+      operationId: orders_tickets_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -1925,7 +2157,6 @@ components:
         session:
           type: string
           format: uuid
-          readOnly: true
         created_by:
           type: string
           format: uuid
@@ -1994,15 +2225,13 @@ components:
         order:
           type: string
           format: uuid
-          readOnly: true
         ticket:
           type: string
           format: uuid
-          readOnly: true
+          nullable: true
         menu_item:
           type: string
           format: uuid
-          readOnly: true
         guest_slot:
           type: integer
           maximum: 2147483647
@@ -2063,7 +2292,6 @@ components:
       - public_id
       - quantity
       - restaurant
-      - ticket
       - unit_price
       - updated_at
       - voided_by
@@ -2522,6 +2750,139 @@ components:
           type: string
           nullable: true
           maxLength: 32
+    PatchedOrder:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        session:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_by_source:
+          $ref: '#/components/schemas/CreatedBySourceEnum'
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        status:
+          $ref: '#/components/schemas/OrderStatusEnum'
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatusEnum'
+        currency:
+          type: string
+          maxLength: 3
+        total_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tax_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        discount_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tip_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        service_charge:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedOrderItem:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        order:
+          type: string
+          format: uuid
+        ticket:
+          type: string
+          format: uuid
+          nullable: true
+        menu_item:
+          type: string
+          format: uuid
+        guest_slot:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        comment:
+          type: string
+          nullable: true
+        modifiers:
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OrderItemStatusEnum'
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        total_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tax_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
+        tax_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        voided_at:
+          type: string
+          format: date-time
+          nullable: true
+        voided_by:
+          type: string
+          format: uuid
+          readOnly: true
+        void_reason:
+          type: integer
+          nullable: true
+        is_wasted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     PatchedReservation:
       type: object
       properties:
@@ -2548,6 +2909,9 @@ components:
           allOf:
           - $ref: '#/components/schemas/RestaurantInfo'
           readOnly: true
+        customer_name:
+          type: string
+          readOnly: true
         guest_count:
           type: integer
           maximum: 2147483647
@@ -2562,6 +2926,98 @@ components:
           $ref: '#/components/schemas/ReservationStatus'
         notes:
           type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedSession:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        table:
+          type: string
+          format: uuid
+        reservation:
+          type: string
+          format: uuid
+          nullable: true
+        opened_by:
+          type: string
+          format: uuid
+          readOnly: true
+        guest_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        status:
+          $ref: '#/components/schemas/SessionStatusEnum'
+        currency:
+          type: string
+          maxLength: 3
+        running_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        final_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        started_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedTicket:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        session:
+          type: string
+          format: uuid
+        order:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/TicketStatusEnum'
+        injected_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
           nullable: true
         created_at:
           type: string
@@ -2847,6 +3303,9 @@ components:
           allOf:
           - $ref: '#/components/schemas/RestaurantInfo'
           readOnly: true
+        customer_name:
+          type: string
+          readOnly: true
         guest_count:
           type: integer
           maximum: 2147483647
@@ -2873,6 +3332,7 @@ components:
       required:
       - created_at
       - customer
+      - customer_name
       - end_at
       - guest_count
       - public_id
@@ -3019,11 +3479,10 @@ components:
         table:
           type: string
           format: uuid
-          readOnly: true
         reservation:
           type: string
           format: uuid
-          readOnly: true
+          nullable: true
         opened_by:
           type: string
           format: uuid
@@ -3066,7 +3525,6 @@ components:
       - guest_count
       - opened_by
       - public_id
-      - reservation
       - restaurant
       - started_at
       - table
@@ -3200,11 +3658,9 @@ components:
         session:
           type: string
           format: uuid
-          readOnly: true
         order:
           type: string
           format: uuid
-          readOnly: true
         status:
           $ref: '#/components/schemas/TicketStatusEnum'
         injected_at:

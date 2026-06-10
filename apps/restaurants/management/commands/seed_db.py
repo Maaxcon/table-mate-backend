@@ -3,6 +3,8 @@ from typing import Any
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
+from apps.restaurants.models import Restaurant
+
 
 class Command(BaseCommand):
     help = "Seed all demo data: superuser, restaurants, menu, users, receipts, reservations"
@@ -15,29 +17,37 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
-        seed_kwargs: dict[str, Any] = {}
-        if options.get("restaurant_id"):
-            seed_kwargs["restaurant_id"] = options["restaurant_id"]
+        restaurant_id = options.get("restaurant_id")
 
         self.stdout.write("=== Seeding superuser ===")
         call_command("seed_superuser")
 
         self.stdout.write("\n=== Seeding restaurants ===")
-        call_command("seed_restaurants", **seed_kwargs)
+        call_command("seed_restaurants", restaurant_id=restaurant_id)
 
         self.stdout.write("\n=== Seeding menu ===")
-        call_command("seed_menu", **seed_kwargs)
+        call_command("seed_menu", restaurant_id=restaurant_id)
 
         self.stdout.write("\n=== Seeding users ===")
-        call_command("seed_users", **seed_kwargs)
+        call_command("seed_users", restaurant_id=restaurant_id)
+
+        self.stdout.write("\n=== Seeding waiters ===")
+        call_command("seed_waiter", restaurant_id=restaurant_id)
 
         self.stdout.write("\n=== Seeding receipts ===")
         call_command("seed_receipts")
 
         self.stdout.write("\n=== Seeding reservations ===")
-        call_command("seed_reservations", **seed_kwargs)
+        call_command("seed_reservations", restaurant_id=restaurant_id)
 
         self.stdout.write("\n=== Seeding table statuses ===")
-        call_command("seed_table_statuses", **seed_kwargs)
+        if restaurant_id:
+            call_command("seed_table_statuses", restaurant_id=restaurant_id)
+        else:
+            for r in Restaurant.objects.all():
+                call_command("seed_table_statuses", restaurant_id=r.pk)
+
+        self.stdout.write("\n=== Seeding orders ===")
+        call_command("seed_orders", restaurant_id=restaurant_id)
 
         self.stdout.write(self.style.SUCCESS("\n✓ Database seeding complete"))

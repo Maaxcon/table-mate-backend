@@ -11,19 +11,28 @@ from apps.restaurants.models import Table, TableStatus
 class Command(BaseCommand):
     help = "Set table statuses based on seeded reservations for demo purposes."
 
+    def add_arguments(self, parser: Any) -> None:
+        parser.add_argument(
+            "--restaurant-id",
+            type=int,
+            help="Restaurant ID to seed (seeds all if omitted)",
+        )
+
     @transaction.atomic
     def handle(self, *args: Any, **options: Any) -> None:
         now = timezone.now()
+        restaurant_id = options.get("restaurant_id")
 
-        tables_with_active_res = set(
-            Reservation.objects.filter(
-                start_at__lte=now,
-                end_at__gt=now,
-                status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-            )
-            .exclude(table__isnull=True)
-            .values_list("table_id", flat=True)
-        )
+        reservations = Reservation.objects.filter(
+            start_at__lte=now,
+            end_at__gt=now,
+            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+        ).exclude(table__isnull=True)
+
+        if restaurant_id:
+            reservations = reservations.filter(restaurant_id=restaurant_id)
+
+        tables_with_active_res = set(reservations.values_list("table_id", flat=True))
 
         updated_reserved = Table.objects.filter(
             id__in=tables_with_active_res,

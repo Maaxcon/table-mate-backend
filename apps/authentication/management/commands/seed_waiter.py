@@ -14,37 +14,34 @@ class Command(BaseCommand):
         parser.add_argument(
             "--restaurant-id",
             type=int,
-            required=True,
-            help="Internal restaurant ID to assign the waiter to",
+            help="Internal restaurant ID to assign the waiter to (seeds all if omitted)",
         )
 
     @transaction.atomic
     def handle(self, *args: Any, **options: Any) -> None:
-        restaurant_id = options["restaurant_id"]
+        restaurant_id = options.get("restaurant_id")
+        restaurants = Restaurant.objects.all()
+        if restaurant_id:
+            restaurants = restaurants.filter(pk=restaurant_id)
 
-        try:
-            restaurant = Restaurant.objects.get(pk=restaurant_id)
-        except Restaurant.DoesNotExist:
-            self.stdout.write(self.style.ERROR(f"Restaurant with id={restaurant_id} not found."))
-            return
+        for restaurant in restaurants:
+            email = f"waiter@{restaurant.name.lower().replace(' ', '')}.com"
+            password = "waiter123"
 
-        email = f"waiter@{restaurant.name.lower().replace(' ', '')}.com"
-        password = "waiter123"  # nosec B105
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={
+                    "first_name": "Waiter",
+                    "last_name": restaurant.name,
+                    "role": RoleCode.WAITER,
+                    "restaurant": restaurant,
+                    "is_staff": True,
+                },
+            )
 
-        user, created = User.objects.get_or_create(
-            email=email,
-            defaults={
-                "first_name": "Waiter",
-                "last_name": restaurant.name,
-                "role": RoleCode.WAITER,
-                "restaurant": restaurant,
-                "is_staff": True,
-            },
-        )
-
-        if created:
-            user.set_password(password)
-            user.save(update_fields=["password"])
-            self.stdout.write(self.style.SUCCESS(f"Waiter created: {email} / {password}"))
-        else:
-            self.stdout.write(f"Waiter {email} already exists — skipping.")
+            if created:
+                user.set_password(password)
+                user.save(update_fields=["password"])
+                self.stdout.write(self.style.SUCCESS(f"Waiter created: {email} / {password}"))
+            else:
+                self.stdout.write(f"Waiter {email} already exists — skipping.")

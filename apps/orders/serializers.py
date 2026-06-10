@@ -11,9 +11,13 @@ from .models import Order, OrderItem, Session, Ticket
 
 class SessionSerializer(serializers.ModelSerializer[Session]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
-    table: PublicIdRelatedField[Table] = PublicIdRelatedField(read_only=True)
+    table: PublicIdRelatedField[Table] = PublicIdRelatedField(
+        queryset=Table.objects.all(),
+    )
     reservation: PublicIdRelatedField[Reservation] = PublicIdRelatedField(
-        read_only=True,
+        queryset=Reservation.objects.all(),
+        allow_null=True,
+        required=False,
     )
     opened_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
 
@@ -35,12 +39,14 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "restaurant", "opened_by", "created_at", "updated_at"]
 
 
 class OrderSerializer(serializers.ModelSerializer[Order]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
-    session: PublicIdRelatedField[Session] = PublicIdRelatedField(read_only=True)
+    session: PublicIdRelatedField[Session] = PublicIdRelatedField(
+        queryset=Session.objects.all(),
+    )
     created_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
 
     class Meta:
@@ -64,13 +70,17 @@ class OrderSerializer(serializers.ModelSerializer[Order]):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "restaurant", "created_by", "created_at", "updated_at"]
 
 
 class TicketSerializer(serializers.ModelSerializer[Ticket]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
-    session: PublicIdRelatedField[Session] = PublicIdRelatedField(read_only=True)
-    order: PublicIdRelatedField[Order] = PublicIdRelatedField(read_only=True)
+    session: PublicIdRelatedField[Session] = PublicIdRelatedField(
+        queryset=Session.objects.all(),
+    )
+    order: PublicIdRelatedField[Order] = PublicIdRelatedField(
+        queryset=Order.objects.all(),
+    )
 
     class Meta:
         model = Ticket
@@ -86,14 +96,22 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]
 
 
 class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
-    order: PublicIdRelatedField[Order] = PublicIdRelatedField(read_only=True)
-    ticket: PublicIdRelatedField[Ticket] = PublicIdRelatedField(read_only=True)
-    menu_item: PublicIdRelatedField[MenuItem] = PublicIdRelatedField(read_only=True)
+    order: PublicIdRelatedField[Order] = PublicIdRelatedField(
+        queryset=Order.objects.all(),
+    )
+    ticket: PublicIdRelatedField[Ticket] = PublicIdRelatedField(
+        queryset=Ticket.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+    menu_item: PublicIdRelatedField[MenuItem] = PublicIdRelatedField(
+        queryset=MenuItem.objects.all(),
+    )
     voided_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
 
     class Meta:
@@ -120,4 +138,4 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]

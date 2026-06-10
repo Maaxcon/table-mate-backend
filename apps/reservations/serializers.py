@@ -38,6 +38,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
     )
     table_info = TableInfoSerializer(source="table", read_only=True)
     restaurant_info = RestaurantInfoSerializer(source="restaurant", read_only=True)
+    customer_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Reservation
@@ -48,6 +49,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "table",
             "table_info",
             "restaurant_info",
+            "customer_name",
             "guest_count",
             "start_at",
             "end_at",
@@ -60,9 +62,15 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "public_id",
             "restaurant",
             "customer",
+            "customer_name",
             "created_at",
             "updated_at",
         ]
+
+    def get_customer_name(self, obj: Reservation) -> str:
+        if obj.customer:
+            return f"{obj.customer.first_name} {obj.customer.last_name}".strip() or obj.customer.email
+        return "Guest"
 
     def validate_table(self, value: Table) -> Table:
         request = self.context.get("request")
