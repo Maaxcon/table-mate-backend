@@ -3820,6 +3820,7 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+          readOnly: true
           nullable: true
         eta_min_minutes:
           type: integer
@@ -4253,6 +4254,7 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+          readOnly: true
           nullable: true
         eta_min_minutes:
           type: integer
@@ -4278,6 +4280,7 @@ components:
       - created_at
       - currency
       - public_id
+      - rating
       - restaurant
       - updated_at
     RoleEnum:
