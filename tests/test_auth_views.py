@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 from rest_framework.test import APIClient
 
-from apps.authentication.models import RoleCode
+from apps.authentication.models import RoleCode, User
 from apps.authentication.services import issue_tokens, issue_tokens_with_restaurant
 from apps.restaurants.models import Restaurant
 from tests.conftest import UserFactory
@@ -63,7 +63,7 @@ class TestGoogleAuthView:
         assert "refresh_token" in response.cookies
         assert "needs_restaurant_context" not in response.data
 
-    def test_staff_gets_partial_token_without_refresh_cookie(self) -> None:
+    def test_staff_gets_refresh_cookie_and_restaurant_id_in_token(self) -> None:
         restaurant = Restaurant.objects.create(name="Test Restaurant")
         user = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
         with patch("apps.authentication.views.google_authenticate", return_value=user):
@@ -73,65 +73,16 @@ class TestGoogleAuthView:
                 format="json",
             )
         assert response.status_code == 200
-        assert response.data["needs_restaurant_context"] is True
         assert "access" in response.data
-        assert "refresh_token" not in response.cookies
+        assert "refresh_token" in response.cookies
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        token = AccessToken(response.data["access"])
+        assert token.payload.get("restaurant_id") == restaurant.pk
 
 
 @pytest.mark.django_db
-class TestGoogleContextView:
-    url = "/api/auth/google/context/"
-
-    def test_valid_restaurant_issues_full_tokens(self) -> None:
-        restaurant = Restaurant.objects.create(name="Test Restaurant")
-        user = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
-        access, _ = issue_tokens(user)
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-
-        response = client.post(self.url, {"restaurant_id": restaurant.pk}, format="json")
-
-        assert response.status_code == 200
-        assert "access" in response.data
-        assert "refresh_token" in response.cookies
-
-    def test_wrong_restaurant_returns_403(self) -> None:
-        restaurant = Restaurant.objects.create(name="Restaurant A")
-        other = Restaurant.objects.create(name="Restaurant B")
-        user = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
-        access, _ = issue_tokens(user)
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-
-        response = client.post(self.url, {"restaurant_id": other.pk}, format="json")
-
-        assert response.status_code == 403
-        assert "detail" in response.data
-
-    def test_unauthenticated_returns_401(self) -> None:
-        response = APIClient().post(self.url, {"restaurant_id": 1}, format="json")
-        assert response.status_code == 401
-
-    def test_customer_cannot_use_context_endpoint(self) -> None:
-        user = UserFactory.create(role=RoleCode.CUSTOMER)
-        access, _ = issue_tokens(user)
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-
-        response = client.post(self.url, {"restaurant_id": 1}, format="json")
-
-        assert response.status_code == 403
-
-    def test_missing_restaurant_id_returns_400(self) -> None:
-        user = UserFactory.create(role=RoleCode.WAITER)
-        access, _ = issue_tokens(user)
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-
-        response = client.post(self.url, {}, format="json")
-
-        assert response.status_code == 400
-
+class TestTokenClaims:
     def test_full_token_contains_restaurant_id(self) -> None:
         from rest_framework_simplejwt.tokens import AccessToken
 
@@ -139,7 +90,8 @@ class TestGoogleContextView:
         user = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
         access, _ = issue_tokens_with_restaurant(user, restaurant.pk)
 
-        assert AccessToken(access).payload["restaurant_id"] == restaurant.pk
+        token = AccessToken(access)  # type: ignore[arg-type]
+        assert token.payload["restaurant_id"] == restaurant.pk
 
 
 @pytest.mark.django_db
@@ -259,7 +211,7 @@ class TestMeView:
 class TestMeUpdate:
     url = "/api/auth/me/"
 
-    def _client(self, user: object) -> APIClient:
+    def _client(self, user: User) -> APIClient:
         access, _ = issue_tokens(user)
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
