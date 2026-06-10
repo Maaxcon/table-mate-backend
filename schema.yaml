@@ -1554,7 +1554,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedRestaurantSettingsList'
+                $ref: '#/components/schemas/PaginatedBookingSettingsList'
           description: ''
   /api/restaurants/restaurant-settings/{public_id}/:
     get:
@@ -1577,7 +1577,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RestaurantSettings'
+                $ref: '#/components/schemas/BookingSettings'
           description: ''
   /api/restaurants/restaurants/:
     get:
@@ -1808,6 +1808,21 @@ paths:
           description: ''
 components:
   schemas:
+    BookingSettings:
+      type: object
+      properties:
+        currency:
+          type: string
+          readOnly: true
+        timezone:
+          type: string
+          readOnly: true
+        working_hours:
+          readOnly: true
+      required:
+      - currency
+      - timezone
+      - working_hours
     CreatedBySourceEnum:
       enum:
       - staff
@@ -2321,6 +2336,29 @@ components:
         * `submitted` - Submitted
         * `completed` - Completed
         * `cancelled` - Cancelled
+    PaginatedBookingSettingsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingSettings'
     PaginatedEditorTableList:
       type: object
       required:
@@ -2574,29 +2612,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Restaurant'
-    PaginatedRestaurantSettingsList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/RestaurantSettings'
     PaginatedSessionList:
       type: object
       required:
@@ -3393,66 +3408,6 @@ components:
       required:
       - name
       - public_id
-    RestaurantSettings:
-      type: object
-      properties:
-        public_id:
-          type: string
-          format: uuid
-          readOnly: true
-        restaurant:
-          type: string
-          format: uuid
-          readOnly: true
-        timezone:
-          type: string
-          maxLength: 64
-        currency:
-          type: string
-          maxLength: 3
-        locale:
-          type: string
-          maxLength: 16
-        default_tax_rate:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        default_service_charge:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        working_hours: {}
-        rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
-          nullable: true
-        eta_min_minutes:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        eta_max_minutes:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        price_band:
-          type: integer
-          maximum: 4
-          minimum: 1
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - created_at
-      - currency
-      - public_id
-      - restaurant
-      - updated_at
     RoleEnum:
       enum:
       - admin
