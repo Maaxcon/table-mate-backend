@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 __pycache__
 *.pyc
 venv/
@@ -10,4 +12,3 @@ media/
 docker-compose.override.yml
 .postgres_data/
 table_mate.egg-info/
-

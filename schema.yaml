@@ -281,8 +281,10 @@ paths:
           enum:
           - free
           - occupied
+          - reserved
         description: |-
           * `free` - Free
+          * `reserved` - Reserved
           * `occupied` - Occupied
       tags:
       - Editor
@@ -361,6 +363,11 @@ paths:
         description: ISO 8601 datetime
         required: true
       - in: query
+        name: exclude
+        schema:
+          type: string
+        description: Reservation public ID to exclude when checking an existing booking.
+      - in: query
         name: guest_count
         schema:
           type: integer
@@ -371,6 +378,11 @@ paths:
         schema:
           type: integer
       - in: query
+        name: restaurant
+        schema:
+          type: string
+        description: Restaurant public ID for unauthenticated access
+      - in: query
         name: start_at
         schema:
           type: string
@@ -379,7 +391,6 @@ paths:
       tags:
       - Editor
       security:
-      - jwtAuth: []
       - jwt_Auth: []
       responses:
         '200':
@@ -690,6 +701,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedOrderItemList'
           description: ''
+    post:
+      operationId: orders_order_items_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrderItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrderItem'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+          description: ''
   /api/orders/order-items/{public_id}/:
     get:
       operationId: orders_order_items_retrieve
@@ -702,6 +739,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+          description: ''
+    patch:
+      operationId: orders_order_items_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderItem'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -806,6 +875,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedOrderList'
           description: ''
+    post:
+      operationId: orders_orders_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Order'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Order'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Order'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
   /api/orders/orders/{public_id}/:
     get:
       operationId: orders_orders_retrieve
@@ -818,6 +913,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+    patch:
+      operationId: orders_orders_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrder'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrder'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrder'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -884,6 +1011,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSessionList'
           description: ''
+    post:
+      operationId: orders_sessions_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Session'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Session'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Session'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
   /api/orders/sessions/{public_id}/:
     get:
       operationId: orders_sessions_retrieve
@@ -896,6 +1049,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
+    patch:
+      operationId: orders_sessions_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSession'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSession'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSession'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -956,6 +1141,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedTicketList'
           description: ''
+    post:
+      operationId: orders_tickets_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
   /api/orders/tickets/{public_id}/:
     get:
       operationId: orders_tickets_retrieve
@@ -968,6 +1179,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+    patch:
+      operationId: orders_tickets_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -1108,15 +1351,15 @@ paths:
         schema:
           type: string
           enum:
+          - active
           - cancelled
           - completed
-          - confirmed
           - pending
         description: |-
           * `pending` - Pending
-          * `confirmed` - Confirmed
-          * `cancelled` - Cancelled
+          * `active` - Active
           * `completed` - Completed
+          * `cancelled` - Cancelled
       - in: query
         name: table
         schema:
@@ -1213,6 +1456,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reservation'
           description: ''
+  /api/reservations/reservations/available-slots/:
+    get:
+      operationId: reservations_reservations_available_slots_retrieve
+      description: Returns available 30-min time slots for a table. If date is provided,
+        returns slots for that date only. Otherwise returns slots for the next 14
+        days.
+      summary: Available time slots for a table
+      tags:
+      - Reservations
+      security:
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
   /api/reservations/reservations/my/:
     get:
       operationId: reservations_reservations_my_list
@@ -1238,15 +1500,15 @@ paths:
         schema:
           type: string
           enum:
+          - active
           - cancelled
           - completed
-          - confirmed
           - pending
         description: |-
           * `pending` - Pending
-          * `confirmed` - Confirmed
-          * `cancelled` - Cancelled
+          * `active` - Active
           * `completed` - Completed
+          * `cancelled` - Cancelled
       - in: query
         name: table
         schema:
@@ -1267,14 +1529,6 @@ paths:
     get:
       operationId: restaurants_restaurant_settings_list
       parameters:
-      - in: query
-        name: currency
-        schema:
-          type: string
-      - in: query
-        name: locale
-        schema:
-          type: string
       - name: ordering
         required: false
         in: query
@@ -1287,29 +1541,18 @@ paths:
         description: A page number within the paginated result set.
         schema:
           type: integer
-      - in: query
-        name: price_band
-        schema:
-          type: integer
-      - in: query
-        name: restaurant
-        schema:
-          type: integer
-      - in: query
-        name: timezone
-        schema:
-          type: string
       tags:
       - Restaurants
       security:
       - jwtAuth: []
       - jwt_Auth: []
+      - {}
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedRestaurantSettingsList'
+                $ref: '#/components/schemas/PaginatedBookingSettingsList'
           description: ''
   /api/restaurants/restaurant-settings/{public_id}/:
     get:
@@ -1326,12 +1569,13 @@ paths:
       security:
       - jwtAuth: []
       - jwt_Auth: []
+      - {}
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RestaurantSettings'
+                $ref: '#/components/schemas/BookingSettings'
           description: ''
   /api/restaurants/restaurants/:
     get:
@@ -1360,6 +1604,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedRestaurantList'
+          description: ''
+  /api/restaurants/restaurants-public/:
+    get:
+      operationId: restaurants_restaurants_public_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPublicRestaurantList'
           description: ''
   /api/restaurants/restaurants-public/{public_id}/:
     get:
@@ -1433,14 +1706,22 @@ paths:
           enum:
           - free
           - occupied
+          - reserved
         description: |-
           * `free` - Free
+          * `reserved` - Reserved
           * `occupied` - Occupied
+      - in: query
+        name: zone__public_id
+        schema:
+          type: string
+          format: uuid
       tags:
       - Restaurants
       security:
       - jwtAuth: []
       - jwt_Auth: []
+      - {}
       responses:
         '200':
           content:
@@ -1463,6 +1744,7 @@ paths:
       security:
       - jwtAuth: []
       - jwt_Auth: []
+      - {}
       responses:
         '200':
           content:
@@ -1470,8 +1752,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/Table'
           description: ''
+  /api/restaurants/zones/:
+    get:
+      operationId: restaurants_zones_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedZoneList'
+          description: ''
+  /api/restaurants/zones/{public_id}/:
+    get:
+      operationId: restaurants_zones_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
 components:
   schemas:
+    BookingSettings:
+      type: object
+      properties:
+        currency:
+          type: string
+          readOnly: true
+        timezone:
+          type: string
+          readOnly: true
+        working_hours:
+          readOnly: true
+      required:
+      - currency
+      - timezone
+      - working_hours
     CreatedBySourceEnum:
       enum:
       - staff
@@ -1821,7 +2170,6 @@ components:
         session:
           type: string
           format: uuid
-          readOnly: true
         created_by:
           type: string
           format: uuid
@@ -1890,15 +2238,13 @@ components:
         order:
           type: string
           format: uuid
-          readOnly: true
         ticket:
           type: string
           format: uuid
-          readOnly: true
+          nullable: true
         menu_item:
           type: string
           format: uuid
-          readOnly: true
         guest_slot:
           type: integer
           maximum: 2147483647
@@ -1959,7 +2305,6 @@ components:
       - public_id
       - quantity
       - restaurant
-      - ticket
       - unit_price
       - updated_at
       - voided_by
@@ -1989,6 +2334,29 @@ components:
         * `submitted` - Submitted
         * `completed` - Completed
         * `cancelled` - Cancelled
+    PaginatedBookingSettingsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingSettings'
     PaginatedEditorTableList:
       type: object
       required:
@@ -2173,6 +2541,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Payment'
+    PaginatedPublicRestaurantList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicRestaurant'
     PaginatedReservationList:
       type: object
       required:
@@ -2219,29 +2610,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Restaurant'
-    PaginatedRestaurantSettingsList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/RestaurantSettings'
     PaginatedSessionList:
       type: object
       required:
@@ -2311,6 +2679,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ticket'
+    PaginatedZoneList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Zone'
     PatchedEditorTable:
       type: object
       properties:
@@ -2372,6 +2763,139 @@ components:
           type: string
           nullable: true
           maxLength: 32
+    PatchedOrder:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        session:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_by_source:
+          $ref: '#/components/schemas/CreatedBySourceEnum'
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        status:
+          $ref: '#/components/schemas/OrderStatusEnum'
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatusEnum'
+        currency:
+          type: string
+          maxLength: 3
+        total_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tax_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        discount_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tip_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        service_charge:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedOrderItem:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        order:
+          type: string
+          format: uuid
+        ticket:
+          type: string
+          format: uuid
+          nullable: true
+        menu_item:
+          type: string
+          format: uuid
+        guest_slot:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        comment:
+          type: string
+          nullable: true
+        modifiers:
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OrderItemStatusEnum'
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        total_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tax_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
+        tax_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        voided_at:
+          type: string
+          format: date-time
+          nullable: true
+        voided_by:
+          type: string
+          format: uuid
+          readOnly: true
+        void_reason:
+          type: integer
+          nullable: true
+        is_wasted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     PatchedReservation:
       type: object
       properties:
@@ -2390,6 +2914,17 @@ components:
         table:
           type: string
           format: uuid
+        table_info:
+          allOf:
+          - $ref: '#/components/schemas/TableInfo'
+          readOnly: true
+        restaurant_info:
+          allOf:
+          - $ref: '#/components/schemas/RestaurantInfo'
+          readOnly: true
+        customer_name:
+          type: string
+          readOnly: true
         guest_count:
           type: integer
           maximum: 2147483647
@@ -2401,11 +2936,101 @@ components:
           type: string
           format: date-time
         status:
-          allOf:
-          - $ref: '#/components/schemas/ReservationStatus'
-          readOnly: true
+          $ref: '#/components/schemas/ReservationStatus'
         notes:
           type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedSession:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        table:
+          type: string
+          format: uuid
+        reservation:
+          type: string
+          format: uuid
+          nullable: true
+        opened_by:
+          type: string
+          format: uuid
+          readOnly: true
+        guest_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        status:
+          $ref: '#/components/schemas/SessionStatusEnum'
+        currency:
+          type: string
+          maxLength: 3
+        running_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        final_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        started_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedTicket:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        session:
+          type: string
+          format: uuid
+        order:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/TicketStatusEnum'
+        injected_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
           nullable: true
         created_at:
           type: string
@@ -2683,6 +3308,17 @@ components:
         table:
           type: string
           format: uuid
+        table_info:
+          allOf:
+          - $ref: '#/components/schemas/TableInfo'
+          readOnly: true
+        restaurant_info:
+          allOf:
+          - $ref: '#/components/schemas/RestaurantInfo'
+          readOnly: true
+        customer_name:
+          type: string
+          readOnly: true
         guest_count:
           type: integer
           maximum: 2147483647
@@ -2694,9 +3330,7 @@ components:
           type: string
           format: date-time
         status:
-          allOf:
-          - $ref: '#/components/schemas/ReservationStatus'
-          readOnly: true
+          $ref: '#/components/schemas/ReservationStatus'
         notes:
           type: string
           nullable: true
@@ -2711,26 +3345,28 @@ components:
       required:
       - created_at
       - customer
+      - customer_name
       - end_at
       - guest_count
       - public_id
       - restaurant
+      - restaurant_info
       - start_at
-      - status
       - table
+      - table_info
       - updated_at
     ReservationStatus:
       enum:
       - pending
-      - confirmed
-      - cancelled
+      - active
       - completed
+      - cancelled
       type: string
       description: |-
         * `pending` - Pending
-        * `confirmed` - Confirmed
-        * `cancelled` - Cancelled
+        * `active` - Active
         * `completed` - Completed
+        * `cancelled` - Cancelled
     Restaurant:
       type: object
       properties:
@@ -2757,66 +3393,19 @@ components:
       - name
       - public_id
       - updated_at
-    RestaurantSettings:
+    RestaurantInfo:
       type: object
       properties:
         public_id:
           type: string
           format: uuid
           readOnly: true
-        restaurant:
+        name:
           type: string
-          format: uuid
-          readOnly: true
-        timezone:
-          type: string
-          maxLength: 64
-        currency:
-          type: string
-          maxLength: 3
-        locale:
-          type: string
-          maxLength: 16
-        default_tax_rate:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        default_service_charge:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        working_hours: {}
-        rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
-          nullable: true
-        eta_min_minutes:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        eta_max_minutes:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        price_band:
-          type: integer
-          maximum: 4
-          minimum: 1
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
+          maxLength: 255
       required:
-      - created_at
-      - currency
+      - name
       - public_id
-      - restaurant
-      - updated_at
     RoleEnum:
       enum:
       - admin
@@ -2843,11 +3432,10 @@ components:
         table:
           type: string
           format: uuid
-          readOnly: true
         reservation:
           type: string
           format: uuid
-          readOnly: true
+          nullable: true
         opened_by:
           type: string
           format: uuid
@@ -2890,7 +3478,6 @@ components:
       - guest_count
       - opened_by
       - public_id
-      - reservation
       - restaurant
       - started_at
       - table
@@ -2947,6 +3534,11 @@ components:
           maximum: 2147483647
           minimum: -2147483648
           nullable: true
+        zone:
+          allOf:
+          - $ref: '#/components/schemas/Zone'
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -2962,6 +3554,27 @@ components:
       - restaurant
       - table_number
       - updated_at
+      - zone
+    TableInfo:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        table_number:
+          type: string
+          maxLength: 64
+        capacity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        shape:
+          $ref: '#/components/schemas/TableShape'
+      required:
+      - capacity
+      - public_id
+      - table_number
     TableShape:
       enum:
       - rectangle
@@ -2977,10 +3590,12 @@ components:
     TableStatus:
       enum:
       - free
+      - reserved
       - occupied
       type: string
       description: |-
         * `free` - Free
+        * `reserved` - Reserved
         * `occupied` - Occupied
     Ticket:
       type: object
@@ -2996,11 +3611,9 @@ components:
         session:
           type: string
           format: uuid
-          readOnly: true
         order:
           type: string
           format: uuid
-          readOnly: true
         status:
           $ref: '#/components/schemas/TicketStatusEnum'
         injected_at:
@@ -3120,6 +3733,23 @@ components:
       - public_id
       - restaurant_public_id
       - updated_at
+    Zone:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        sort_order:
+          type: integer
+          readOnly: true
+      required:
+      - name
+      - public_id
+      - sort_order
   securitySchemes:
     jwtAuth:
       type: http

@@ -32,6 +32,7 @@ def validate_working_hours(value: object) -> None:
 
 class TableStatus(models.TextChoices):
     FREE = "free", "Free"
+    RESERVED = "reserved", "Reserved"
     OCCUPIED = "occupied", "Occupied"
 
 
@@ -97,6 +98,28 @@ class TableShape(models.TextChoices):
     BOOTH = "booth", "Booth"
 
 
+class Zone(BaseModel):
+    restaurant = models.ForeignKey(
+        "restaurants.Restaurant",
+        on_delete=models.CASCADE,
+        related_name="zones",
+    )
+    name = models.CharField(max_length=128)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["restaurant_id", "sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["restaurant", "name"],
+                name="restaurants_zone_restaurant_name_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.restaurant.name} / {self.name}"
+
+
 class Table(RestaurantScopedModel):
     table_number = models.CharField(max_length=64)
     capacity = models.PositiveIntegerField()
@@ -113,6 +136,13 @@ class Table(RestaurantScopedModel):
     active = models.BooleanField(default=True)
     position_x = models.IntegerField(null=True, blank=True)
     position_y = models.IntegerField(null=True, blank=True)
+    zone = models.ForeignKey(
+        Zone,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tables",
+    )
 
     class Meta:
         ordering = ["restaurant_id", "table_number", "id"]

@@ -17,11 +17,13 @@ def check_availability(
     table_id: str,
     start_at: datetime,
     end_at: datetime,
+    current_reservation_id: int | None = None,
 ) -> bool:
     available = get_available_tables(
         restaurant_id=restaurant_id,
         start_at=start_at,
         end_at=end_at,
+        current_reservation_id=current_reservation_id,
     )
     return available.filter(public_id=table_id).exists()
 
@@ -32,17 +34,17 @@ def _check_reservation_conflict(
     table: Table,
     start_at: datetime,
     end_at: datetime,
-    exclude_id: int | None = None,
+    current_reservation_id: int | None = None,
 ) -> None:
     qs = Reservation.objects.filter(
         restaurant_id=restaurant_id,
         table=table,
-        status=ReservationStatus.CONFIRMED,
+        status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
         start_at__lt=end_at,
         end_at__gt=start_at,
     )
-    if exclude_id is not None:
-        qs = qs.exclude(id=exclude_id)
+    if current_reservation_id is not None:
+        qs = qs.exclude(id=current_reservation_id)
     if qs.exists():
         raise ReservationConflictError("Table is not available during the requested time.")
 
@@ -79,7 +81,7 @@ def create_reservation(
         guest_count=guest_count,
         start_at=start_at,
         end_at=end_at,
-        status=ReservationStatus.CONFIRMED,
+        status=ReservationStatus.PENDING,
         notes=notes or "",
     )
 
@@ -91,7 +93,7 @@ def seat_walk_in_customer(table: Table, guest_count: int) -> Reservation:
     table.status = TableStatus.OCCUPIED
     table.save(update_fields=["status"])
 
-    end_at = timezone.now() + timedelta(minutes=90)
+    end_at = timezone.now() + timedelta(hours=2)
 
     reservation = Reservation.objects.create(
         table=table,
@@ -99,7 +101,7 @@ def seat_walk_in_customer(table: Table, guest_count: int) -> Reservation:
         guest_count=guest_count,
         start_at=timezone.now(),
         end_at=end_at,
-        status=ReservationStatus.CONFIRMED,
+        status=ReservationStatus.ACTIVE,
         customer=None,
     )
 
@@ -124,7 +126,7 @@ def reschedule_reservation(
         table=table,
         start_at=start_at,
         end_at=end_at,
-        exclude_id=reservation.id,
+        current_reservation_id=reservation.id,
     )
 
     fields_to_update = ["table", "guest_count", "start_at", "end_at", "notes"]

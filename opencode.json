@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "xiaomi": {
+      "models": {
+        "mimo-v2.5-pro": {
+          "options": {
+            "reasoningEffort": "high"
+          }
+        }
+      }
+    }
+  }
+}

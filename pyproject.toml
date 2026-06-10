@@ -14,7 +14,7 @@ dependencies = [
     "channels-redis",
     "daphne",
     "drf-spectacular",
-    "Pillow",
+    "pillow",
 ]
 requires-python = ">=3.11"
 
