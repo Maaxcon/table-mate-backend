@@ -1,24 +1,133 @@
+from typing import Any
+
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.authentication.models import RoleCode, User
 from common.api import PublicIdRelatedField
 
-from .models import Restaurant, RestaurantSettings, Table, Zone
+from .models import Restaurant, RestaurantSettings, Table, Zone, validate_working_hours
+
+
+class WorkingHoursDaySerializer(serializers.Serializer[Any]):
+    open = serializers.CharField()
+    close = serializers.CharField()
+
+
+class WorkingHoursSerializer(serializers.Serializer[Any]):
+    """Schema shape for the working_hours JSON: optional mon–sun, each open/close.
+    Used only to type the OpenAPI schema; validation stays in validate_working_hours."""
+
+    mon = WorkingHoursDaySerializer(required=False)
+    tue = WorkingHoursDaySerializer(required=False)
+    wed = WorkingHoursDaySerializer(required=False)
+    thu = WorkingHoursDaySerializer(required=False)
+    fri = WorkingHoursDaySerializer(required=False)
+    sat = WorkingHoursDaySerializer(required=False)
+    sun = WorkingHoursDaySerializer(required=False)
+
+
+@extend_schema_field(WorkingHoursSerializer)
+class _WorkingHoursField(serializers.JSONField):
+    """JSONField that advertises the WorkingHours shape in the OpenAPI schema."""
+
+
+def working_hours_field(**kwargs: Any) -> serializers.JSONField:
+    return _WorkingHoursField(validators=[validate_working_hours], **kwargs)
+
+
+class AdminOverviewSerializer(serializers.Serializer[Any]):
+    """Counts for the admin dashboard, scoped to the admin's restaurant."""
+
+    menus_total = serializers.IntegerField()
+    menus_active = serializers.IntegerField()
+    dishes_total = serializers.IntegerField()
+    dishes_hidden = serializers.IntegerField()
+    categories_total = serializers.IntegerField()
+    staff_total = serializers.IntegerField()
+    staff_active = serializers.IntegerField()
 
 
 class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
+    # Working hours live on RestaurantSettings; expose them here so the admin can
+    # edit them with the restaurant profile. The view writes them to settings.
+    working_hours = working_hours_field(required=False, write_only=True)
+
     class Meta:
         model = Restaurant
         fields = [
             "public_id",
             "name",
             "address",
+            "phone",
+            "telegram_url",
+            "facebook_url",
+            "working_hours",
+            "cover_image",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        # cover_image is uploaded via the dedicated `cover` action, so it is
+        # read-only here (the profile PATCH ignores it).
+        read_only_fields = ["public_id", "cover_image", "created_at", "updated_at"]
+
+    def to_representation(self, instance: Restaurant) -> dict[str, object]:
+        data = super().to_representation(instance)
+        try:
+            data["working_hours"] = instance.settings.working_hours
+        except RestaurantSettings.DoesNotExist:
+            data["working_hours"] = {}
+        return data
+
+
+class EmployeeSerializer(serializers.ModelSerializer[User]):
+    class Meta:
+        model = User
+        fields = [
+            "public_id",
+            "email",
+            "first_name",
+            "last_name",
+            "phone",
+            "role",
+            "is_active",
+        ]
+        read_only_fields = ["public_id", "email"]
+
+    def validate_role(self, value: str) -> str:
+        if value == RoleCode.CUSTOMER:
+            raise serializers.ValidationError("An employee cannot be set to the customer role.")
+        return value
+
+
+class EmployeeCreateSerializer(serializers.ModelSerializer[User]):
+    class Meta:
+        model = User
+        fields = [
+            "public_id",
+            "email",
+            "first_name",
+            "last_name",
+            "phone",
+            "role",
+            "is_active",
+        ]
+        read_only_fields = ["public_id", "is_active"]
+
+    def validate_role(self, value: str) -> str:
+        if value == RoleCode.CUSTOMER:
+            raise serializers.ValidationError("An employee cannot be set to the customer role.")
+        return value
+
+    def validate_email(self, value: str) -> str:
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
 
 
 class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
+    working_hours = working_hours_field(read_only=True)
+
     class Meta:
         model = RestaurantSettings
         fields = ["currency", "timezone", "working_hours", "rating", "eta_min_minutes", "eta_max_minutes", "price_band"]
@@ -52,6 +161,7 @@ class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
 
 class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
+    working_hours = working_hours_field(required=False)
 
     class Meta:
         model = RestaurantSettings
@@ -71,7 +181,7 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "rating", "created_at", "updated_at"]
 
 
 class ZoneSerializer(serializers.ModelSerializer[Zone]):

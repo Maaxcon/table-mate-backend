@@ -18,7 +18,13 @@ class GoogleAuthResponseSerializer(serializers.Serializer[None]):
 
 
 class GoogleContextSerializer(serializers.Serializer[None]):
-    restaurant_id = serializers.IntegerField()
+    restaurant_id = serializers.IntegerField(required=False)
+    restaurant_public_id = serializers.UUIDField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        if attrs.get("restaurant_id") is None and attrs.get("restaurant_public_id") is None:
+            raise serializers.ValidationError("Provide restaurant_id or restaurant_public_id.")
+        return attrs
 
 
 class GoogleContextResponseSerializer(serializers.Serializer[None]):
