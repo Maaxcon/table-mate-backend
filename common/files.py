@@ -1,5 +1,6 @@
 from typing import Any
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Model
 
 
@@ -12,8 +13,8 @@ def delete_old_file_on_change(sender: type[Model], instance: Model, field_name: 
     if not instance.pk:
         return
     try:
-        old = sender.objects.get(pk=instance.pk)
-    except sender.DoesNotExist:
+        old = sender._default_manager.get(pk=instance.pk)
+    except ObjectDoesNotExist:
         return
     old_file = getattr(old, field_name)
     new_file: Any = getattr(instance, field_name)
