@@ -96,7 +96,13 @@ class EditorTableViewSet(
             ),
         ],
     )
-    @action(detail=False, methods=["get"], url_path="available", filter_backends=[])
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="available",
+        filter_backends=[],
+        authentication_classes=[],
+    )
     def available(self, request: Request) -> Response:
         restaurant_id = self._resolve_restaurant_id(request)
 

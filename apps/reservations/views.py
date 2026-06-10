@@ -122,7 +122,13 @@ class ReservationViewSet(
         "If date is provided, returns slots for that date only. "
         "Otherwise returns slots for the next 14 days.",
     )
-    @action(detail=False, methods=["get"], url_path="available-slots", permission_classes=[AllowAny])
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="available-slots",
+        permission_classes=[AllowAny],
+        authentication_classes=[],
+    )
     def available_slots(self, request: Request) -> Response:
         table_id = request.query_params.get("table")
         date_str = request.query_params.get("date")
