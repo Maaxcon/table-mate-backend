@@ -33,7 +33,9 @@ def get_menu_items_by_restaurant(*, restaurant_id: int, guest_token: str | None 
         restaurant_id=restaurant_id,
         menu__is_active=True,
     ).select_related("category")
-    return _with_like_annotations(qs, guest_token=guest_token)
+    # Explicit order: the likes_count aggregate adds a GROUP BY, which makes
+    # Django drop Meta.ordering and warn under pagination.
+    return _with_like_annotations(qs, guest_token=guest_token).order_by("menu_id", "sort_order", "id")
 
 
 def search_menu_items(
@@ -52,4 +54,4 @@ def search_menu_items(
         )
         .select_related("category")
     )
-    return _with_like_annotations(qs, guest_token=guest_token)
+    return _with_like_annotations(qs, guest_token=guest_token).order_by("menu_id", "sort_order", "id")

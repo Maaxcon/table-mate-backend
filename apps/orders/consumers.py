@@ -10,6 +10,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from common.channels import authenticate_websocket, cart_group_name
 
 from .models import Session
+from .selectors import get_session
 
 
 def _make_cart_event(event_name: str, payload: dict) -> dict:  # type: ignore[type-arg]
@@ -85,7 +86,5 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
 @database_sync_to_async  # type: ignore[untyped-decorator]
 def _fetch_session(session_id: uuid.UUID, restaurant_id: int) -> Session | None:
-    try:
-        return Session.objects.get(public_id=session_id, restaurant_id=restaurant_id)
-    except Session.DoesNotExist:
-        return None
+    # Data access lives in selectors; the consumer only handles transport.
+    return get_session(session_id, restaurant_id)

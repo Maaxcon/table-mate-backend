@@ -77,6 +77,9 @@ class TicketViewSet(
         "completed_at",
     ]
 
+    def perform_create(self, serializer):  # type: ignore[no-untyped-def]
+        serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
+
 
 @extend_schema(tags=["Orders"])
 class OrderItemViewSet(
@@ -97,3 +100,6 @@ class OrderItemViewSet(
         "is_wasted",
     ]
     ordering_fields = ["created_at", "updated_at", "guest_slot", "status", "voided_at"]
+
+    def perform_create(self, serializer):  # type: ignore[no-untyped-def]
+        serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))

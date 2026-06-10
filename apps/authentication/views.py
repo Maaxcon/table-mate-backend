@@ -95,11 +95,6 @@ class GoogleAuthView(APIView):
         _set_refresh_cookie(response, refresh)
         return response
 
-        access, refresh = issue_tokens(user)
-        response = Response({"access": access})
-        _set_refresh_cookie(response, refresh)
-        return response
-
 
 class CookieTokenRefreshView(TokenRefreshView):
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:

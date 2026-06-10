@@ -62,7 +62,7 @@ class ReservationViewSet(
     def get_queryset(self) -> QuerySet[Reservation]:
         qs = super().get_queryset()
         role = getattr(self.request.user, "role", None)
-        if role and role in ("admin", "waiter"):
+        if role and role in (RoleCode.ADMIN, RoleCode.WAITER):
             restaurant_id = get_restaurant_id_from_auth(self.request)
             if restaurant_id is not None:
                 return qs.filter(restaurant_id=restaurant_id)
@@ -122,7 +122,13 @@ class ReservationViewSet(
         "If date is provided, returns slots for that date only. "
         "Otherwise returns slots for the next 14 days.",
     )
-    @action(detail=False, methods=["get"], url_path="available-slots", permission_classes=[AllowAny])
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="available-slots",
+        permission_classes=[AllowAny],
+        authentication_classes=[],
+    )
     def available_slots(self, request: Request) -> Response:
         table_id = request.query_params.get("table")
         date_str = request.query_params.get("date")
@@ -173,7 +179,8 @@ class ReservationViewSet(
                 m = minute % 60
                 slot_start_str = f"{h:02d}:{m:02d}"
 
-                slot_local = datetime(d.year, d.month, d.day, h, m, tzinfo=tz)
+                slot_date = d + timedelta(days=1) if minute >= 24 * 60 else d
+                slot_local = datetime(slot_date.year, slot_date.month, slot_date.day, h, m, tzinfo=tz)
                 slot_utc = slot_local.astimezone(ZoneInfo("UTC"))
                 slot_end_utc = slot_utc + timedelta(minutes=30)
 

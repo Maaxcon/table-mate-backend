@@ -1,15 +1,29 @@
+from typing import Any
+
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Count, QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
+from rest_framework.views import APIView
 
-from common.api import PublicLookupMixin, PublicRestaurantQueryMixin
+from apps.authentication.permissions import IsAdmin
+from common.api import (
+    PublicLookupMixin,
+    PublicRestaurantQueryMixin,
+    RestaurantScopedViewSetMixin,
+    get_restaurant_id_from_auth,
+    require_restaurant_id_from_auth,
+)
 
+from . import services
+from .allergens import ALLERGENS
 from .filters import MenuCategoryFilter, MenuItemFilter
 from .models import Menu, MenuCategory, MenuItem, MenuItemLike
 from .selectors import (
@@ -19,12 +33,30 @@ from .selectors import (
     search_menu_items,
 )
 from .serializers import (
+    AdminMenuCategorySerializer,
+    AdminMenuItemSerializer,
+    AdminMenuSerializer,
+    BulkItemActionSerializer,
     MenuCategorySerializer,
     MenuItemSerializer,
     MenuSerializer,
+    ReorderEntrySerializer,
     ToggleMenuItemLikeRequestSerializer,
     ToggleMenuItemLikeResponseSerializer,
 )
+
+
+def _reorder_view(viewset: Any, request: Request) -> Response:
+    """Validate {public_id, sort_order} entries and delegate to the reorder service."""
+    serializer = ReorderEntrySerializer(data=request.data, many=True)
+    serializer.is_valid(raise_exception=True)
+    services.reorder(viewset.get_queryset(), serializer.validated_data)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _get_serializer_fields(serializer: BaseSerializer[Any]) -> Any:
+    target = getattr(serializer, "child", serializer)
+    return getattr(target, "fields", {})
 
 
 @extend_schema(tags=["Menu"])
@@ -60,6 +92,127 @@ class MenuCategoryViewSet(
         if restaurant_id is None:
             return MenuCategory.objects.none()
         return get_categories_by_restaurant(restaurant_id=restaurant_id)
+
+
+@extend_schema(tags=["Menu Admin"])
+class AdminMenuViewSet(
+    RestaurantScopedViewSetMixin[Menu],
+    viewsets.ModelViewSet[Menu],
+):
+    permission_classes = [IsAdmin]
+    queryset = Menu.objects.all()
+    serializer_class = AdminMenuSerializer
+    restaurant_lookup = "restaurant_id"
+    ordering_fields = ["name", "created_at", "updated_at"]
+
+    def perform_create(self, serializer: BaseSerializer[Menu]) -> None:
+        serializer.save(restaurant_id=require_restaurant_id_from_auth(self.request))
+
+
+@extend_schema(tags=["Menu Admin"])
+class AdminMenuCategoryViewSet(
+    RestaurantScopedViewSetMixin[MenuCategory],
+    viewsets.ModelViewSet[MenuCategory],
+):
+    permission_classes = [IsAdmin]
+    queryset = MenuCategory.objects.all()
+    serializer_class = AdminMenuCategorySerializer
+    restaurant_lookup = "menu__restaurant_id"
+    filterset_class = MenuCategoryFilter
+    ordering_fields = ["sort_order", "name", "created_at", "updated_at"]
+
+    def safely_get_queryset(self, qs: QuerySet[MenuCategory]) -> QuerySet[MenuCategory]:
+        # select_related avoids an N+1 from the serializer reading menu.public_id.
+        return qs.select_related("menu")
+
+    def get_serializer(self, *args: object, **kwargs: object) -> BaseSerializer[MenuCategory]:
+        serializer = super().get_serializer(*args, **kwargs)
+        # Restrict the selectable menu to the admin's own restaurant, so an admin
+        # cannot attach a category to another restaurant's menu.
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        fields = _get_serializer_fields(serializer)
+        if "menu" in fields:
+            fields["menu"].queryset = (
+                Menu.objects.filter(restaurant_id=restaurant_id) if restaurant_id is not None else Menu.objects.none()
+            )
+        return serializer
+
+    @extend_schema(request=ReorderEntrySerializer(many=True), responses={204: None})
+    @action(detail=False, methods=["post"])
+    def reorder(self, request: Request) -> Response:
+        return _reorder_view(self, request)
+
+
+@extend_schema(tags=["Menu Admin"])
+class AdminMenuItemViewSet(
+    RestaurantScopedViewSetMixin[MenuItem],
+    viewsets.ModelViewSet[MenuItem],
+):
+    permission_classes = [IsAdmin]
+    queryset = MenuItem.objects.all()
+    serializer_class = AdminMenuItemSerializer
+    restaurant_lookup = "restaurant_id"
+    filterset_class = MenuItemFilter
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    ordering_fields = ["sort_order", "name", "price", "created_at", "updated_at"]
+
+    def safely_get_queryset(self, qs: QuerySet[MenuItem]) -> QuerySet[MenuItem]:
+        # select_related avoids an N+1 from the serializer reading menu.public_id
+        # and category.public_id per row. Expose a likes_count for the admin
+        # (used by the dashboard charts). The aggregate adds a GROUP BY, so set an
+        # explicit order to keep pagination stable (Django otherwise drops
+        # Meta.ordering and warns).
+        return (
+            qs.select_related("menu", "category")
+            .annotate(likes_count=Count("likes", distinct=True))
+            .order_by("menu_id", "sort_order", "id")
+        )
+
+    def get_serializer(self, *args: object, **kwargs: object) -> BaseSerializer[MenuItem]:
+        serializer = super().get_serializer(*args, **kwargs)
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        fields = _get_serializer_fields(serializer)
+        if "menu" in fields:
+            fields["menu"].queryset = (
+                Menu.objects.filter(restaurant_id=restaurant_id) if restaurant_id is not None else Menu.objects.none()
+            )
+        if "category" in fields:
+            fields["category"].queryset = (
+                MenuCategory.objects.filter(menu__restaurant_id=restaurant_id)
+                if restaurant_id is not None
+                else MenuCategory.objects.none()
+            )
+        return serializer
+
+    def perform_create(self, serializer: BaseSerializer[MenuItem]) -> None:
+        # Require the restaurant from auth so a token without one fails as a
+        # permission error, not an IntegrityError from saving restaurant_id=None.
+        serializer.save(restaurant_id=require_restaurant_id_from_auth(self.request))
+
+    @extend_schema(request=ReorderEntrySerializer(many=True), responses={204: None})
+    @action(detail=False, methods=["post"])
+    def reorder(self, request: Request) -> Response:
+        return _reorder_view(self, request)
+
+    @extend_schema(request=BulkItemActionSerializer, responses={200: OpenApiTypes.OBJECT})
+    @action(detail=False, methods=["post"])
+    def bulk(self, request: Request) -> Response:
+        """Hide/show, set the category of, or delete several dishes at once.
+        Only items in the admin's restaurant are touched; unknown ids are ignored."""
+        serializer = BulkItemActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = services.bulk_update_items(
+            restaurant_id=require_restaurant_id_from_auth(request),
+            data=serializer.validated_data,
+        )
+        return Response(result, status=status.HTTP_200_OK)
+
+    @extend_schema(request=None, responses={201: AdminMenuItemSerializer})
+    @action(detail=True, methods=["post"])
+    def duplicate(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Server-side copy of a dish, including its image file."""
+        copy = services.duplicate_item(self.get_object())
+        return Response(self.get_serializer(copy).data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Menu"])
@@ -171,3 +324,16 @@ class MenuItemViewSet(
         )
         response_serializer.is_valid(raise_exception=True)
         return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    tags=["Menu"],
+    responses={200: serializers.ListSerializer(child=serializers.CharField())},
+)
+class AllergenListView(APIView):
+    """The allowed allergen vocabulary — the single source of truth for clients."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        return Response(ALLERGENS)

@@ -1,25 +1,80 @@
+from typing import Any, cast
+
+from django.db import transaction
 from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
-from rest_framework.permissions import AllowAny
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import SAFE_METHODS, AllowAny, BasePermission
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
+from rest_framework.views import APIView
 
-from apps.authentication.models import RoleCode
-from apps.authentication.permissions import IsStaff
+from apps.authentication.models import RoleCode, User
+from apps.authentication.permissions import IsAdmin, IsStaff
+from apps.menu.models import Menu, MenuCategory, MenuItem
 from common.api import (
     PublicLookupMixin,
     PublicRestaurantQueryMixin,
     RestaurantScopedViewSetMixin,
     get_restaurant_id_from_auth,
+    require_restaurant_id_from_auth,
 )
 
+from . import services
 from .models import Restaurant, RestaurantSettings, Table, Zone
 from .serializers import (
+    AdminOverviewSerializer,
+    BookingSettingsSerializer,
+    EmployeeCreateSerializer,
+    EmployeeSerializer,
     PublicRestaurantSerializer,
     RestaurantSerializer,
     RestaurantSettingsSerializer,
     TableSerializer,
     ZoneSerializer,
 )
+
+
+@extend_schema(tags=["Restaurants"], responses=AdminOverviewSerializer)
+class AdminOverviewView(APIView):
+    """Aggregate counts for the admin dashboard, in one request."""
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request: Request) -> Response:
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is None:
+            return Response(
+                {
+                    "menus_total": 0,
+                    "menus_active": 0,
+                    "dishes_total": 0,
+                    "dishes_hidden": 0,
+                    "categories_total": 0,
+                    "staff_total": 0,
+                    "staff_active": 0,
+                }
+            )
+
+        menus = Menu.objects.filter(restaurant_id=restaurant_id)
+        items = MenuItem.objects.filter(restaurant_id=restaurant_id)
+        categories = MenuCategory.objects.filter(menu__restaurant_id=restaurant_id)
+        staff = User.objects.filter(restaurant_id=restaurant_id).exclude(role=RoleCode.CUSTOMER)
+
+        data = {
+            "menus_total": menus.count(),
+            "menus_active": menus.filter(is_active=True).count(),
+            "dishes_total": items.count(),
+            "dishes_hidden": items.filter(is_available=False).count(),
+            "categories_total": categories.count(),
+            "staff_total": staff.count(),
+            "staff_active": staff.filter(is_active=True).count(),
+        }
+        return Response(AdminOverviewSerializer(data).data)
 
 
 @extend_schema(tags=["Restaurants"])
@@ -37,13 +92,50 @@ class PublicRestaurantViewSet(
 @extend_schema(tags=["Restaurants"])
 class RestaurantViewSet(
     RestaurantScopedViewSetMixin[Restaurant],
-    viewsets.ReadOnlyModelViewSet[Restaurant],
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet[Restaurant],
 ):
-    permission_classes = [IsStaff]
     queryset = Restaurant.objects.all()
     serializer_class = RestaurantSerializer
     restaurant_lookup = "id"
     ordering_fields = ["created_at", "updated_at", "name"]
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_permissions(self) -> list[BasePermission]:
+        if self.request.method in SAFE_METHODS:
+            return [IsStaff()]
+        return [IsAdmin()]
+
+    def perform_update(self, serializer: BaseSerializer[Restaurant]) -> None:
+        data = dict(serializer.validated_data)
+        working_hours = data.pop("working_hours", None)
+        # One transaction so a failure on the settings write rolls back the profile write.
+        with transaction.atomic():
+            restaurant = services.update_restaurant(cast(Restaurant, serializer.instance), **data)
+            if working_hours is not None:
+                settings, _ = RestaurantSettings.objects.get_or_create(restaurant=restaurant)
+                services.update_restaurant_settings(settings, working_hours=working_hours)
+
+    @extend_schema(request=None, responses=RestaurantSerializer)
+    @action(
+        detail=True,
+        methods=["patch"],
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+    )
+    def cover(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Set the cover from `cover_image`, or clear it when that key is sent empty."""
+        restaurant = self.get_object()
+        file = request.FILES.get("cover_image")
+        if file is not None:
+            restaurant.cover_image = file
+        elif "cover_image" in request.data:
+            restaurant.cover_image = None
+        else:
+            return Response(RestaurantSerializer(restaurant, context=self.get_serializer_context()).data)
+        restaurant.save(update_fields=["cover_image", "updated_at"])
+        return Response(RestaurantSerializer(restaurant, context=self.get_serializer_context()).data)
 
 
 class _PublicRestaurantScopedViewSetMixin(PublicRestaurantQueryMixin):
@@ -78,11 +170,25 @@ class ZoneViewSet(
 class RestaurantSettingsViewSet(
     PublicLookupMixin,
     _PublicRestaurantScopedViewSetMixin,
-    viewsets.ReadOnlyModelViewSet[RestaurantSettings],
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet[RestaurantSettings],
 ):
-    permission_classes = [AllowAny]
     queryset = RestaurantSettings.objects.all()
-    serializer_class = RestaurantSettingsSerializer
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_permissions(self) -> list[BasePermission]:
+        if self.request.method in SAFE_METHODS:
+            return [AllowAny()]
+        return [IsAdmin()]
+
+    def get_serializer_class(self) -> type[BaseSerializer[RestaurantSettings]]:
+        # Anonymous booking clients get the trimmed booking fields; admins
+        # editing settings get the full serializer.
+        if self.request.method in SAFE_METHODS:
+            return BookingSettingsSerializer
+        return RestaurantSettingsSerializer
 
     def get_queryset(self) -> QuerySet[RestaurantSettings]:
         qs = super().get_queryset()
@@ -90,6 +196,71 @@ class RestaurantSettingsViewSet(
         if restaurant_id is not None:
             return qs.filter(restaurant_id=restaurant_id)
         return qs.none()
+
+    def perform_update(self, serializer: BaseSerializer[RestaurantSettings]) -> None:
+        services.update_restaurant_settings(cast(RestaurantSettings, serializer.instance), **serializer.validated_data)
+
+
+@extend_schema(tags=["Restaurants"])
+class EmployeeViewSet(
+    RestaurantScopedViewSetMixin[User],
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet[User],
+):
+    permission_classes = [IsAdmin]
+    queryset = User.objects.all()
+    serializer_class = EmployeeSerializer
+    filterset_fields = ["role", "is_active"]
+    ordering_fields = ["role", "email", "created_at", "updated_at"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_serializer_class(self) -> type[BaseSerializer[User]]:
+        if self.action == "create":
+            return EmployeeCreateSerializer
+        return EmployeeSerializer
+
+    def safely_get_queryset(self, qs):  # type: ignore[no-untyped-def]
+        return qs.exclude(role=RoleCode.CUSTOMER)
+
+    def perform_create(self, serializer: BaseSerializer[User]) -> None:
+        # Restaurant comes from the admin's auth context, never the request body,
+        # so an admin can only add staff to their own restaurant.
+        restaurant_id = require_restaurant_id_from_auth(self.request)
+        serializer.instance = services.create_employee(
+            restaurant_id=restaurant_id,
+            **serializer.validated_data,
+        )
+
+    def perform_update(self, serializer: BaseSerializer[User]) -> None:
+        employee = cast(User, serializer.instance)
+        self._guard_last_admin(employee, serializer.validated_data)
+        services.manage_employee(employee, **serializer.validated_data)
+
+    def _guard_last_admin(self, employee: User, data: dict[str, Any]) -> None:
+        """Block a change that would leave the restaurant with no active admin."""
+        restaurant_id = employee.restaurant_id
+        if restaurant_id is None:
+            return
+        if not (employee.role == RoleCode.ADMIN and employee.is_active):
+            return
+        new_role = data.get("role", employee.role)
+        new_active = data.get("is_active", employee.is_active)
+        if new_role == RoleCode.ADMIN and new_active:
+            return
+        other_active_admin = (
+            User.objects.filter(
+                restaurant_id=restaurant_id,
+                role=RoleCode.ADMIN,
+                is_active=True,
+            )
+            .exclude(pk=employee.pk)
+            .exists()
+        )
+        if not other_active_admin:
+            raise ValidationError("You cannot demote or deactivate the last active admin.")
 
 
 @extend_schema(tags=["Restaurants"])
