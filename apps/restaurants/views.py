@@ -128,14 +128,15 @@ class RestaurantViewSet(
         parser_classes=[MultiPartParser, FormParser, JSONParser],
     )
     def cover(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Upload a new cover image (multipart `cover_image`), or clear it by
-        sending `cover_image` empty/null."""
+        """Set the cover from `cover_image`, or clear it when that key is sent empty."""
         restaurant = self.get_object()
         file = request.FILES.get("cover_image")
         if file is not None:
             restaurant.cover_image = file
-        else:
+        elif "cover_image" in request.data:
             restaurant.cover_image = None
+        else:
+            return Response(RestaurantSerializer(restaurant, context=self.get_serializer_context()).data)
         restaurant.save(update_fields=["cover_image", "updated_at"])
         return Response(RestaurantSerializer(restaurant, context=self.get_serializer_context()).data)
 
