@@ -241,6 +241,9 @@ class EmployeeViewSet(
 
     def _guard_last_admin(self, employee: User, data: dict[str, Any]) -> None:
         """Block a change that would leave the restaurant with no active admin."""
+        restaurant_id = employee.restaurant_id
+        if restaurant_id is None:
+            return
         if not (employee.role == RoleCode.ADMIN and employee.is_active):
             return
         new_role = data.get("role", employee.role)
@@ -249,7 +252,7 @@ class EmployeeViewSet(
             return
         other_active_admin = (
             User.objects.filter(
-                restaurant_id=employee.restaurant_id,
+                restaurant_id=restaurant_id,
                 role=RoleCode.ADMIN,
                 is_active=True,
             )

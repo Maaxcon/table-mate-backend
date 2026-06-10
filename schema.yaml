@@ -62,6 +62,8 @@ paths:
           description: ''
         '400':
           description: User is not a member of this restaurant.
+        '404':
+          description: Restaurant not found.
   /api/auth/logout/:
     post:
       operationId: auth_logout_create
@@ -2239,9 +2241,8 @@ paths:
   /api/restaurants/restaurants/{public_id}/cover/:
     patch:
       operationId: restaurants_restaurants_cover_partial_update
-      description: |-
-        Upload a new cover image (multipart `cover_image`), or clear it by
-        sending `cover_image` empty/null.
+      description: Set the cover from `cover_image`, or clear it when that key is
+        sent empty.
       parameters:
       - in: path
         name: public_id
