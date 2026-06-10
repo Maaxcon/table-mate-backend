@@ -3,6 +3,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.permissions import AllowAny
 
+from apps.authentication.models import RoleCode
 from apps.authentication.permissions import IsStaff
 from common.api import (
     PublicLookupMixin,
@@ -47,9 +48,11 @@ class RestaurantViewSet(
 
 class _PublicRestaurantScopedViewSetMixin(PublicRestaurantQueryMixin):
     def get_restaurant_id(self) -> int | None:
-        restaurant_id = get_restaurant_id_from_auth(self.request)  # type: ignore[attr-defined]
-        if restaurant_id is not None:
-            return restaurant_id
+        user = getattr(self.request, "user", None)  # type: ignore[attr-defined]
+        if user is not None and user.is_authenticated and user.role != RoleCode.CUSTOMER:
+            restaurant_id = get_restaurant_id_from_auth(self.request)  # type: ignore[attr-defined]
+            if restaurant_id is not None:
+                return restaurant_id
         return super().get_restaurant_id()
 
 
