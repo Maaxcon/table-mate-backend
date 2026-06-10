@@ -25,6 +25,13 @@ class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantS
         read_only_fields = fields
 
 
+class BookingSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
+    class Meta:
+        model = RestaurantSettings
+        fields = ["currency", "timezone", "working_hours"]
+        read_only_fields = fields
+
+
 class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
     settings = PublicRestaurantSettingsSerializer(read_only=True, allow_null=True)
 

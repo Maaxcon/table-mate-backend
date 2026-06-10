@@ -13,9 +13,9 @@ from common.api import (
 
 from .models import Restaurant, RestaurantSettings, Table, Zone
 from .serializers import (
+    BookingSettingsSerializer,
     PublicRestaurantSerializer,
     RestaurantSerializer,
-    RestaurantSettingsSerializer,
     TableSerializer,
     ZoneSerializer,
 )
@@ -79,7 +79,7 @@ class RestaurantSettingsViewSet(
 ):
     permission_classes = [AllowAny]
     queryset = RestaurantSettings.objects.all()
-    serializer_class = RestaurantSettingsSerializer
+    serializer_class = BookingSettingsSerializer
 
     def get_queryset(self) -> QuerySet[RestaurantSettings]:
         qs = super().get_queryset()
