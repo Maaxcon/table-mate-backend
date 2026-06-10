@@ -106,8 +106,7 @@ class AdminMenuViewSet(
     ordering_fields = ["name", "created_at", "updated_at"]
 
     def perform_create(self, serializer: BaseSerializer[Menu]) -> None:
-        # Menu belongs to the admin's restaurant, taken from the auth context.
-        serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
+        serializer.save(restaurant_id=require_restaurant_id_from_auth(self.request))
 
 
 @extend_schema(tags=["Menu Admin"])
