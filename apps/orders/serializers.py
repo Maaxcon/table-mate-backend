@@ -1,12 +1,24 @@
+from collections.abc import Mapping
+from typing import Any
+
 from rest_framework import serializers
 
 from apps.authentication.models import User
 from apps.menu.models import MenuItem
 from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
-from common.api import PublicIdRelatedField
+from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
 from .models import Order, OrderItem, Session, Ticket
+
+
+def _scope_to_request_restaurant(field: Any, context: Mapping[str, object]) -> None:
+    request = context.get("request")
+    if request is None:
+        return
+    restaurant_id = get_restaurant_id_from_auth(request)  # type: ignore[arg-type]
+    if restaurant_id is not None and field.queryset is not None:
+        field.queryset = field.queryset.filter(restaurant_id=restaurant_id)
 
 
 class SessionSerializer(serializers.ModelSerializer[Session]):
@@ -20,6 +32,11 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
         required=False,
     )
     opened_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _scope_to_request_restaurant(self.fields["table"], self.context)
+        _scope_to_request_restaurant(self.fields["reservation"], self.context)
 
     class Meta:
         model = Session
@@ -48,6 +65,10 @@ class OrderSerializer(serializers.ModelSerializer[Order]):
         queryset=Session.objects.all(),
     )
     created_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _scope_to_request_restaurant(self.fields["session"], self.context)
 
     class Meta:
         model = Order
@@ -82,6 +103,11 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         queryset=Order.objects.all(),
     )
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _scope_to_request_restaurant(self.fields["session"], self.context)
+        _scope_to_request_restaurant(self.fields["order"], self.context)
+
     class Meta:
         model = Ticket
         fields = [
@@ -113,6 +139,12 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         queryset=MenuItem.objects.all(),
     )
     voided_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _scope_to_request_restaurant(self.fields["order"], self.context)
+        _scope_to_request_restaurant(self.fields["ticket"], self.context)
+        _scope_to_request_restaurant(self.fields["menu_item"], self.context)
 
     class Meta:
         model = OrderItem
