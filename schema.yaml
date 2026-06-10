@@ -391,7 +391,6 @@ paths:
       tags:
       - Editor
       security:
-      - jwtAuth: []
       - jwt_Auth: []
       responses:
         '200':
@@ -1467,7 +1466,6 @@ paths:
       tags:
       - Reservations
       security:
-      - jwtAuth: []
       - jwt_Auth: []
       - {}
       responses:
