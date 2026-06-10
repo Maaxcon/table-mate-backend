@@ -62,7 +62,7 @@ class ReservationViewSet(
     def get_queryset(self) -> QuerySet[Reservation]:
         qs = super().get_queryset()
         role = getattr(self.request.user, "role", None)
-        if role and role in ("admin", "waiter"):
+        if role and role in (RoleCode.ADMIN, RoleCode.WAITER):
             restaurant_id = get_restaurant_id_from_auth(self.request)
             if restaurant_id is not None:
                 return qs.filter(restaurant_id=restaurant_id)
