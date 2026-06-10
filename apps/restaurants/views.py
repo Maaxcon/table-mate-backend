@@ -5,6 +5,7 @@ from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import SAFE_METHODS, AllowAny, BasePermission
 from rest_framework.request import Request
@@ -234,7 +235,29 @@ class EmployeeViewSet(
         )
 
     def perform_update(self, serializer: BaseSerializer[User]) -> None:
-        services.manage_employee(cast(User, serializer.instance), **serializer.validated_data)
+        employee = cast(User, serializer.instance)
+        self._guard_last_admin(employee, serializer.validated_data)
+        services.manage_employee(employee, **serializer.validated_data)
+
+    def _guard_last_admin(self, employee: User, data: dict[str, Any]) -> None:
+        """Block a change that would leave the restaurant with no active admin."""
+        if not (employee.role == RoleCode.ADMIN and employee.is_active):
+            return
+        new_role = data.get("role", employee.role)
+        new_active = data.get("is_active", employee.is_active)
+        if new_role == RoleCode.ADMIN and new_active:
+            return
+        other_active_admin = (
+            User.objects.filter(
+                restaurant_id=employee.restaurant_id,
+                role=RoleCode.ADMIN,
+                is_active=True,
+            )
+            .exclude(pk=employee.pk)
+            .exists()
+        )
+        if not other_active_admin:
+            raise ValidationError("You cannot demote or deactivate the last active admin.")
 
 
 @extend_schema(tags=["Restaurants"])
