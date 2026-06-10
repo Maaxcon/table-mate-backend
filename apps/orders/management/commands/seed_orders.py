@@ -230,7 +230,7 @@ class Command(BaseCommand):
 def random_item_status() -> str:
     import random
 
-    return random.choice(
+    return random.choice(  # nosec B311
         [
             OrderItemStatus.PENDING,
             OrderItemStatus.IN_PROGRESS,
