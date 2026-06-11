@@ -159,7 +159,7 @@ class TestCustomerContextView:
             guest_count=2,
             start_at=start,
             end_at=start + timedelta(hours=2),
-            status=ReservationStatus.CONFIRMED,
+            status=ReservationStatus.ACTIVE,
         )
 
     def test_customer_participant_gets_restaurant_token(self) -> None:
@@ -338,7 +338,7 @@ class TestMeView:
 class TestMeUpdate:
     url = "/api/auth/me/"
 
-    def _client(self, user: object) -> APIClient:
+    def _client(self, user: User) -> APIClient:
         access, _ = issue_tokens(user)
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
