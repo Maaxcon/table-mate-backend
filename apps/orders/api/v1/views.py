@@ -68,6 +68,13 @@ class CartSessionViewSet(
     lookup_url_kwarg = "pk"  # type: ignore[misc]
 
     def safely_get_queryset(self, qs: QuerySet[CartSession]) -> QuerySet[CartSession]:
+        if _is_guest_request(self.request):
+            auth = getattr(self.request, "auth", None)
+            payload = getattr(auth, "payload", {})
+            session_id = payload.get("cart_session_id")
+            if session_id:
+                return qs.filter(public_id=session_id)
+            return qs.none()
         user = cast(User, self.request.user)
         return (
             qs.filter(Q(participants=user) | Q(reservation__participants=user) | Q(reservation__customer=user))
