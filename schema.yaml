@@ -1999,12 +1999,9 @@ components:
           maxLength: 255
         reservation_id:
           type: string
-          nullable: true
-        table_id:
-          type: string
-          nullable: true
       required:
       - device_id
+      - reservation_id
     Layout:
       type: object
       properties:
