@@ -26,8 +26,6 @@ from .serializers import AddCartItemSerializer, CartItemSerializer, CartSessionS
 
 
 class GuestFallbackAuthMixin:
-    """Fall back to GuestJWTAuthentication if standard JWT auth fails."""
-
     def perform_authentication(self, request: Request) -> None:
         try:
             super().perform_authentication(request)  # type: ignore[misc]
