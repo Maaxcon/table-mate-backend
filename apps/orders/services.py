@@ -125,18 +125,11 @@ def add_item_to_cart(
             )
             created = False
         if not created:
-            update_fields = {
-                "quantity": F("quantity") + quantity,
-                "comment": comment,
-                "guest_slot": guest_slot,
-                "device_id": device_id,
-                "updated_at": timezone.now(),
-            }
-            if _is_authenticated_user(user):
-                user = cast(User, user)
-                update_fields["added_by"] = user.id
-            CartItem.objects.filter(pk=item.pk).update(**update_fields)
-            item.refresh_from_db(fields=["quantity", "comment", "guest_slot", "device_id", "added_by_id", "updated_at"])
+            CartItem.objects.filter(pk=item.pk).update(
+                quantity=F("quantity") + quantity,
+                updated_at=timezone.now(),
+            )
+            item.refresh_from_db(fields=["quantity", "updated_at"])
 
         item.menu_item = menu_item
         item.cart_session = session
