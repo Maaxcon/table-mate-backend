@@ -6,6 +6,8 @@ __all__ = [
 ]
 
 
+from typing import cast
+
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import F
@@ -79,7 +81,7 @@ def add_item_to_cart(
             raise CartSessionClosedError("Cart session is closed.")
 
         if _is_authenticated_user(user):
-            assert isinstance(user, User)
+            user = cast(User, user)
             if not is_cart_participant(user, session):
                 raise PermissionDenied("Only cart participants may add items.")
             session.participants.add(user)
@@ -98,7 +100,7 @@ def add_item_to_cart(
             "device_id": device_id,
         }
         if _is_authenticated_user(user):
-            assert isinstance(user, User)
+            user = cast(User, user)
             defaults["added_by"] = user
 
         try:
@@ -131,7 +133,7 @@ def add_item_to_cart(
                 "updated_at": timezone.now(),
             }
             if _is_authenticated_user(user):
-                assert isinstance(user, User)
+                user = cast(User, user)
                 update_fields["added_by"] = user.id
             CartItem.objects.filter(pk=item.pk).update(**update_fields)
             item.refresh_from_db(fields=["quantity", "comment", "guest_slot", "device_id", "added_by_id", "updated_at"])
@@ -141,7 +143,7 @@ def add_item_to_cart(
         if "restaurant" in session.__dict__:
             item.restaurant = session.__dict__["restaurant"]
         if _is_authenticated_user(user):
-            assert isinstance(user, User)
+            user = cast(User, user)
             item.added_by = user
     return item
 
@@ -159,7 +161,7 @@ def remove_item_from_cart(
             raise CartSessionClosedError("Cart session is closed.")
 
         if _is_authenticated_user(user):
-            assert isinstance(user, User)
+            user = cast(User, user)
             if not is_cart_participant(user, session):
                 raise PermissionDenied("Only cart participants may remove items.")
             session.participants.add(user)
@@ -187,7 +189,7 @@ def update_cart_item_quantity(
             raise CartSessionClosedError("Cart session is closed.")
 
         if _is_authenticated_user(user):
-            assert isinstance(user, User)
+            user = cast(User, user)
             if not is_cart_participant(user, session):
                 raise PermissionDenied("Only cart participants may update items.")
             session.participants.add(user)
@@ -206,7 +208,7 @@ def update_cart_item_quantity(
             "updated_at": timezone.now(),
         }
         if _is_authenticated_user(user):
-            assert isinstance(user, User)
+            user = cast(User, user)
             update_fields["added_by"] = user
         CartItem.objects.filter(pk=item.pk).update(**update_fields)
         item.refresh_from_db()
