@@ -4,7 +4,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q, QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
@@ -145,12 +145,17 @@ class CartSessionItemViewSet(
         return rid
 
     def _get_session(self) -> CartSession:
-        session_pk = cast(str, self.kwargs["session_pk"])
+        session_pk = self.kwargs["session_pk"]
         if _is_guest_request(self.request):
+            auth = getattr(self.request, "auth", None)
+            payload = getattr(auth, "payload", {})
+            token_session_id = payload.get("cart_session_id")
+            if token_session_id and str(token_session_id) != str(session_pk):
+                raise PermissionDenied("Guest token is not scoped to this session.")
             session = CartSession.objects.filter(public_id=session_pk).first()
         else:
             restaurant_id = self._get_restaurant_id()
-            session = get_cart_session(restaurant_id=restaurant_id, session_pk=session_pk)
+            session = get_cart_session(restaurant_id=restaurant_id, session_pk=str(session_pk))
         if session is None:
             raise CartSessionNotFoundError(f"Cart session {session_pk} not found.")
         return session

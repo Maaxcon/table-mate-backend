@@ -22,6 +22,10 @@ class IsActiveTableGuest(permissions.BasePermission):
         if cart_session_id is None:
             return False
 
+        session_pk = view.kwargs.get("session_pk")
+        if session_pk is not None and str(cart_session_id) != str(session_pk):
+            return False
+
         return CartSession.objects.filter(
             public_id=cart_session_id,
             status=CartSessionStatus.ACTIVE,

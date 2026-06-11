@@ -101,10 +101,10 @@ class RestaurantScopedViewSetMixin(PublicLookupMixin, Generic[_ModelT]):
         request = cast(_HasRequest, self).request
         restaurant_id = get_restaurant_id_from_auth(request)
 
-        if restaurant_id is None:
-            return queryset.none()
+        if restaurant_id is not None:
+            queryset = queryset.filter(**{self.restaurant_lookup: restaurant_id})
 
-        return self.safely_get_queryset(queryset.filter(**{self.restaurant_lookup: restaurant_id}))
+        return self.safely_get_queryset(queryset)
 
     def safely_get_queryset(self, qs: QuerySet[_ModelT]) -> QuerySet[_ModelT]:
         return qs

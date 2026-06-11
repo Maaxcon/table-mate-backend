@@ -764,6 +764,139 @@ class TestGuestInit:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
+@pytest.mark.django_db(databases=["default"])
+class TestGuestSessionScope:
+    """Guest token must be scoped to exactly one session."""
+
+    def _issue_token(self, device_id: str, cart_session_id: str | None) -> str:
+        from datetime import timedelta
+
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        token = AccessToken()
+        token.payload["is_guest"] = True
+        token.payload["device_id"] = device_id
+        if cart_session_id:
+            token.payload["cart_session_id"] = cart_session_id
+        token.set_exp(lifetime=timedelta(hours=4))
+        return str(token)
+
+    def test_guest_token_scoped_to_one_session(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        from apps.orders.models import CartSession
+
+        session_a = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        session_b = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+
+        token = self._issue_token("device-a", str(session_a.public_id))
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        other_url = reverse("cart-item-list", kwargs={"session_pk": session_b.public_id})
+        response = guest_client.post(
+            other_url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_guest_can_list_own_items(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        from apps.orders.models import CartSession
+
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+
+        token = self._issue_token("device-b", str(session.public_id))
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        add_url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        add_resp = guest_client.post(
+            add_url,
+            {"menu_item": str(cart_item.public_id), "quantity": 2},
+            content_type="application/json",
+        )
+        assert add_resp.status_code == status.HTTP_201_CREATED
+
+        list_resp = guest_client.get(add_url)
+        assert list_resp.status_code == status.HTTP_200_OK
+        data = list_resp.json()
+        assert data["count"] == 1
+        assert data["results"][0]["quantity"] == 2
+
+    def test_guest_list_other_session_rejected(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        from apps.orders.models import CartSession
+
+        session_a = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        session_b = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+
+        token = self._issue_token("device-c", str(session_a.public_id))
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        add_url = reverse("cart-item-list", kwargs={"session_pk": session_a.public_id})
+        add_resp = guest_client.post(
+            add_url,
+            {"menu_item": str(cart_item.public_id), "quantity": 2},
+            content_type="application/json",
+        )
+        assert add_resp.status_code == status.HTTP_201_CREATED
+
+        other_url = reverse("cart-item-list", kwargs={"session_pk": session_b.public_id})
+        list_resp = guest_client.get(other_url)
+        assert list_resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_guest_cannot_delete_from_other_session(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        from apps.orders.models import CartSession
+
+        session_a = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        session_b = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        other_item = CartItem.objects.create(
+            cart_session=session_b,
+            menu_item=cart_item,
+            quantity=1,
+            restaurant=restaurant,
+        )
+
+        token = self._issue_token("device-d", str(session_a.public_id))
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        delete_url = reverse("cart-item-detail", kwargs={"session_pk": session_b.public_id, "pk": other_item.public_id})
+        response = guest_client.delete(delete_url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
 @pytest.mark.django_db(transaction=True, databases=["default"])
 class TestCartItemConcurrency:
     def test_concurrent_adds_combine_quantity(
