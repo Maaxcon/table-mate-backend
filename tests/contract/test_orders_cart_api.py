@@ -897,6 +897,154 @@ class TestGuestSessionScope:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
+@pytest.mark.django_db(databases=["default"])
+class TestGuestTokenEdgeCases:
+    def _issue_token(self, device_id: str, cart_session_id: str | None, *, expired: bool = False) -> str:
+        import time
+        from datetime import timedelta
+
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        token = AccessToken()
+        token.payload["is_guest"] = True
+        token.payload["device_id"] = device_id
+        if cart_session_id:
+            token.payload["cart_session_id"] = cart_session_id
+        if expired:
+            token.payload["exp"] = int(time.time()) - 3600
+        else:
+            token.set_exp(lifetime=timedelta(hours=4))
+        return str(token)
+
+    def test_expired_guest_token_returns_401(
+        self,
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        from apps.orders.models import CartSession
+
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        token = self._issue_token("device-exp", str(session.public_id), expired=True)
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        response = guest_client.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_malformed_guest_token_returns_401(
+        self,
+        reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION="Bearer invalid.jwt.here")
+
+        url = reverse("cart-item-list", kwargs={"session_pk": str(reservation.public_id)})
+        response = guest_client.get(url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_guest_reinit_same_device_id(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        from apps.orders.models import CartSession
+
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+
+        resp1 = api_client.post(
+            reverse("guest-init"),
+            {"device_id": "device-reinit", "reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert resp1.status_code == status.HTTP_200_OK
+        token1 = resp1.json()["access"]
+
+        resp2 = api_client.post(
+            reverse("guest-init"),
+            {"device_id": "device-reinit", "reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert resp2.status_code == status.HTTP_200_OK
+        token2 = resp2.json()["access"]
+
+        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        for token in (token1, token2):
+            client = APIClient()
+            client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+            response = client.post(
+                url,
+                {"menu_item": str(cart_item.public_id), "quantity": 1},
+                content_type="application/json",
+            )
+            assert response.status_code == status.HTTP_201_CREATED
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestCartItemPatchUnavailable:
+    """PATCH must reject requests for items that are no longer available."""
+
+    def test_patch_unavailable_item_returns_400(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        from tests.conftest import MenuItemFactory
+
+        item = cast(
+            MenuItem,
+            MenuItemFactory(
+                restaurant=restaurant,
+                menu__restaurant=restaurant,
+                is_available=True,
+            ),
+        )
+
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
+        session.participants.add(auth.user)
+
+        # Add the item while available
+        add_url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        add_resp = auth.client.post(
+            add_url,
+            {"menu_item": str(item.public_id), "quantity": 2},
+            content_type="application/json",
+        )
+        assert add_resp.status_code == status.HTTP_201_CREATED
+        cart_item_id = add_resp.json()["public_id"]
+
+        # Mark it unavailable
+        item.is_available = False
+        item.save(update_fields=["is_available"])
+
+        # PATCH should now be rejected
+        patch_url = reverse("cart-item-detail", kwargs={"session_pk": session.public_id, "pk": cart_item_id})
+        response = auth.client.patch(
+            patch_url,
+            {"quantity": 5},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert data["code"] == "menu_item_unavailable"
+
+
 @pytest.mark.django_db(transaction=True, databases=["default"])
 class TestCartItemConcurrency:
     def test_concurrent_adds_combine_quantity(
