@@ -6,7 +6,7 @@ __all__ = [
 ]
 
 
-from typing import cast
+from typing import Final, cast
 
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
@@ -163,7 +163,14 @@ def remove_item_from_cart(
         item.delete()
 
 
-_UNSET = object()
+class _UnsetType:
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debug helper
+        return "<UNSET>"
+
+
+_UNSET: Final = _UnsetType()
 
 
 def update_cart_item_quantity(
@@ -172,8 +179,8 @@ def update_cart_item_quantity(
     item_id: str,
     quantity: int,
     user: User | AnonymousUser | None = None,
-    comment: str | None | object = _UNSET,
-    guest_slot: int | None | object = _UNSET,
+    comment: str | None | _UnsetType = _UNSET,
+    guest_slot: int | None | _UnsetType = _UNSET,
 ) -> CartItem:
     with transaction.atomic():
         session = CartSession.objects.select_for_update().get(pk=session.pk)
