@@ -109,7 +109,9 @@ def add_item_to_cart(
                     restaurant_id=session.restaurant_id,
                     defaults=defaults,
                 )
-        except IntegrityError:
+        except IntegrityError as exc:
+            if exc.__cause__ is None or getattr(exc.__cause__, "pgcode", None) != "23505":
+                raise
             item = (
                 CartItem.objects.select_for_update()
                 .filter(
@@ -193,6 +195,9 @@ def update_cart_item_quantity(
         item = get_cart_item(session.restaurant_id, item_id, session)
         if item is None:
             raise CartItemNotFoundError(f"Cart item {item_id} not found.")
+
+        if not item.menu_item.is_available:
+            raise MenuItemUnavailableError(f"Menu item '{item.menu_item.name}' is not available.")
 
         update_fields: dict[str, object] = {
             "quantity": quantity,
