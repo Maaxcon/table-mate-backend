@@ -26,6 +26,21 @@ from common.exceptions import CartSessionNotFoundError, DomainError, MenuItemUna
 from .serializers import AddCartItemSerializer, CartItemSerializer, CartSessionSerializer, UpdateCartItemSerializer
 
 
+class GuestFallbackAuthMixin:
+    """Fall back to GuestJWTAuthentication if standard JWT auth fails."""
+
+    def perform_authentication(self, request: Request) -> None:
+        try:
+            super().perform_authentication(request)  # type: ignore[misc]
+        except AuthenticationFailed:
+            guest = GuestJWTAuthentication()
+            result = guest.authenticate(request)
+            if result is not None:
+                request.user, request.auth = result
+            else:
+                raise
+
+
 def _is_guest_request(request: Request) -> bool:
     auth = getattr(request, "auth", None)
     if auth is not None:
@@ -45,6 +60,7 @@ def _get_device_id_from_request(request: Request) -> str | None:
 
 @extend_schema(tags=["Cart"])
 class CartSessionViewSet(
+    GuestFallbackAuthMixin,
     RestaurantScopedViewSetMixin[CartSession],
     viewsets.ModelViewSet[CartSession],
 ):
@@ -53,17 +69,6 @@ class CartSessionViewSet(
     http_method_names = ["get", "post", "head", "options"]
     queryset = CartSession.objects.all()
     lookup_url_kwarg = "pk"  # type: ignore[misc]
-
-    def perform_authentication(self, request: Request) -> None:
-        try:
-            super().perform_authentication(request)
-        except AuthenticationFailed:
-            guest = GuestJWTAuthentication()
-            result = guest.authenticate(request)
-            if result is not None:
-                request.user, request.auth = result
-            else:
-                raise
 
     def safely_get_queryset(self, qs: QuerySet[CartSession]) -> QuerySet[CartSession]:
         user = cast(User, self.request.user)
@@ -97,6 +102,7 @@ class CartSessionViewSet(
 
 @extend_schema(tags=["Cart"])
 class CartSessionItemViewSet(
+    GuestFallbackAuthMixin,
     RestaurantScopedViewSetMixin[CartItem],
     viewsets.ModelViewSet[CartItem],
 ):
@@ -104,17 +110,6 @@ class CartSessionItemViewSet(
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     queryset = CartItem.objects.all()
     lookup_url_kwarg = "pk"  # type: ignore[misc]
-
-    def perform_authentication(self, request: Request) -> None:
-        try:
-            super().perform_authentication(request)
-        except AuthenticationFailed:
-            guest = GuestJWTAuthentication()
-            result = guest.authenticate(request)
-            if result is not None:
-                request.user, request.auth = result
-            else:
-                raise
 
     def get_serializer_class(self) -> type[Serializer[Any]]:
         if self.action == "create":
