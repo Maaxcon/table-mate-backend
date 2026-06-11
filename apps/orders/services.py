@@ -173,14 +173,17 @@ def remove_item_from_cart(
         item.delete()
 
 
+_UNSET = object()
+
+
 def update_cart_item_quantity(
     *,
     session: CartSession,
     item_id: str,
     quantity: int,
     user: User | AnonymousUser | None = None,
-    comment: str | None = None,
-    guest_slot: int | None = None,
+    comment: str | None | object = _UNSET,
+    guest_slot: int | None | object = _UNSET,
 ) -> CartItem:
     with transaction.atomic():
         session = CartSession.objects.select_for_update().get(pk=session.pk)
@@ -203,13 +206,12 @@ def update_cart_item_quantity(
 
         update_fields: dict[str, object] = {
             "quantity": quantity,
-            "comment": comment,
-            "guest_slot": guest_slot,
             "updated_at": timezone.now(),
         }
-        if _is_authenticated_user(user):
-            user = cast(User, user)
-            update_fields["added_by"] = user
+        if comment is not _UNSET:
+            update_fields["comment"] = comment
+        if guest_slot is not _UNSET:
+            update_fields["guest_slot"] = guest_slot
         CartItem.objects.filter(pk=item.pk).update(**update_fields)
         item.refresh_from_db()
         return item

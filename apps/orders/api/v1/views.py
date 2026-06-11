@@ -212,14 +212,20 @@ class CartSessionItemViewSet(
 
         session = self._get_session()
 
-        item = update_cart_item_quantity(
-            session=session,
-            item_id=self.kwargs["pk"],
-            quantity=serializer.validated_data["quantity"],
-            user=self._get_user_or_anon(),
-            comment=serializer.validated_data.get("comment"),
-            guest_slot=serializer.validated_data.get("guest_slot"),
+        kwargs = cast(
+            dict[str, Any],
+            {
+                "session": session,
+                "item_id": self.kwargs["pk"],
+                "quantity": serializer.validated_data["quantity"],
+                "user": self._get_user_or_anon(),
+            },
         )
+        if "comment" in serializer.validated_data:
+            kwargs["comment"] = serializer.validated_data["comment"]
+        if "guest_slot" in serializer.validated_data:
+            kwargs["guest_slot"] = serializer.validated_data["guest_slot"]
+        item = update_cart_item_quantity(**kwargs)
 
         result = CartItemSerializer(item, context=self.get_serializer_context())
         return Response(result.data, status=status.HTTP_200_OK)
