@@ -15,8 +15,6 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
-from apps.reservations.models import Reservation
-from apps.reservations.selectors import get_reservation_participant_ids
 from common.exceptions import (
     CartItemNotFoundError,
     CartSessionClosedError,
@@ -26,14 +24,13 @@ from common.exceptions import (
 )
 
 from .models import CartItem, CartSession, CartSessionStatus
-from .selectors import get_cart_item, get_menu_item, get_reservation, is_cart_participant
-
-
-def _resolve_allowed_reservation_participant_ids(reservation: Reservation) -> set[int]:
-    participant_ids = set(get_reservation_participant_ids(reservation))
-    if reservation.customer_id:
-        participant_ids.add(reservation.customer_id)
-    return participant_ids
+from .selectors import (
+    _resolve_allowed_reservation_participant_ids,
+    get_cart_item,
+    get_menu_item,
+    get_reservation,
+    is_cart_participant,
+)
 
 
 def _is_authenticated_user(user: User | AnonymousUser | None) -> bool:
