@@ -20,7 +20,7 @@ from apps.orders.services import (
     update_cart_item_quantity,
 )
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
-from common.exceptions import CartSessionNotFoundError, DomainError, MenuItemUnavailableError
+from common.exceptions import CartSessionNotFoundError, DomainError
 
 from .serializers import AddCartItemSerializer, CartItemSerializer, CartSessionSerializer, UpdateCartItemSerializer
 
@@ -172,21 +172,15 @@ class CartSessionItemViewSet(
 
         session = self._get_session()
 
-        try:
-            item = add_item_to_cart(
-                session=session,
-                menu_item_id=str(serializer.validated_data["menu_item"].public_id),
-                quantity=serializer.validated_data["quantity"],
-                user=self._get_user_or_anon(),
-                device_id=_get_device_id_from_request(request),
-                guest_slot=serializer.validated_data.get("guest_slot"),
-                comment=serializer.validated_data.get("comment"),
-            )
-        except MenuItemUnavailableError as exc:
-            return Response(
-                {"code": "menu_item_unavailable", "detail": str(exc)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        item = add_item_to_cart(
+            session=session,
+            menu_item_id=str(serializer.validated_data["menu_item"].public_id),
+            quantity=serializer.validated_data["quantity"],
+            user=self._get_user_or_anon(),
+            device_id=_get_device_id_from_request(request),
+            guest_slot=serializer.validated_data.get("guest_slot"),
+            comment=serializer.validated_data.get("comment"),
+        )
 
         result = CartItemSerializer(item, context=self.get_serializer_context())
         return Response(result.data, status=status.HTTP_201_CREATED)
