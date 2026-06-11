@@ -11,14 +11,8 @@ from .models import RoleCode, User
 
 
 class GuestInitSerializer(serializers.Serializer[None]):
-    device_id = serializers.CharField(max_length=255, required=True)
-    reservation_id = serializers.CharField(required=False, allow_null=True, default=None)
-    table_id = serializers.CharField(required=False, allow_null=True, default=None)
-
-    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        if not attrs.get("reservation_id") and not attrs.get("table_id"):
-            raise serializers.ValidationError("Either reservation_id or table_id is required.")
-        return attrs
+    device_id = serializers.CharField(max_length=255, required=True, allow_blank=False)
+    reservation_id = serializers.CharField(required=True)
 
 
 class GoogleAuthSerializer(serializers.Serializer[None]):
