@@ -2,6 +2,7 @@ from typing import cast
 
 from django.contrib.auth.models import AnonymousUser
 from rest_framework.authentication import BaseAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
@@ -31,8 +32,8 @@ class GuestJWTAuthentication(BaseAuthentication):
 
         try:
             validated_token = jwt_auth.get_validated_token(raw_token)
-        except (TokenError, InvalidToken):
-            return None
+        except TokenError as exc:
+            raise AuthenticationFailed(f"Invalid guest token: {exc}") from exc
 
         if not validated_token.payload.get("is_guest"):
             return None
