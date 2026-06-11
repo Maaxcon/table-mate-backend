@@ -92,6 +92,32 @@ paths:
           description: ''
         '400':
           description: User is not a member of this restaurant.
+  /api/auth/guest-init/:
+    post:
+      operationId: auth_guest_init_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestInit'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GuestInit'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GuestInit'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          description: Guest JWT issued.
+        '400':
+          description: Invalid request.
   /api/auth/logout/:
     post:
       operationId: auth_logout_create
@@ -795,6 +821,44 @@ paths:
                 $ref: '#/components/schemas/CartItem'
           description: ''
   /api/orders/cart/sessions/{session_pk}/items/{id}/:
+    patch:
+      operationId: orders_cart_sessions_items_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdateCartItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdateCartItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdateCartItem'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+          description: ''
     delete:
       operationId: orders_cart_sessions_items_destroy
       parameters:
@@ -1680,6 +1744,10 @@ components:
         comment:
           type: string
           nullable: true
+        guest_slot:
+          type: integer
+          minimum: 1
+          nullable: true
       required:
       - menu_item
       - quantity
@@ -1705,6 +1773,17 @@ components:
           type: string
           format: uuid
           readOnly: true
+        guest_slot:
+          type: integer
+          readOnly: true
+          nullable: true
+        device_id:
+          type: string
+          readOnly: true
+          nullable: true
+        is_paid:
+          type: boolean
+          readOnly: true
         cart_session:
           type: string
           format: uuid
@@ -1725,6 +1804,9 @@ components:
       - added_by
       - cart_session
       - created_at
+      - device_id
+      - guest_slot
+      - is_paid
       - menu_item
       - public_id
       - quantity
@@ -1909,6 +1991,20 @@ components:
           readOnly: true
       required:
       - access
+    GuestInit:
+      type: object
+      properties:
+        device_id:
+          type: string
+          maxLength: 255
+        reservation_id:
+          type: string
+          nullable: true
+        table_id:
+          type: string
+          nullable: true
+      required:
+      - device_id
     Layout:
       type: object
       properties:
@@ -2780,6 +2876,19 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PatchedUpdateCartItem:
+      type: object
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+        comment:
+          type: string
+          nullable: true
+        guest_slot:
+          type: integer
+          minimum: 1
+          nullable: true
     Payment:
       type: object
       properties:

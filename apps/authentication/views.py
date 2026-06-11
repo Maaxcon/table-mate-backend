@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Any, cast
 
 from django.conf import settings
@@ -20,6 +21,7 @@ from .serializers import (
     GoogleAuthSerializer,
     GoogleContextResponseSerializer,
     GoogleContextSerializer,
+    GuestInitSerializer,
     MeUpdateSerializer,
     UserSerializer,
 )
@@ -212,6 +214,58 @@ class LogoutView(APIView):
         return response
 
 
+class GuestInitView(APIView):
+    permission_classes = [AllowAny]
+    throttle_scope = "auth"
+
+    @extend_schema(
+        request=GuestInitSerializer,
+        responses={
+            200: OpenApiResponse(description="Guest JWT issued."),
+            400: OpenApiResponse(description="Invalid request."),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        serializer = GuestInitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        reservation_id = serializer.validated_data.get("reservation_id")
+
+        if reservation_id:
+            from apps.orders.models import CartSession, CartSessionStatus
+
+            session = CartSession.objects.filter(
+                reservation__public_id=reservation_id,
+                status=CartSessionStatus.ACTIVE,
+            ).first()
+            if session is None:
+                return Response(
+                    {"detail": "No active cart session found for this reservation."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            cart_session_id = str(session.public_id)
+        else:
+            cart_session_id = None
+
+        token = _issue_guest_token(
+            device_id=serializer.validated_data["device_id"],
+            cart_session_id=cart_session_id,
+        )
+        return Response({"access": token})
+
+
+def _issue_guest_token(*, device_id: str, cart_session_id: str | None) -> str:
+    from rest_framework_simplejwt.tokens import AccessToken
+
+    token = AccessToken()
+    token.payload["is_guest"] = True
+    token.payload["device_id"] = device_id
+    if cart_session_id:
+        token.payload["cart_session_id"] = cart_session_id
+    token.set_exp(lifetime=timedelta(hours=4))
+    return str(token)
+
+
 __all__ = [
     "CustomTokenObtainPairView",
     "MeView",
@@ -220,4 +274,5 @@ __all__ = [
     "CustomerContextView",
     "CookieTokenRefreshView",
     "LogoutView",
+    "GuestInitView",
 ]

@@ -6,6 +6,7 @@ from .views import (
     CustomTokenObtainPairView,
     GoogleAuthView,
     GoogleContextView,
+    GuestInitView,
     LogoutView,
     MeView,
 )
@@ -18,4 +19,5 @@ urlpatterns = [
     path("google/context/", GoogleContextView.as_view(), name="google-context"),
     path("customer/context/", CustomerContextView.as_view(), name="customer-context"),
     path("logout/", LogoutView.as_view(), name="logout"),
+    path("guest-init/", GuestInitView.as_view(), name="guest-init"),
 ]

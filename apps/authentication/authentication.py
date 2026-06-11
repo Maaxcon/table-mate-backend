@@ -1,7 +1,10 @@
 from typing import cast
 
+from django.contrib.auth.models import AnonymousUser
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.request import Request
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import Token
 
 from .models import User
@@ -16,4 +19,25 @@ class TokenVersionJWTAuthentication(JWTAuthentication):
         return user
 
 
-__all__ = ["TokenVersionJWTAuthentication"]
+class GuestJWTAuthentication(BaseAuthentication):
+    def authenticate(self, request: Request) -> tuple[AnonymousUser, Token] | None:
+        jwt_auth = JWTAuthentication()
+        header = jwt_auth.get_header(request)
+        if header is None:
+            return None
+        raw_token = jwt_auth.get_raw_token(header)
+        if raw_token is None:
+            return None
+
+        try:
+            validated_token = jwt_auth.get_validated_token(raw_token)
+        except (TokenError, InvalidToken):
+            return None
+
+        if not validated_token.payload.get("is_guest"):
+            return None
+
+        return AnonymousUser(), validated_token
+
+
+__all__ = ["GuestJWTAuthentication", "TokenVersionJWTAuthentication"]

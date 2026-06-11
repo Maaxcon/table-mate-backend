@@ -212,4 +212,4 @@ def item(menu: Menu, category: MenuCategory, restaurant: Restaurant) -> MenuItem
 
 @pytest.fixture
 def restaurant_settings(restaurant: Restaurant) -> RestaurantSettings:
-    return RestaurantSettingsFactory(restaurant=restaurant)
+    return cast(RestaurantSettings, RestaurantSettingsFactory(restaurant=restaurant))

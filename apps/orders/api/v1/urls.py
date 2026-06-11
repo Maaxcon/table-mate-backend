@@ -16,7 +16,7 @@ urlpatterns = [
     ),
     path(
         "sessions/<uuid:session_pk>/items/<uuid:pk>/",
-        CartSessionItemViewSet.as_view({"delete": "destroy"}),
+        CartSessionItemViewSet.as_view({"delete": "destroy", "patch": "partial_update"}),
         name="cart-item-detail",
     ),
 ]

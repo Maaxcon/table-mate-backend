@@ -24,6 +24,10 @@ class CartItem(RestaurantScopedModel):
     )
     comment = models.TextField(null=True, blank=True)
 
+    guest_slot = models.PositiveIntegerField(null=True, blank=True)
+    is_paid = models.BooleanField(default=False)
+    device_id = models.CharField(max_length=255, null=True, blank=True)
+
     class Meta:
         ordering = ["-created_at", "-id"]
         constraints = [

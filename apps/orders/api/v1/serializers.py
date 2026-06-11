@@ -69,6 +69,9 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
             "quantity",
             "comment",
             "added_by",
+            "guest_slot",
+            "device_id",
+            "is_paid",
             "cart_session",
             "restaurant",
             "created_at",
@@ -80,9 +83,18 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
             "cart_session",
             "menu_item",
             "added_by",
+            "guest_slot",
+            "device_id",
+            "is_paid",
             "created_at",
             "updated_at",
         ]
+
+
+class UpdateCartItemSerializer(serializers.Serializer[None]):
+    quantity = serializers.IntegerField(min_value=1, required=True)
+    comment = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    guest_slot = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
 
 class AddCartItemSerializer(serializers.Serializer[None]):
@@ -92,6 +104,7 @@ class AddCartItemSerializer(serializers.Serializer[None]):
     )
     quantity = serializers.IntegerField(min_value=1)
     comment = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    guest_slot = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

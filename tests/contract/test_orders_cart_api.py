@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
+from django.db import close_old_connections
 from django.test import Client
 from django.urls import reverse
 from rest_framework import status
@@ -496,3 +497,381 @@ class TestCartTwoUserScenario:
         delete_url = reverse("cart-item-detail", kwargs={"session_pk": session_id, "pk": item_id})
         response = intruder.client.delete(delete_url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestCartItemPatch:
+    def test_patch_quantity(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
+        session.participants.add(auth.user)
+
+        item = CartItem.objects.create(
+            cart_session=session,
+            menu_item=cart_item,
+            quantity=2,
+            added_by=auth.user,
+            restaurant=restaurant,
+        )
+
+        url = reverse("cart-item-detail", kwargs={"session_pk": session.public_id, "pk": item.public_id})
+        response = auth.client.patch(
+            url,
+            {"quantity": 5},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["quantity"] == 5
+
+    def test_patch_with_guest_slot(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
+        session.participants.add(auth.user)
+
+        item = CartItem.objects.create(
+            cart_session=session,
+            menu_item=cart_item,
+            quantity=1,
+            added_by=auth.user,
+            restaurant=restaurant,
+        )
+
+        url = reverse("cart-item-detail", kwargs={"session_pk": session.public_id, "pk": item.public_id})
+        response = auth.client.patch(
+            url,
+            {"quantity": 3, "guest_slot": 2},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["quantity"] == 3
+        assert data["guest_slot"] == 2
+
+    def test_patch_non_participant_returns_403(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
+        session.participants.add(auth.user)
+
+        item = CartItem.objects.create(
+            cart_session=session,
+            menu_item=cart_item,
+            quantity=1,
+            added_by=auth.user,
+            restaurant=restaurant,
+        )
+
+        intruder = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        url = reverse("cart-item-detail", kwargs={"session_pk": session.public_id, "pk": item.public_id})
+        response = intruder.client.patch(
+            url,
+            {"quantity": 5},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_patch_closed_session_returns_409(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(
+            restaurant=restaurant,
+            reservation=reservation,
+            created_by=auth.user,
+            status=CartSessionStatus.CLOSED,
+        )
+        session.participants.add(auth.user)
+
+        item = CartItem.objects.create(
+            cart_session=session,
+            menu_item=cart_item,
+            quantity=1,
+            added_by=auth.user,
+            restaurant=restaurant,
+        )
+
+        url = reverse("cart-item-detail", kwargs={"session_pk": session.public_id, "pk": item.public_id})
+        response = auth.client.patch(
+            url,
+            {"quantity": 5},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_409_CONFLICT
+        data = response.json()
+        assert data["code"] == "cart_session_closed"
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestCartItemUnavailable:
+    def test_add_unavailable_item_returns_400(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+
+        from tests.conftest import MenuItemFactory
+
+        unavailable_item = cast(
+            MenuItem,
+            MenuItemFactory(
+                restaurant=restaurant,
+                menu__restaurant=restaurant,
+                is_available=False,
+            ),
+        )
+
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
+        session.participants.add(auth.user)
+
+        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        response = auth.client.post(
+            url,
+            {"menu_item": str(unavailable_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert data["code"] == "menu_item_unavailable"
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestGuestInit:
+    url = reverse("guest-init")
+
+    def test_guest_init_returns_token(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        from apps.orders.models import CartSession
+
+        CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+
+        response = api_client.post(
+            self.url,
+            {"device_id": "test-device-uuid", "reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "access" in data
+        assert len(data["access"]) > 0
+
+    def test_guest_init_no_active_session_returns_404(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+    ) -> None:
+        response = api_client.post(
+            self.url,
+            {"device_id": "test-device-uuid", "reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_guest_init_missing_device_id_returns_400(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+    ) -> None:
+        response = api_client.post(
+            self.url,
+            {"reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_guest_init_token_allows_add_item(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        from apps.orders.models import CartSession
+
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+
+        guest_response = api_client.post(
+            self.url,
+            {"device_id": "test-device-uuid", "reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert guest_response.status_code == status.HTTP_200_OK
+        token = guest_response.json()["access"]
+
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        response = guest_client.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 2, "guest_slot": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert data["quantity"] == 2
+        assert data["guest_slot"] == 1
+        assert data["device_id"] == "test-device-uuid"
+
+    def test_guest_init_closed_session_returns_404(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        from apps.orders.models import CartSession, CartSessionStatus
+
+        CartSession.objects.create(
+            restaurant=restaurant,
+            reservation=reservation,
+            status=CartSessionStatus.CLOSED,
+        )
+
+        response = api_client.post(
+            self.url,
+            {"device_id": "test-device-uuid", "reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db(transaction=True, databases=["default"])
+class TestCartItemConcurrency:
+    def test_concurrent_adds_combine_quantity(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        import concurrent.futures
+
+        from apps.orders.services import add_item_to_cart
+
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
+        session.participants.add(auth.user)
+
+        def add_item(quantity: int) -> int | None:
+            close_old_connections()
+            from django.db import transaction
+
+            with transaction.atomic():
+                try:
+                    item = add_item_to_cart(
+                        session=session,
+                        menu_item_id=str(cart_item.public_id),
+                        quantity=quantity,
+                        user=auth.user,
+                    )
+                    return item.id
+                except Exception:
+                    return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            fut1 = executor.submit(add_item, 3)
+            fut2 = executor.submit(add_item, 5)
+            results = [fut1.result(), fut2.result()]
+
+        assert all(r is not None for r in results)
+        cart_items = CartItem.objects.filter(cart_session=session)
+        assert cart_items.count() == 1
+        first_item = cart_items.first()
+        assert first_item is not None
+        assert first_item.quantity == 8  # 3 + 5 = 8
+
+    def test_concurrent_delete_and_update_has_valid_outcome(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        import concurrent.futures
+
+        from apps.orders.services import add_item_to_cart, remove_item_from_cart, update_cart_item_quantity
+
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
+        session.participants.add(auth.user)
+
+        item = add_item_to_cart(
+            session=session,
+            menu_item_id=str(cart_item.public_id),
+            quantity=5,
+            user=auth.user,
+        )
+        item_id = str(item.public_id)
+
+        results: dict[str, str | None] = {}
+
+        def delete_item() -> None:
+            close_old_connections()
+            from django.db import transaction
+
+            with transaction.atomic():
+                try:
+                    remove_item_from_cart(session=session, item_id=item_id, user=auth.user)
+                    results["delete"] = "deleted"
+                except Exception as exc:
+                    results["delete"] = f"error:{type(exc).__name__}"
+
+        def update_item() -> None:
+            close_old_connections()
+            from django.db import transaction
+
+            with transaction.atomic():
+                try:
+                    update_cart_item_quantity(session=session, item_id=item_id, quantity=2, user=auth.user)
+                    results["update"] = "updated"
+                except Exception as exc:
+                    results["update"] = f"error:{type(exc).__name__}"
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            fut1 = executor.submit(delete_item)
+            fut2 = executor.submit(update_item)
+            fut1.result()
+            fut2.result()
+
+        remaining = list(CartItem.objects.filter(cart_session=session))
+
+        delete_outcome = results["delete"]
+        update_outcome = results["update"]
+
+        valid_outcomes = [
+            # Delete won: item gone, update got 404
+            (delete_outcome == "deleted" and update_outcome == "error:CartItemNotFoundError"),
+            # Update won: quantity changed, then delete removed the item
+            (delete_outcome == "deleted" and update_outcome == "updated"),
+        ]
+        assert any(valid_outcomes), f"Unexpected outcome: delete={delete_outcome}, update={update_outcome}"
+        assert len(remaining) == 0, f"Cart should be empty, found {len(remaining)} items"
