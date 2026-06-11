@@ -79,7 +79,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/GoogleContext'
-        required: true
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -92,6 +91,8 @@ paths:
           description: ''
         '400':
           description: User is not a member of this restaurant.
+        '404':
+          description: Restaurant not found.
   /api/auth/guest-init/:
     post:
       operationId: auth_guest_init_create
@@ -336,8 +337,10 @@ paths:
           enum:
           - free
           - occupied
+          - reserved
         description: |-
           * `free` - Free
+          * `reserved` - Reserved
           * `occupied` - Occupied
       tags:
       - Editor
@@ -416,6 +419,11 @@ paths:
         description: ISO 8601 datetime
         required: true
       - in: query
+        name: exclude
+        schema:
+          type: string
+        description: Reservation public ID to exclude when checking an existing booking.
+      - in: query
         name: guest_count
         schema:
           type: integer
@@ -426,6 +434,11 @@ paths:
         schema:
           type: integer
       - in: query
+        name: restaurant
+        schema:
+          type: string
+        description: Restaurant public ID for unauthenticated access
+      - in: query
         name: start_at
         schema:
           type: string
@@ -434,7 +447,6 @@ paths:
       tags:
       - Editor
       security:
-      - jwtAuth: []
       - jwt_Auth: []
       responses:
         '200':
@@ -442,6 +454,631 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedEditorTableList'
+          description: ''
+  /api/menu/admin/categories/:
+    get:
+      operationId: menu_admin_categories_list
+      parameters:
+      - in: query
+        name: menu
+        schema:
+          type: string
+          format: uuid
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdminMenuCategoryList'
+          description: ''
+    post:
+      operationId: menu_admin_categories_create
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMenuCategory'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminMenuCategory'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminMenuCategory'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuCategory'
+          description: ''
+  /api/menu/admin/categories/{public_id}/:
+    get:
+      operationId: menu_admin_categories_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuCategory'
+          description: ''
+    put:
+      operationId: menu_admin_categories_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMenuCategory'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminMenuCategory'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminMenuCategory'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuCategory'
+          description: ''
+    patch:
+      operationId: menu_admin_categories_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminMenuCategory'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminMenuCategory'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminMenuCategory'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuCategory'
+          description: ''
+    delete:
+      operationId: menu_admin_categories_destroy
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/menu/admin/categories/reorder/:
+    post:
+      operationId: menu_admin_categories_reorder_create
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReorderEntry'
+          application/x-www-form-urlencoded:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReorderEntry'
+          multipart/form-data:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReorderEntry'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/menu/admin/items/:
+    get:
+      operationId: menu_admin_items_list
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: is_available
+        schema:
+          type: boolean
+      - in: query
+        name: menu
+        schema:
+          type: string
+          format: uuid
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdminMenuItemList'
+          description: ''
+    post:
+      operationId: menu_admin_items_create
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminMenuItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminMenuItem'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMenuItem'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuItem'
+          description: ''
+  /api/menu/admin/items/{public_id}/:
+    get:
+      operationId: menu_admin_items_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuItem'
+          description: ''
+    put:
+      operationId: menu_admin_items_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminMenuItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminMenuItem'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMenuItem'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuItem'
+          description: ''
+    patch:
+      operationId: menu_admin_items_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminMenuItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminMenuItem'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminMenuItem'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuItem'
+          description: ''
+    delete:
+      operationId: menu_admin_items_destroy
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/menu/admin/items/{public_id}/duplicate/:
+    post:
+      operationId: menu_admin_items_duplicate_create
+      description: Server-side copy of a dish, including its image file.
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuItem'
+          description: ''
+  /api/menu/admin/items/bulk/:
+    post:
+      operationId: menu_admin_items_bulk_create
+      description: |-
+        Hide/show, set the category of, or delete several dishes at once.
+        Only items in the admin's restaurant are touched; unknown ids are ignored.
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BulkItemAction'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BulkItemAction'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkItemAction'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/menu/admin/items/reorder/:
+    post:
+      operationId: menu_admin_items_reorder_create
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReorderEntry'
+          application/x-www-form-urlencoded:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReorderEntry'
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReorderEntry'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/menu/admin/menus/:
+    get:
+      operationId: menu_admin_menus_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdminMenuList'
+          description: ''
+    post:
+      operationId: menu_admin_menus_create
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMenu'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminMenu'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminMenu'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenu'
+          description: ''
+  /api/menu/admin/menus/{public_id}/:
+    get:
+      operationId: menu_admin_menus_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenu'
+          description: ''
+    put:
+      operationId: menu_admin_menus_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminMenu'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminMenu'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminMenu'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenu'
+          description: ''
+    patch:
+      operationId: menu_admin_menus_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminMenu'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminMenu'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminMenu'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenu'
+          description: ''
+    delete:
+      operationId: menu_admin_menus_destroy
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/menu/allergens/:
+    get:
+      operationId: menu_allergens_list
+      description: The allowed allergen vocabulary — the single source of truth for
+        clients.
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
           description: ''
   /api/menu/categories/:
     get:
@@ -950,6 +1587,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedOrderItemList'
           description: ''
+    post:
+      operationId: orders_order_items_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrderItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrderItem'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+          description: ''
   /api/orders/order-items/{public_id}/:
     get:
       operationId: orders_order_items_retrieve
@@ -962,6 +1625,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+          description: ''
+    patch:
+      operationId: orders_order_items_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrderItem'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -1066,6 +1761,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedOrderList'
           description: ''
+    post:
+      operationId: orders_orders_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Order'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Order'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Order'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
   /api/orders/orders/{public_id}/:
     get:
       operationId: orders_orders_retrieve
@@ -1078,6 +1799,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+    patch:
+      operationId: orders_orders_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrder'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrder'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrder'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -1144,6 +1897,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSessionList'
           description: ''
+    post:
+      operationId: orders_sessions_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Session'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Session'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Session'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
   /api/orders/sessions/{public_id}/:
     get:
       operationId: orders_sessions_retrieve
@@ -1156,6 +1935,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
+    patch:
+      operationId: orders_sessions_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSession'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSession'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSession'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -1216,6 +2027,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedTicketList'
           description: ''
+    post:
+      operationId: orders_tickets_create
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
   /api/orders/tickets/{public_id}/:
     get:
       operationId: orders_tickets_retrieve
@@ -1228,6 +2065,38 @@ paths:
         required: true
       tags:
       - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          description: ''
+    patch:
+      operationId: orders_tickets_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTicket'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -1368,15 +2237,15 @@ paths:
         schema:
           type: string
           enum:
+          - active
           - cancelled
           - completed
-          - confirmed
           - pending
         description: |-
           * `pending` - Pending
-          * `confirmed` - Confirmed
-          * `cancelled` - Cancelled
+          * `active` - Active
           * `completed` - Completed
+          * `cancelled` - Cancelled
       - in: query
         name: table
         schema:
@@ -1473,6 +2342,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reservation'
           description: ''
+  /api/reservations/reservations/available-slots/:
+    get:
+      operationId: reservations_reservations_available_slots_retrieve
+      description: Returns available 30-min time slots for a table. If date is provided,
+        returns slots for that date only. Otherwise returns slots for the next 14
+        days.
+      summary: Available time slots for a table
+      tags:
+      - Reservations
+      security:
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
   /api/reservations/reservations/my/:
     get:
       operationId: reservations_reservations_my_list
@@ -1498,15 +2386,15 @@ paths:
         schema:
           type: string
           enum:
+          - active
           - cancelled
           - completed
-          - confirmed
           - pending
         description: |-
           * `pending` - Pending
-          * `confirmed` - Confirmed
-          * `cancelled` - Cancelled
+          * `active` - Active
           * `completed` - Completed
+          * `cancelled` - Cancelled
       - in: query
         name: table
         schema:
@@ -1523,18 +2411,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedReservationList'
           description: ''
-  /api/restaurants/restaurant-settings/:
+  /api/restaurants/admin/overview/:
     get:
-      operationId: restaurants_restaurant_settings_list
+      operationId: restaurants_admin_overview_retrieve
+      description: Aggregate counts for the admin dashboard, in one request.
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOverview'
+          description: ''
+  /api/restaurants/employees/:
+    get:
+      operationId: restaurants_employees_list
       parameters:
       - in: query
-        name: currency
+        name: is_active
         schema:
-          type: string
-      - in: query
-        name: locale
-        schema:
-          type: string
+          type: boolean
       - name: ordering
         required: false
         in: query
@@ -1548,17 +2448,19 @@ paths:
         schema:
           type: integer
       - in: query
-        name: price_band
-        schema:
-          type: integer
-      - in: query
-        name: restaurant
-        schema:
-          type: integer
-      - in: query
-        name: timezone
+        name: role
         schema:
           type: string
+          enum:
+          - admin
+          - cook
+          - customer
+          - waiter
+        description: |-
+          * `admin` - Admin
+          * `waiter` - Waiter
+          * `cook` - Cook
+          * `customer` - Customer
       tags:
       - Restaurants
       security:
@@ -1569,7 +2471,116 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedRestaurantSettingsList'
+                $ref: '#/components/schemas/PaginatedEmployeeList'
+          description: ''
+    post:
+      operationId: restaurants_employees_create
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeCreate'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeCreate'
+          description: ''
+  /api/restaurants/employees/{public_id}/:
+    get:
+      operationId: restaurants_employees_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+    patch:
+      operationId: restaurants_employees_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployee'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployee'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployee'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+  /api/restaurants/restaurant-settings/:
+    get:
+      operationId: restaurants_restaurant_settings_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBookingSettingsList'
           description: ''
   /api/restaurants/restaurant-settings/{public_id}/:
     get:
@@ -1583,6 +2594,39 @@ paths:
         required: true
       tags:
       - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingSettings'
+          description: ''
+    patch:
+      operationId: restaurants_restaurant_settings_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRestaurantSettings'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRestaurantSettings'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRestaurantSettings'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -1620,6 +2664,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedRestaurantList'
+          description: ''
+  /api/restaurants/restaurants-public/:
+    get:
+      operationId: restaurants_restaurants_public_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPublicRestaurantList'
           description: ''
   /api/restaurants/restaurants-public/{public_id}/:
     get:
@@ -1666,6 +2739,62 @@ paths:
               schema:
                 $ref: '#/components/schemas/Restaurant'
           description: ''
+    patch:
+      operationId: restaurants_restaurants_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRestaurant'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRestaurant'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRestaurant'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+          description: ''
+  /api/restaurants/restaurants/{public_id}/cover/:
+    patch:
+      operationId: restaurants_restaurants_cover_partial_update
+      description: Set the cover from `cover_image`, or clear it when that key is
+        sent empty.
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+          description: ''
   /api/restaurants/tables/:
     get:
       operationId: restaurants_tables_list
@@ -1693,14 +2822,22 @@ paths:
           enum:
           - free
           - occupied
+          - reserved
         description: |-
           * `free` - Free
+          * `reserved` - Reserved
           * `occupied` - Occupied
+      - in: query
+        name: zone__public_id
+        schema:
+          type: string
+          format: uuid
       tags:
       - Restaurants
       security:
       - jwtAuth: []
       - jwt_Auth: []
+      - {}
       responses:
         '200':
           content:
@@ -1723,6 +2860,7 @@ paths:
       security:
       - jwtAuth: []
       - jwt_Auth: []
+      - {}
       responses:
         '200':
           content:
@@ -1730,8 +2868,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/Table'
           description: ''
+  /api/restaurants/zones/:
+    get:
+      operationId: restaurants_zones_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedZoneList'
+          description: ''
+  /api/restaurants/zones/{public_id}/:
+    get:
+      operationId: restaurants_zones_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
 components:
   schemas:
+    ActionEnum:
+      enum:
+      - set_available
+      - set_category
+      - delete
+      type: string
+      description: |-
+        * `set_available` - set_available
+        * `set_category` - set_category
+        * `delete` - delete
     AddCartItem:
       type: object
       properties:
@@ -1751,6 +2951,201 @@ components:
       required:
       - menu_item
       - quantity
+    AdminMenu:
+      type: object
+      description: Writable menu serializer for the admin panel.
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - name
+      - public_id
+      - updated_at
+    AdminMenuCategory:
+      type: object
+      description: |-
+        Writable category serializer. The menu is referenced by its public id and
+        must belong to the admin's restaurant (validated in the view's queryset).
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        menu:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 255
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - menu
+      - name
+      - public_id
+      - updated_at
+    AdminMenuItem:
+      type: object
+      description: |-
+        Writable menu item serializer for the admin panel. Menu and category are
+        referenced by public id and limited to the admin's restaurant in the view.
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        menu:
+          type: string
+          format: uuid
+        category:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        ingredients:
+          type: array
+          items:
+            type: string
+        allergens:
+          type: array
+          items:
+            type: string
+        weight_grams:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        image:
+          type: string
+          format: uri
+          nullable: true
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        is_available:
+          type: boolean
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        likes_count:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - likes_count
+      - menu
+      - name
+      - price
+      - public_id
+      - updated_at
+    AdminOverview:
+      type: object
+      description: Counts for the admin dashboard, scoped to the admin's restaurant.
+      properties:
+        menus_total:
+          type: integer
+        menus_active:
+          type: integer
+        dishes_total:
+          type: integer
+        dishes_hidden:
+          type: integer
+        categories_total:
+          type: integer
+        staff_total:
+          type: integer
+        staff_active:
+          type: integer
+      required:
+      - categories_total
+      - dishes_hidden
+      - dishes_total
+      - menus_active
+      - menus_total
+      - staff_active
+      - staff_total
+    BookingSettings:
+      type: object
+      properties:
+        currency:
+          type: string
+          readOnly: true
+        timezone:
+          type: string
+          readOnly: true
+        working_hours:
+          readOnly: true
+      required:
+      - currency
+      - timezone
+      - working_hours
+    BulkItemAction:
+      type: object
+      description: |-
+        A bulk operation over several menu items, selected by public id.
+
+        - ``set_available`` needs ``is_available``
+        - ``set_category`` needs ``category`` (may be null to clear it)
+        - ``delete`` needs nothing else
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        action:
+          $ref: '#/components/schemas/ActionEnum'
+        is_available:
+          type: boolean
+        category:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - action
+      - ids
     CartItem:
       type: object
       properties:
@@ -1954,6 +3349,64 @@ components:
       - restaurant
       - table_number
       - updated_at
+    Employee:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+      required:
+      - email
+      - public_id
+    EmployeeCreate:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - email
+      - is_active
+      - public_id
     GoogleAuth:
       type: object
       properties:
@@ -1981,8 +3434,9 @@ components:
       properties:
         restaurant_id:
           type: integer
-      required:
-      - restaurant_id
+        restaurant_public_id:
+          type: string
+          format: uuid
     GoogleContextResponse:
       type: object
       properties:
@@ -2233,7 +3687,6 @@ components:
         session:
           type: string
           format: uuid
-          readOnly: true
         created_by:
           type: string
           format: uuid
@@ -2302,15 +3755,13 @@ components:
         order:
           type: string
           format: uuid
-          readOnly: true
         ticket:
           type: string
           format: uuid
-          readOnly: true
+          nullable: true
         menu_item:
           type: string
           format: uuid
-          readOnly: true
         guest_slot:
           type: integer
           maximum: 2147483647
@@ -2371,7 +3822,6 @@ components:
       - public_id
       - quantity
       - restaurant
-      - ticket
       - unit_price
       - updated_at
       - voided_by
@@ -2401,6 +3851,98 @@ components:
         * `submitted` - Submitted
         * `completed` - Completed
         * `cancelled` - Cancelled
+    PaginatedAdminMenuCategoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMenuCategory'
+    PaginatedAdminMenuItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMenuItem'
+    PaginatedAdminMenuList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMenu'
+    PaginatedBookingSettingsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingSettings'
     PaginatedCartItemList:
       type: object
       required:
@@ -2470,6 +4012,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EditorTable'
+    PaginatedEmployeeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Employee'
     PaginatedLayoutList:
       type: object
       required:
@@ -2631,6 +4196,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Payment'
+    PaginatedPublicRestaurantList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicRestaurant'
     PaginatedReservationList:
       type: object
       required:
@@ -2677,29 +4265,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Restaurant'
-    PaginatedRestaurantSettingsList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/RestaurantSettings'
     PaginatedSessionList:
       type: object
       required:
@@ -2769,6 +4334,139 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ticket'
+    PaginatedZoneList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Zone'
+    PatchedAdminMenu:
+      type: object
+      description: Writable menu serializer for the admin panel.
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedAdminMenuCategory:
+      type: object
+      description: |-
+        Writable category serializer. The menu is referenced by its public id and
+        must belong to the admin's restaurant (validated in the view's queryset).
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        menu:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 255
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedAdminMenuItem:
+      type: object
+      description: |-
+        Writable menu item serializer for the admin panel. Menu and category are
+        referenced by public id and limited to the admin's restaurant in the view.
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        menu:
+          type: string
+          format: uuid
+        category:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+        ingredients:
+          type: array
+          items:
+            type: string
+        allergens:
+          type: array
+          items:
+            type: string
+        weight_grams:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        image:
+          type: string
+          format: uri
+          nullable: true
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        is_available:
+          type: boolean
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        likes_count:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     PatchedEditorTable:
       type: object
       properties:
@@ -2810,6 +4508,31 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PatchedEmployee:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
     PatchedMeUpdate:
       type: object
       description: |-
@@ -2830,6 +4553,139 @@ components:
           type: string
           nullable: true
           maxLength: 32
+    PatchedOrder:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        session:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_by_source:
+          $ref: '#/components/schemas/CreatedBySourceEnum'
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        status:
+          $ref: '#/components/schemas/OrderStatusEnum'
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatusEnum'
+        currency:
+          type: string
+          maxLength: 3
+        total_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tax_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        discount_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tip_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        service_charge:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedOrderItem:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        order:
+          type: string
+          format: uuid
+        ticket:
+          type: string
+          format: uuid
+          nullable: true
+        menu_item:
+          type: string
+          format: uuid
+        guest_slot:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        comment:
+          type: string
+          nullable: true
+        modifiers:
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OrderItemStatusEnum'
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        total_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        tax_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
+        tax_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        voided_at:
+          type: string
+          format: date-time
+          nullable: true
+        voided_by:
+          type: string
+          format: uuid
+          readOnly: true
+        void_reason:
+          type: integer
+          nullable: true
+        is_wasted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     PatchedReservation:
       type: object
       properties:
@@ -2848,6 +4704,17 @@ components:
         table:
           type: string
           format: uuid
+        table_info:
+          allOf:
+          - $ref: '#/components/schemas/TableInfo'
+          readOnly: true
+        restaurant_info:
+          allOf:
+          - $ref: '#/components/schemas/RestaurantInfo'
+          readOnly: true
+        customer_name:
+          type: string
+          readOnly: true
         guest_count:
           type: integer
           maximum: 2147483647
@@ -2859,11 +4726,197 @@ components:
           type: string
           format: date-time
         status:
-          allOf:
-          - $ref: '#/components/schemas/ReservationStatus'
-          readOnly: true
+          $ref: '#/components/schemas/ReservationStatus'
         notes:
           type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedRestaurant:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        address:
+          type: string
+        phone:
+          type: string
+          maxLength: 32
+        telegram_url:
+          type: string
+          format: uri
+          maxLength: 255
+        facebook_url:
+          type: string
+          format: uri
+          maxLength: 255
+        working_hours:
+          allOf:
+          - $ref: '#/components/schemas/WorkingHours'
+          writeOnly: true
+        cover_image:
+          type: string
+          format: uri
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedRestaurantSettings:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        timezone:
+          type: string
+          maxLength: 64
+        currency:
+          type: string
+          maxLength: 3
+        locale:
+          type: string
+          maxLength: 16
+        default_tax_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
+        default_service_charge:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
+        working_hours:
+          $ref: '#/components/schemas/WorkingHours'
+        rating:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+        eta_min_minutes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        eta_max_minutes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        price_band:
+          type: integer
+          maximum: 4
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedSession:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        table:
+          type: string
+          format: uuid
+        reservation:
+          type: string
+          format: uuid
+          nullable: true
+        opened_by:
+          type: string
+          format: uuid
+          readOnly: true
+        guest_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        status:
+          $ref: '#/components/schemas/SessionStatusEnum'
+        currency:
+          type: string
+          maxLength: 3
+        running_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        final_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        started_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedTicket:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        session:
+          type: string
+          format: uuid
+        order:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/TicketStatusEnum'
+        injected_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
           nullable: true
         created_at:
           type: string
@@ -3011,6 +5064,8 @@ components:
           type: string
           readOnly: true
         working_hours:
+          allOf:
+          - $ref: '#/components/schemas/WorkingHours'
           readOnly: true
         rating:
           type: string
@@ -3136,6 +5191,19 @@ components:
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
           nullable: true
+    ReorderEntry:
+      type: object
+      description: One {public_id, sort_order} pair for a bulk reorder request.
+      properties:
+        public_id:
+          type: string
+          format: uuid
+        sort_order:
+          type: integer
+          minimum: 0
+      required:
+      - public_id
+      - sort_order
     Reservation:
       type: object
       properties:
@@ -3154,6 +5222,17 @@ components:
         table:
           type: string
           format: uuid
+        table_info:
+          allOf:
+          - $ref: '#/components/schemas/TableInfo'
+          readOnly: true
+        restaurant_info:
+          allOf:
+          - $ref: '#/components/schemas/RestaurantInfo'
+          readOnly: true
+        customer_name:
+          type: string
+          readOnly: true
         guest_count:
           type: integer
           maximum: 2147483647
@@ -3165,9 +5244,7 @@ components:
           type: string
           format: date-time
         status:
-          allOf:
-          - $ref: '#/components/schemas/ReservationStatus'
-          readOnly: true
+          $ref: '#/components/schemas/ReservationStatus'
         notes:
           type: string
           nullable: true
@@ -3182,26 +5259,28 @@ components:
       required:
       - created_at
       - customer
+      - customer_name
       - end_at
       - guest_count
       - public_id
       - restaurant
+      - restaurant_info
       - start_at
-      - status
       - table
+      - table_info
       - updated_at
     ReservationStatus:
       enum:
       - pending
-      - confirmed
-      - cancelled
+      - active
       - completed
+      - cancelled
       type: string
       description: |-
         * `pending` - Pending
-        * `confirmed` - Confirmed
-        * `cancelled` - Cancelled
+        * `active` - Active
         * `completed` - Completed
+        * `cancelled` - Cancelled
     Restaurant:
       type: object
       properties:
@@ -3214,6 +5293,26 @@ components:
           maxLength: 255
         address:
           type: string
+        phone:
+          type: string
+          maxLength: 32
+        telegram_url:
+          type: string
+          format: uri
+          maxLength: 255
+        facebook_url:
+          type: string
+          format: uri
+          maxLength: 255
+        working_hours:
+          allOf:
+          - $ref: '#/components/schemas/WorkingHours'
+          writeOnly: true
+        cover_image:
+          type: string
+          format: uri
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -3224,10 +5323,24 @@ components:
           readOnly: true
       required:
       - address
+      - cover_image
       - created_at
       - name
       - public_id
       - updated_at
+    RestaurantInfo:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - name
+      - public_id
     RestaurantSettings:
       type: object
       properties:
@@ -3256,11 +5369,13 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        working_hours: {}
+        working_hours:
+          $ref: '#/components/schemas/WorkingHours'
         rating:
           type: string
           format: decimal
           pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+          readOnly: true
           nullable: true
         eta_min_minutes:
           type: integer
@@ -3286,6 +5401,7 @@ components:
       - created_at
       - currency
       - public_id
+      - rating
       - restaurant
       - updated_at
     RoleEnum:
@@ -3314,11 +5430,10 @@ components:
         table:
           type: string
           format: uuid
-          readOnly: true
         reservation:
           type: string
           format: uuid
-          readOnly: true
+          nullable: true
         opened_by:
           type: string
           format: uuid
@@ -3361,7 +5476,6 @@ components:
       - guest_count
       - opened_by
       - public_id
-      - reservation
       - restaurant
       - started_at
       - table
@@ -3418,6 +5532,11 @@ components:
           maximum: 2147483647
           minimum: -2147483648
           nullable: true
+        zone:
+          allOf:
+          - $ref: '#/components/schemas/Zone'
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -3433,6 +5552,27 @@ components:
       - restaurant
       - table_number
       - updated_at
+      - zone
+    TableInfo:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        table_number:
+          type: string
+          maxLength: 64
+        capacity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        shape:
+          $ref: '#/components/schemas/TableShape'
+      required:
+      - capacity
+      - public_id
+      - table_number
     TableShape:
       enum:
       - rectangle
@@ -3448,10 +5588,12 @@ components:
     TableStatus:
       enum:
       - free
+      - reserved
       - occupied
       type: string
       description: |-
         * `free` - Free
+        * `reserved` - Reserved
         * `occupied` - Occupied
     Ticket:
       type: object
@@ -3467,11 +5609,9 @@ components:
         session:
           type: string
           format: uuid
-          readOnly: true
         order:
           type: string
           format: uuid
-          readOnly: true
         status:
           $ref: '#/components/schemas/TicketStatusEnum'
         injected_at:
@@ -3591,6 +5731,53 @@ components:
       - public_id
       - restaurant_public_id
       - updated_at
+    WorkingHours:
+      type: object
+      description: |-
+        Schema shape for the working_hours JSON: optional mon–sun, each open/close.
+        Used only to type the OpenAPI schema; validation stays in validate_working_hours.
+      properties:
+        mon:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        tue:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        wed:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        thu:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        fri:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        sat:
+          $ref: '#/components/schemas/WorkingHoursDay'
+        sun:
+          $ref: '#/components/schemas/WorkingHoursDay'
+    WorkingHoursDay:
+      type: object
+      properties:
+        open:
+          type: string
+        close:
+          type: string
+      required:
+      - close
+      - open
+    Zone:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        sort_order:
+          type: integer
+          readOnly: true
+      required:
+      - name
+      - public_id
+      - sort_order
   securitySchemes:
     jwtAuth:
       type: http

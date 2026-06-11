@@ -1,11 +1,6 @@
-__all__ = [
-    "get_cart_item",
-    "get_cart_session",
-    "get_menu_item",
-    "get_reservation",
-    "is_cart_participant",
-]
+from __future__ import annotations
 
+import uuid
 from collections.abc import MutableMapping
 from typing import cast
 
@@ -14,7 +9,22 @@ from apps.menu.models import MenuItem
 from apps.reservations.models import Reservation
 from apps.reservations.selectors import get_reservation_participant_ids
 
-from .models import CartItem, CartSession
+from .models import CartItem, CartSession, Session
+
+
+def get_session(session_id: uuid.UUID, restaurant_id: int) -> Session | None:
+    """Return the restaurant's session by public id, or None if it doesn't exist."""
+    return Session.objects.filter(public_id=session_id, restaurant_id=restaurant_id).first()
+
+
+__all__ = [
+    "get_cart_item",
+    "get_cart_session",
+    "get_menu_item",
+    "get_reservation",
+    "get_session",
+    "is_cart_participant",
+]
 
 
 def _resolve_allowed_reservation_participant_ids(reservation: Reservation) -> set[int]:

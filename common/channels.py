@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs
 
@@ -49,3 +50,7 @@ async def authenticate_websocket(scope: dict) -> tuple[User | None, int | None]:
 
 def hall_group_name(restaurant_id: int) -> str:
     return f"hall_{restaurant_id}"
+
+
+def cart_group_name(session_id: uuid.UUID) -> str:
+    return f"cart_{session_id}"

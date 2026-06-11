@@ -15,9 +15,9 @@ class TsTzRange(Func):
 
 class ReservationStatus(models.TextChoices):
     PENDING = "pending", "Pending"
-    CONFIRMED = "confirmed", "Confirmed"
-    CANCELLED = "cancelled", "Cancelled"
+    ACTIVE = "active", "Active"
     COMPLETED = "completed", "Completed"
+    CANCELLED = "cancelled", "Cancelled"
 
 
 class Reservation(RestaurantScopedModel):
@@ -76,7 +76,7 @@ class Reservation(RestaurantScopedModel):
                     ),
                     ("table", RangeOperators.EQUAL),
                 ],
-                condition=Q(status=ReservationStatus.CONFIRMED),
+                condition=Q(status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE]),
             ),
         ]
 

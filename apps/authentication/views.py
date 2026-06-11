@@ -13,6 +13,8 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from apps.restaurants.models import Restaurant
+
 from .models import RoleCode, User
 from .serializers import (
     CustomerContextSerializer,
@@ -111,13 +113,24 @@ class GoogleContextView(APIView):
         responses={
             200: GoogleContextResponseSerializer,
             400: OpenApiResponse(description="User is not a member of this restaurant."),
+            404: OpenApiResponse(description="Restaurant not found."),
         },
     )
     def post(self, request: Request) -> Response:
         serializer = GoogleContextSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        restaurant_id: int = serializer.validated_data["restaurant_id"]
+        public_id = serializer.validated_data.get("restaurant_public_id")
+        if public_id is not None:
+            resolved = Restaurant.objects.filter(public_id=public_id).values_list("id", flat=True).first()
+            if resolved is None:
+                return Response(
+                    {"detail": "Restaurant not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            restaurant_id: int = resolved
+        else:
+            restaurant_id = serializer.validated_data["restaurant_id"]
         user = cast(User, request.user)
 
         if user.role == RoleCode.CUSTOMER:

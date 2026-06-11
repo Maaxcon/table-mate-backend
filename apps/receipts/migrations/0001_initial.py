@@ -9,54 +9,75 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('restaurants', '0008_add_social_links_to_restaurant'),
+        ("restaurants", "0008_add_social_links_to_restaurant"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Receipt',
+            name="Receipt",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('public_id', models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('order_number', models.CharField(max_length=40)),
-                ('visited_at', models.DateTimeField()),
-                ('currency', models.CharField(default='USD', max_length=3)),
-                ('table_label', models.CharField(blank=True, default='', max_length=40)),
-                ('server_name', models.CharField(blank=True, default='', max_length=80)),
-                ('guests', models.PositiveIntegerField(default=1)),
-                ('tax', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=12)),
-                ('service_charge', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=12)),
-                ('tip', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=12)),
-                ('payment_method', models.CharField(choices=[('card', 'Card'), ('cash', 'Cash')], default='card', max_length=10)),
-                ('payment_status', models.CharField(default='Paid', max_length=20)),
-                ('customer', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='receipts', to=settings.AUTH_USER_MODEL)),
-                ('restaurant', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='receipts', to='restaurants.restaurant')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("public_id", models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("order_number", models.CharField(max_length=40)),
+                ("visited_at", models.DateTimeField()),
+                ("currency", models.CharField(default="USD", max_length=3)),
+                ("table_label", models.CharField(blank=True, default="", max_length=40)),
+                ("server_name", models.CharField(blank=True, default="", max_length=80)),
+                ("guests", models.PositiveIntegerField(default=1)),
+                ("tax", models.DecimalField(decimal_places=2, default=Decimal("0.00"), max_digits=12)),
+                ("service_charge", models.DecimalField(decimal_places=2, default=Decimal("0.00"), max_digits=12)),
+                ("tip", models.DecimalField(decimal_places=2, default=Decimal("0.00"), max_digits=12)),
+                (
+                    "payment_method",
+                    models.CharField(choices=[("card", "Card"), ("cash", "Cash")], default="card", max_length=10),
+                ),
+                ("payment_status", models.CharField(default="Paid", max_length=20)),
+                (
+                    "customer",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="receipts",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "restaurant",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="receipts",
+                        to="restaurants.restaurant",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-visited_at', '-id'],
+                "ordering": ["-visited_at", "-id"],
             },
         ),
         migrations.CreateModel(
-            name='ReceiptItem',
+            name="ReceiptItem",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('public_id', models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('name', models.CharField(max_length=120)),
-                ('quantity', models.PositiveIntegerField(default=1)),
-                ('unit_price', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=12)),
-                ('receipt', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='items', to='receipts.receipt')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("public_id", models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("name", models.CharField(max_length=120)),
+                ("quantity", models.PositiveIntegerField(default=1)),
+                ("unit_price", models.DecimalField(decimal_places=2, default=Decimal("0.00"), max_digits=12)),
+                (
+                    "receipt",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="items", to="receipts.receipt"
+                    ),
+                ),
             ],
             options={
-                'ordering': ['id'],
+                "ordering": ["id"],
             },
         ),
     ]

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('receipts', '0004_receipt_order_receipt_payment'),
+        ("receipts", "0004_receipt_order_receipt_payment"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='receiptitem',
-            name='unit_price',
+            model_name="receiptitem",
+            name="unit_price",
             field=models.DecimalField(blank=True, decimal_places=2, default=None, max_digits=12, null=True),
         ),
     ]

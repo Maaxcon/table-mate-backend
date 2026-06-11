@@ -6,6 +6,7 @@ from django.test import Client
 from django.urls import reverse
 from rest_framework import status
 
+from apps.authentication.models import RoleCode
 from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.restaurants.models import Restaurant
 
@@ -217,6 +218,42 @@ class TestPublicMenuMenus:
         assert "next" in data
         assert "previous" in data
         assert "results" in data
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestAdminMenuCategories:
+    def test_admin_list_with_menu_filter_returns_200(
+        self,
+        api: Any,
+        restaurant: Restaurant,
+        menu: Menu,
+        category: MenuCategory,
+    ) -> None:
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        url = reverse("admin-menu-category-list")
+        response: Any = auth.client.get(url, {"menu": str(menu.public_id), "ordering": "sort_order"})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["results"][0]["public_id"] == str(category.public_id)
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestAdminMenuItems:
+    def test_admin_list_with_menu_filter_returns_200(
+        self,
+        api: Any,
+        restaurant: Restaurant,
+        menu: Menu,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        url = reverse("admin-menu-item-list")
+        response: Any = auth.client.get(url, {"menu": str(menu.public_id), "ordering": "sort_order"})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["results"][0]["public_id"] == str(item.public_id)
 
 
 @pytest.mark.django_db(databases=["default"])

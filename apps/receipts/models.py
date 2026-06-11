@@ -89,9 +89,7 @@ class ReceiptItem(BaseModel):
     quantity = models.PositiveIntegerField(default=1)
     # Nullable so an unset price (None) can be auto-filled from the menu while a
     # deliberate 0.00 (a comped or genuinely free item) is preserved.
-    unit_price = models.DecimalField(
-        max_digits=12, decimal_places=2, null=True, blank=True, default=None
-    )
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=None)
 
     class Meta:
         ordering = ["id"]
