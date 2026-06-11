@@ -1,6 +1,5 @@
 from typing import Any, cast
 
-from django.contrib.auth.models import AnonymousUser
 from django.db.models import Q, QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -155,7 +154,7 @@ class CartSessionItemViewSet(
             raise CartSessionNotFoundError(f"Cart session {session_pk} not found.")
         return session
 
-    def _get_user_or_anon(self) -> User | AnonymousUser | None:
+    def _get_user_or_anon(self) -> User | None:
         user = self.request.user
         if user is None or user.is_anonymous:
             return None
