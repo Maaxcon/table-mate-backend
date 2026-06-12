@@ -6,17 +6,8 @@ from django.db import transaction
 from apps.authentication.models import RoleCode, User
 from apps.restaurants.models import Restaurant
 
-_OVERRIDE_EMAILS: dict[str, str] = {
-    "Table Mate": "gakhovalera2004@gmail.com",
-}
 
-
-def _resolve_waiter_email(restaurant_name: str, override: str | None) -> str:
-    if override:
-        return override
-    result = _OVERRIDE_EMAILS.get(restaurant_name)
-    if result is not None:
-        return result
+def _default_waiter_email(restaurant_name: str) -> str:
     name_slug = restaurant_name.lower().replace(" ", "")
     return f"waiter@{name_slug}.com"
 
@@ -48,7 +39,7 @@ class Command(BaseCommand):
             raise CommandError("No restaurants found. Run seed_restaurants first.")
 
         for restaurant in restaurants:
-            email = _resolve_waiter_email(restaurant.name, override_email)
+            email = override_email or _default_waiter_email(restaurant.name)
 
             password = "waiter123"  # nosec B105
 
