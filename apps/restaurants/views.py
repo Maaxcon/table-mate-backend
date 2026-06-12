@@ -84,6 +84,7 @@ class AdminOverviewView(APIView):
 @extend_schema(tags=["Restaurants"])
 class VerifyTableScanView(APIView):
     permission_classes = [AllowAny]
+    serializer_class = None
 
     @extend_schema(
         summary="Verify a table QR scan",
