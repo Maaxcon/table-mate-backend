@@ -6,15 +6,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('editor', '0002_alter_layout_public_id'),
+        ("editor", "0002_alter_layout_public_id"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='layout',
-            name='public_id',
+            model_name="layout",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
     ]

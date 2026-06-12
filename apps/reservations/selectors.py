@@ -4,7 +4,7 @@ from django.db.models import QuerySet
 
 from apps.restaurants.models import Table
 
-from .models import Reservation, ReservationStatus
+from .models import Reservation, ReservationParticipant, ReservationStatus
 
 
 def get_reservations_for_table(
@@ -37,3 +37,7 @@ def get_customer_global_reservations(customer_id: int) -> QuerySet[Reservation]:
 
 def get_reservation_by_id(reservation_id: str, restaurant_id: int) -> Reservation | None:
     return Reservation.objects.filter(public_id=reservation_id, restaurant_id=restaurant_id).first()
+
+
+def get_reservation_participant_ids(reservation: Reservation) -> list[int]:
+    return list(ReservationParticipant.objects.filter(reservation=reservation).values_list("user_id", flat=True))

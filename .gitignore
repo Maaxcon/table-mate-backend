@@ -13,3 +13,4 @@ docker-compose.override.yml
 .postgres_data/
 table_mate.egg-info/
 *.sqlite3
+dump.rdb

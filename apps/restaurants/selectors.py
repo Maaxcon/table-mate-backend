@@ -14,18 +14,12 @@ def get_restaurant_settings(restaurant_id: int) -> RestaurantSettings | None:
 
 
 def list_employees(restaurant_id: int) -> QuerySet[User]:
-    return (
-        User.objects.filter(restaurant_id=restaurant_id)
-        .exclude(role=RoleCode.CUSTOMER)
-        .order_by("role", "email")
-    )
+    return User.objects.filter(restaurant_id=restaurant_id).exclude(role=RoleCode.CUSTOMER).order_by("role", "email")
 
 
 def get_employee(employee_id: str, restaurant_id: int) -> User | None:
     return (
-        User.objects.filter(public_id=employee_id, restaurant_id=restaurant_id)
-        .exclude(role=RoleCode.CUSTOMER)
-        .first()
+        User.objects.filter(public_id=employee_id, restaurant_id=restaurant_id).exclude(role=RoleCode.CUSTOMER).first()
     )
 
 

@@ -30,9 +30,7 @@ class ReceiptItemInline(admin.TabularInline):  # type: ignore[type-arg]
         if db_field.name == "menu_item":
             restaurant_id = getattr(request, "_receipt_restaurant_id", None)
             qs = MenuItem.objects.all()
-            kwargs["queryset"] = (
-                qs.filter(restaurant_id=restaurant_id) if restaurant_id else qs.none()
-            )
+            kwargs["queryset"] = qs.filter(restaurant_id=restaurant_id) if restaurant_id else qs.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
@@ -83,12 +81,7 @@ class ReceiptAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     def get_queryset(self, request: HttpRequest) -> QuerySet[Receipt]:
         # Prefetch items (used by subtotal/total) and related FKs to avoid N+1
         # queries when rendering the list and computed columns.
-        return (
-            super()
-            .get_queryset(request)
-            .select_related("customer", "restaurant")
-            .prefetch_related("items")
-        )
+        return super().get_queryset(request).select_related("customer", "restaurant").prefetch_related("items")
 
     @admin.display(description="Subtotal")
     def subtotal_display(self, obj: Receipt) -> str:

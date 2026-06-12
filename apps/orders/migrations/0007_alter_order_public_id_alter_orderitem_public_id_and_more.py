@@ -6,30 +6,29 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('orders', '0006_merge_20260526_1321'),
+        ("orders", "0006_merge_20260526_1321"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='order',
-            name='public_id',
+            model_name="order",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
         migrations.AlterField(
-            model_name='orderitem',
-            name='public_id',
+            model_name="orderitem",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
         migrations.AlterField(
-            model_name='session',
-            name='public_id',
+            model_name="session",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
         migrations.AlterField(
-            model_name='ticket',
-            name='public_id',
+            model_name="ticket",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
     ]

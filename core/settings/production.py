@@ -12,5 +12,5 @@ if SECRET_KEY == LOCAL_DEV_SECRET_KEY:  # noqa: F405
 if len(SECRET_KEY.encode()) < 32:  # noqa: F405
     raise ImproperlyConfigured(
         "SECRET_KEY must be at least 32 bytes in production (HMAC-SHA256 signing key). "
-        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+        'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(48))"'
     )

@@ -114,6 +114,4 @@ class Command(BaseCommand):
             created += 1
             self.stdout.write(self.style.SUCCESS(f"created {data['order_number']}"))
 
-        self.stdout.write(
-            self.style.SUCCESS(f"Done. {created} receipt(s) created for {user.email}.")
-        )
+        self.stdout.write(self.style.SUCCESS(f"Done. {created} receipt(s) created for {user.email}."))

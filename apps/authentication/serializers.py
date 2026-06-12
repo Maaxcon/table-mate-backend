@@ -4,7 +4,15 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.reservations.models import Reservation
+from common.api import PublicIdRelatedField
+
 from .models import RoleCode, User
+
+
+class GuestInitSerializer(serializers.Serializer[None]):
+    device_id = serializers.CharField(max_length=255, required=True, allow_blank=False)
+    reservation_id = serializers.CharField(required=True)
 
 
 class GoogleAuthSerializer(serializers.Serializer[None]):
@@ -14,9 +22,31 @@ class GoogleAuthSerializer(serializers.Serializer[None]):
 
 class GoogleAuthResponseSerializer(serializers.Serializer[None]):
     access = serializers.CharField(read_only=True)
+    needs_restaurant_context = serializers.BooleanField(read_only=True, required=False)
+
+
+class GoogleContextSerializer(serializers.Serializer[None]):
+    restaurant_id = serializers.IntegerField(required=False)
+    restaurant_public_id = serializers.UUIDField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        if attrs.get("restaurant_id") is None and attrs.get("restaurant_public_id") is None:
+            raise serializers.ValidationError("Provide restaurant_id or restaurant_public_id.")
+        return attrs
+
+
+class GoogleContextResponseSerializer(serializers.Serializer[None]):
+    access = serializers.CharField(read_only=True)
 
 
 _STAFF_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
+
+
+class CustomerContextSerializer(serializers.Serializer[None]):
+    reservation = PublicIdRelatedField[Reservation](
+        queryset=Reservation.objects.select_related("restaurant").all(),
+        required=True,
+    )
 
 
 class UserSerializer(serializers.ModelSerializer[User]):

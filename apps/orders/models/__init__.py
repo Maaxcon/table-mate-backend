@@ -2,6 +2,10 @@ from django.db import models
 
 from common.models import RestaurantScopedModel
 
+from .cart_item import CartItem as CartItem
+from .cart_session import CartSession as CartSession
+from .cart_session import CartSessionStatus as CartSessionStatus
+
 
 class SessionStatus(models.TextChoices):
     OPEN = "open", "Open"

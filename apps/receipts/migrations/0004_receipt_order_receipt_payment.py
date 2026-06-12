@@ -5,22 +5,33 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('orders', '0007_alter_order_public_id_alter_orderitem_public_id_and_more'),
-        ('payments', '0004_alter_payment_public_id_alter_webhookevent_public_id'),
-        ('receipts', '0003_alter_receipt_currency'),
+        ("orders", "0007_alter_order_public_id_alter_orderitem_public_id_and_more"),
+        ("payments", "0004_alter_payment_public_id_alter_webhookevent_public_id"),
+        ("receipts", "0003_alter_receipt_currency"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='receipt',
-            name='order',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='receipt', to='orders.order'),
+            model_name="receipt",
+            name="order",
+            field=models.OneToOneField(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="receipt",
+                to="orders.order",
+            ),
         ),
         migrations.AddField(
-            model_name='receipt',
-            name='payment',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='receipts', to='payments.payment'),
+            model_name="receipt",
+            name="payment",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="receipts",
+                to="payments.payment",
+            ),
         ),
     ]

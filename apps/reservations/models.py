@@ -5,7 +5,7 @@ from django.db import models
 from django.db.models import F, Func, Q
 
 from apps.authentication.models import RoleCode
-from common.models import RestaurantScopedModel
+from common.models import BaseModel, RestaurantScopedModel
 
 
 class TsTzRange(Func):
@@ -56,6 +56,12 @@ class Reservation(RestaurantScopedModel):
     )
     created_by_staff = models.BooleanField(default=False)
     notes = models.TextField(null=True, blank=True)
+    participants = models.ManyToManyField(
+        "authentication.User",
+        through="reservations.ReservationParticipant",
+        related_name="participating_reservations",
+        blank=True,
+    )
 
     class Meta:
         ordering = ["start_at", "id"]
@@ -91,3 +97,28 @@ class Reservation(RestaurantScopedModel):
 
     def __str__(self) -> str:
         return f"Reservation {self.public_id}"
+
+
+class ReservationParticipant(BaseModel):
+    reservation = models.ForeignKey(
+        "reservations.Reservation",
+        on_delete=models.CASCADE,
+        related_name="reservation_participants",
+    )
+    user = models.ForeignKey(
+        "authentication.User",
+        on_delete=models.CASCADE,
+        related_name="reservation_participations",
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["reservation", "user"],
+                name="reservations_participant_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ReservationParticipant {self.public_id}"

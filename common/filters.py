@@ -4,7 +4,6 @@ from rest_framework.filters import OrderingFilter
 
 
 class StableOrderingFilter(OrderingFilter):
-
     def filter_queryset(self, request: Any, queryset: Any, view: Any) -> Any:
         ordering = self.get_ordering(request, queryset, view)
         if ordering:
