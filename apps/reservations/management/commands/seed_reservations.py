@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode, User
-from apps.reservations.models import Reservation, ReservationStatus
+from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
 
 
@@ -46,6 +46,8 @@ class Command(BaseCommand):
 
             now = timezone.now()
 
+            Reservation.objects.filter(restaurant=restaurant).delete()
+
             reservations_config: list[dict[str, Any]] = [
                 # ── Active reservations (ongoing now → sessions created → OCCUPIED) ──
                 # Tables 1, 2, 3, 5
@@ -55,6 +57,7 @@ class Command(BaseCommand):
                     "guest_count": 2,
                     "start_at": now - timedelta(hours=1),
                     "end_at": now + timedelta(hours=2),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": "Алергія на горіхи",
                 },
@@ -64,6 +67,7 @@ class Command(BaseCommand):
                     "guest_count": 4,
                     "start_at": now - timedelta(minutes=45),
                     "end_at": now + timedelta(hours=1, minutes=30),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
@@ -73,6 +77,7 @@ class Command(BaseCommand):
                     "guest_count": 3,
                     "start_at": now - timedelta(minutes=90),
                     "end_at": now + timedelta(minutes=90),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": "Дитячий стільчик",
                 },
@@ -82,6 +87,7 @@ class Command(BaseCommand):
                     "guest_count": 5,
                     "start_at": now - timedelta(minutes=30),
                     "end_at": now + timedelta(hours=3),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
@@ -93,6 +99,7 @@ class Command(BaseCommand):
                     "guest_count": 4,
                     "start_at": now + timedelta(minutes=8),
                     "end_at": now + timedelta(hours=2, minutes=30),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.PENDING,
                     "notes": "Потрібен високий стільчик",
                 },
@@ -102,6 +109,7 @@ class Command(BaseCommand):
                     "guest_count": 3,
                     "start_at": now + timedelta(minutes=12),
                     "end_at": now + timedelta(hours=2),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.PENDING,
                     "notes": None,
                 },
@@ -112,6 +120,7 @@ class Command(BaseCommand):
                     "guest_count": 4,
                     "start_at": now + timedelta(days=2, hours=1),
                     "end_at": now + timedelta(days=2, hours=3),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.PENDING,
                     "notes": None,
                 },
@@ -122,6 +131,7 @@ class Command(BaseCommand):
                     "guest_count": 6,
                     "start_at": now - timedelta(days=2),
                     "end_at": now - timedelta(days=2) + timedelta(hours=2),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": "День народження",
                 },
@@ -131,6 +141,7 @@ class Command(BaseCommand):
                     "guest_count": 8,
                     "start_at": now - timedelta(days=1),
                     "end_at": now - timedelta(days=1) + timedelta(hours=2),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
@@ -141,6 +152,7 @@ class Command(BaseCommand):
                     "guest_count": 4,
                     "start_at": now + timedelta(days=3),
                     "end_at": now + timedelta(days=3, hours=2),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.CANCELLED,
                     "notes": "Захворіли",
                 },
@@ -151,6 +163,7 @@ class Command(BaseCommand):
                     "guest_count": 3,
                     "start_at": now + timedelta(days=1, hours=3),
                     "end_at": now + timedelta(days=1, hours=5),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
