@@ -5,7 +5,7 @@ import urllib.request
 from typing import Any, cast
 
 from django.conf import settings
-from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import RoleCode, User
 from .selectors import get_user_by_email
@@ -79,15 +79,6 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
     return user
 
 
-def issue_access_token(user: User) -> str:
-    token = AccessToken.for_user(user)
-    token["role"] = user.role
-    token["token_version"] = user.token_version
-    if user.restaurant_id is not None:
-        token["restaurant_id"] = user.restaurant_id
-    return str(token)
-
-
 def issue_tokens(user: User) -> tuple[str, str]:
     refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role
@@ -109,7 +100,6 @@ __all__ = [
     "exchange_google_code",
     "fetch_google_userinfo",
     "google_authenticate",
-    "issue_access_token",
     "issue_tokens",
     "issue_tokens_with_restaurant",
 ]
