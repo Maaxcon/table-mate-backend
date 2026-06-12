@@ -18,7 +18,7 @@ from rest_framework.test import APIClient
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
 from apps.menu.models import Menu, MenuCategory, MenuItem
-from apps.restaurants.models import Restaurant, RestaurantSettings, Table, TableStatus
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 
 if TYPE_CHECKING:
     from apps.authentication.models import User as _User
@@ -181,7 +181,6 @@ def table(restaurant: Restaurant) -> Table:
         table_number="T1",
         capacity=4,
         active=True,
-        status=TableStatus.FREE,
     )
 
 
