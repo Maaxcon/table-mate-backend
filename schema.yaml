@@ -252,10 +252,8 @@ paths:
           enum:
           - free
           - occupied
-          - reserved
         description: |-
           * `free` - Free
-          * `reserved` - Reserved
           * `occupied` - Occupied
       tags:
       - Editor
@@ -2532,10 +2530,8 @@ paths:
           enum:
           - free
           - occupied
-          - reserved
         description: |-
           * `free` - Free
-          * `reserved` - Reserved
           * `occupied` - Occupied
       - in: query
         name: zone__public_id
@@ -2578,6 +2574,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/Table'
           description: ''
+  /api/restaurants/tables/layout/:
+    get:
+      operationId: restaurants_tables_layout_retrieve
+      description: Returns all active tables and today's PENDING reservations for
+        the floor plan.
+      summary: Tables layout with upcoming reservations
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Table'
+          description: ''
+  /api/restaurants/tables/verify-scan/:
+    post:
+      operationId: restaurants_tables_verify_scan_create
+      description: Checks for an imminent PENDING reservation for the scanned table.
+        If found and owned by the user, flips the table to OCCUPIED and the reservation
+        to ACTIVE.
+      summary: Verify a table QR scan
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                table_id:
+                  type: string
+                  format: uuid
+                  description: Table public ID
+              required:
+              - table_id
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/restaurants/zones/:
     get:
       operationId: restaurants_zones_list
@@ -5067,12 +5110,10 @@ components:
     TableStatus:
       enum:
       - free
-      - reserved
       - occupied
       type: string
       description: |-
         * `free` - Free
-        * `reserved` - Reserved
         * `occupied` - Occupied
     Ticket:
       type: object
