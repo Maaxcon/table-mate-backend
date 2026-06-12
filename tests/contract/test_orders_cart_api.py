@@ -682,6 +682,28 @@ class TestGuestInit:
         assert "access" in data
         assert len(data["access"]) > 0
 
+    def test_guest_init_with_table_id(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        from apps.orders.models import CartSession
+
+        CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+
+        table = reservation.table
+        assert table is not None
+
+        response = api_client.post(
+            self.url,
+            {"device_id": "device-table", "table_id": str(table.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "access" in data
+
     def test_guest_init_no_active_session_returns_404(
         self,
         api_client: Client,
@@ -702,6 +724,14 @@ class TestGuestInit:
         response = api_client.post(
             self.url,
             {"reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_guest_init_missing_target_returns_400(self, api_client: Client) -> None:
+        response = api_client.post(
+            self.url,
+            {"device_id": "no-target"},
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST

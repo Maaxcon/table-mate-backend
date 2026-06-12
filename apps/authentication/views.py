@@ -239,22 +239,25 @@ class GuestInitView(APIView):
         serializer.is_valid(raise_exception=True)
 
         reservation_id = serializer.validated_data.get("reservation_id")
+        table_id = serializer.validated_data.get("table_id")
 
+        from apps.orders.models import CartSession, CartSessionStatus
+
+        filters: dict[str, Any] = {"status": CartSessionStatus.ACTIVE}
+        error_detail = "No active cart session found for this reservation."
         if reservation_id:
-            from apps.orders.models import CartSession, CartSessionStatus
-
-            session = CartSession.objects.filter(
-                reservation__public_id=reservation_id,
-                status=CartSessionStatus.ACTIVE,
-            ).first()
-            if session is None:
-                return Response(
-                    {"detail": "No active cart session found for this reservation."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            cart_session_id = str(session.public_id)
+            filters["reservation__public_id"] = reservation_id
         else:
-            cart_session_id = None
+            filters["reservation__table__public_id"] = table_id
+            error_detail = "No active cart session found for this table."
+
+        session = CartSession.objects.filter(**filters).first()
+        if session is None:
+            return Response(
+                {"detail": error_detail},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        cart_session_id = str(session.public_id)
 
         token = _issue_guest_token(
             device_id=serializer.validated_data["device_id"],

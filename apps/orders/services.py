@@ -98,7 +98,7 @@ def add_item_to_cart(
                 raise PermissionDenied("Only cart participants may add items.")
             session.participants.add(user)
 
-        menu_item = get_menu_item(session.restaurant_id, menu_item_id)
+        menu_item = get_menu_item(session.restaurant_id, menu_item_id, for_update=True)
         if menu_item is None:
             raise MenuItemNotFoundError(f"Menu item {menu_item_id} not found.")
 
@@ -214,6 +214,11 @@ def update_cart_item_quantity(
         item = get_cart_item(session.restaurant_id, item_id, session)
         if item is None:
             raise CartItemNotFoundError(f"Cart item {item_id} not found.")
+
+        locked_menu_item = get_menu_item(session.restaurant_id, str(item.menu_item.public_id), for_update=True)
+        if locked_menu_item is None:
+            raise MenuItemNotFoundError(f"Menu item {item.menu_item.public_id} not found.")
+        item.menu_item = locked_menu_item
 
         if not item.menu_item.is_available:
             raise MenuItemUnavailableError(f"Menu item '{item.menu_item.name}' is not available.")
