@@ -16,4 +16,4 @@ class RestaurantSettingsAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
 @admin.register(Table)
 class TableAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
-    list_display = ["restaurant", "table_number", "capacity", "status"]
+    list_display = ["restaurant", "table_number", "capacity"]

@@ -1,7 +1,5 @@
 from django.db import migrations, models
 
-import apps.restaurants.models
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -16,7 +14,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="table",
             constraint=models.CheckConstraint(
-                condition=models.Q(status__in=apps.restaurants.models.TableStatus.values),
+                condition=models.Q(status__in=["free", "occupied", "reserved"]),
                 name="restaurants_table_status_valid",
             ),
         ),

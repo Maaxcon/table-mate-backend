@@ -1,7 +1,9 @@
+from datetime import timedelta
 from typing import Any, cast
 
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, QuerySet
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
@@ -16,6 +18,8 @@ from rest_framework.views import APIView
 from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsAdmin, IsStaff
 from apps.menu.models import Menu, MenuCategory, MenuItem
+from apps.orders.models import Session, SessionStatus
+from apps.reservations.models import Reservation, ReservationStatus
 from common.api import (
     PublicLookupMixin,
     PublicRestaurantQueryMixin,
@@ -75,6 +79,61 @@ class AdminOverviewView(APIView):
             "staff_active": staff.filter(is_active=True).count(),
         }
         return Response(AdminOverviewSerializer(data).data)
+
+
+@extend_schema(tags=["Restaurants"])
+class VerifyTableScanView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary="Verify a table QR scan",
+        description="Checks for an imminent PENDING reservation for the scanned table. "
+        "If found and owned by the user, flips the reservation to ACTIVE.",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "table_id": {"type": "string", "format": "uuid", "description": "Table public ID"},
+                },
+                "required": ["table_id"],
+            }
+        },
+    )
+    def post(self, request: Request) -> Response:
+        table_id = request.data.get("table_id")
+        if not table_id:
+            raise ValidationError("table_id is required.")
+
+        try:
+            table = Table.objects.get(public_id=table_id, active=True)
+        except Table.DoesNotExist:
+            raise ValidationError("Table not found.") from None
+
+        now = timezone.now()
+        deadline = now + timedelta(minutes=15)
+
+        reservation = Reservation.objects.filter(
+            table=table,
+            status=ReservationStatus.PENDING,
+            start_at__gte=now,
+            start_at__lte=deadline,
+        ).first()
+
+        if not reservation:
+            return Response(
+                {"valid": False, "detail": "No imminent reservation found for this table."},
+            )
+
+        user = request.user
+        if user.is_authenticated and reservation.customer_id != user.pk:
+            return Response(
+                {"valid": False, "detail": "This reservation belongs to another guest."},
+            )
+
+        reservation.status = ReservationStatus.ACTIVE
+        reservation.save(update_fields=["status"])
+
+        return Response({"valid": True, "detail": "Table verified and activated."})
 
 
 @extend_schema(tags=["Restaurants"])
@@ -272,11 +331,58 @@ class TableViewSet(
     permission_classes = [AllowAny]
     queryset = Table.objects.select_related("zone").all()
     serializer_class = TableSerializer
-    filterset_fields = ["status", "capacity", "zone__public_id"]
+    filterset_fields = ["capacity", "zone__public_id"]
 
     def get_queryset(self) -> QuerySet[Table]:
         qs = super().get_queryset()
         restaurant_id = self.get_restaurant_id()
         if restaurant_id is not None:
-            return qs.filter(restaurant_id=restaurant_id)
-        return qs.none()
+            qs = qs.filter(restaurant_id=restaurant_id)
+        else:
+            return qs.none()
+
+        occupied_subquery = Session.objects.filter(
+            table=OuterRef("pk"),
+            status=SessionStatus.OPEN,
+            reservation__status="active",
+        )
+        return qs.annotate(is_occupied=Exists(occupied_subquery))
+
+    @extend_schema(
+        summary="Tables layout with upcoming reservations",
+        description="Returns all active tables and today's PENDING reservations for the floor plan.",
+    )
+    @action(detail=False, methods=["get"])
+    def layout(self, request: Request) -> Response:
+        restaurant_id = self.get_restaurant_id()
+        if restaurant_id is None:
+            return Response({"tables": [], "upcoming_reservations": []})
+
+        tables_qs = self.get_queryset().filter(active=True)
+        tables_serializer = self.get_serializer(tables_qs, many=True)
+
+        now = timezone.now()
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        reservations = Reservation.objects.filter(
+            restaurant_id=restaurant_id,
+            status=ReservationStatus.PENDING,
+            start_at__gte=now,
+            start_at__lte=today_end,
+        ).select_related("table")
+
+        upcoming_reservations = [
+            {
+                "public_id": r.public_id,
+                "table_id": r.table.public_id,
+                "start_at": r.start_at,
+            }
+            for r in reservations
+            if r.table is not None
+        ]
+
+        return Response(
+            {
+                "tables": tables_serializer.data,
+                "upcoming_reservations": upcoming_reservations,
+            }
+        )

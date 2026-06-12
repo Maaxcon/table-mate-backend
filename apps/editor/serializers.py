@@ -36,7 +36,6 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
             "restaurant",
             "table_number",
             "capacity",
-            "status",
             "shape",
             "active",
             "position_x",

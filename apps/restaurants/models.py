@@ -30,12 +30,6 @@ def validate_working_hours(value: object) -> None:
             raise ValidationError(f"'{day}.open' and '{day}.close' cannot be equal.")
 
 
-class TableStatus(models.TextChoices):
-    FREE = "free", "Free"
-    RESERVED = "reserved", "Reserved"
-    OCCUPIED = "occupied", "Occupied"
-
-
 class Restaurant(BaseModel):
     name = models.CharField(max_length=255)
     address = models.TextField()
@@ -123,11 +117,6 @@ class Zone(BaseModel):
 class Table(RestaurantScopedModel):
     table_number = models.CharField(max_length=64)
     capacity = models.PositiveIntegerField()
-    status = models.CharField(
-        max_length=20,
-        choices=TableStatus.choices,
-        default=TableStatus.FREE,
-    )
     shape = models.CharField(
         max_length=20,
         choices=TableShape.choices,
@@ -150,10 +139,6 @@ class Table(RestaurantScopedModel):
             models.UniqueConstraint(
                 fields=["restaurant", "table_number"],
                 name="restaurants_table_restaurant_number_unique",
-            ),
-            models.CheckConstraint(
-                condition=models.Q(status__in=TableStatus.values),
-                name="restaurants_table_status_valid",
             ),
         ]
 
