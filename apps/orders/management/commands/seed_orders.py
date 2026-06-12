@@ -20,7 +20,9 @@ from apps.orders.models import (
     TicketStatus,
 )
 from apps.reservations.models import Reservation, ReservationStatus
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, Table, TableStatus
+
+WALKIN_SESSION_COUNT = 3
 
 
 class Command(BaseCommand):
@@ -69,6 +71,7 @@ class Command(BaseCommand):
                 ).select_related("table")
             )
 
+            sessions_from_res = 0
             for res in active_reservations:
                 if not res.table:
                     continue
@@ -89,6 +92,13 @@ class Command(BaseCommand):
                 )
                 if not created:
                     continue
+
+                sessions_from_res += 1
+
+                # Mark the table as occupied on the floor plan
+                if res.table.status != TableStatus.OCCUPIED:
+                    res.table.status = TableStatus.OCCUPIED
+                    res.table.save(update_fields=["status"])
 
                 items_data = (
                     [
@@ -155,19 +165,21 @@ class Command(BaseCommand):
                 )
                 session.save(update_fields=["running_total"])
 
-            sessions_from_res = len(active_reservations)
             self.stdout.write(f"  Created {sessions_from_res} session(s) from active reservations.")
 
-            # Optionally create a walk-in session on a free table
-            free_table = (
+            # Create walk-in sessions on free tables
+            free_tables = list(
                 Table.objects.filter(restaurant=restaurant, active=True)
                 .exclude(
                     id__in=Session.objects.filter(restaurant=restaurant, status=SessionStatus.OPEN).values("table_id")
                 )
                 .exclude(id__in=[r.table_id for r in active_reservations if r.table_id])
-                .first()
-            )
-            if free_table and menu_items:
+            )[:WALKIN_SESSION_COUNT]
+
+            for free_table in free_tables:
+                if not menu_items:
+                    continue
+
                 session, created = Session.objects.get_or_create(
                     restaurant=restaurant,
                     table=free_table,
@@ -181,7 +193,15 @@ class Command(BaseCommand):
                         "started_at": now - timedelta(minutes=45),
                     },
                 )
-                if created and menu_items:
+                if not created:
+                    continue
+
+                # Mark the table as occupied on the floor plan
+                if free_table.status != TableStatus.OCCUPIED:
+                    free_table.status = TableStatus.OCCUPIED
+                    free_table.save(update_fields=["status"])
+
+                if menu_items:
                     mi = menu_items[0]
                     order, _ = Order.objects.get_or_create(
                         restaurant=restaurant,
