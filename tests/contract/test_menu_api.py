@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from django.test import Client
@@ -10,7 +11,13 @@ from apps.authentication.models import RoleCode
 from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.restaurants.models import Restaurant
 
-from ..conftest import MenuCategoryFactory, MenuFactory, MenuItemFactory
+from ..conftest import MenuCategoryFactory as _MenuCategoryFactory
+from ..conftest import MenuFactory as _MenuFactory
+from ..conftest import MenuItemFactory as _MenuItemFactory
+
+MenuFactory = cast(Callable[..., Menu], _MenuFactory)
+MenuCategoryFactory = cast(Callable[..., MenuCategory], _MenuCategoryFactory)
+MenuItemFactory = cast(Callable[..., MenuItem], _MenuItemFactory)
 
 
 @pytest.mark.django_db(databases=["default"])

@@ -17,6 +17,7 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
+from apps.orders.broadcast import cart_group_send
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Table
 from common.exceptions import (
@@ -40,6 +41,15 @@ from .selectors import (
 
 def _is_authenticated_user(user: User | AnonymousUser | None) -> bool:
     return user is not None and user.is_authenticated
+
+
+def _broadcast_cart_updated(session: CartSession) -> None:
+    session_id = session.public_id
+
+    def _emit() -> None:
+        cart_group_send(session_id)
+
+    transaction.on_commit(_emit)
 
 
 def create_cart_session(
@@ -140,6 +150,7 @@ def add_item_to_cart(
         if _is_authenticated_user(user):
             user = cast(User, user)
             item.added_by = user
+        _broadcast_cart_updated(session)
     return item
 
 
@@ -166,6 +177,7 @@ def remove_item_from_cart(
             raise CartItemNotFoundError(f"Cart item {item_id} not found.")
 
         item.delete()
+        _broadcast_cart_updated(session)
 
 
 class _UnsetType:
@@ -216,6 +228,7 @@ def update_cart_item_quantity(
             update_fields["guest_slot"] = guest_slot
         CartItem.objects.filter(pk=item.pk).update(**update_fields)
         item.refresh_from_db()
+        _broadcast_cart_updated(session)
         return item
 
 
