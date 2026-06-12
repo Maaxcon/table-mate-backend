@@ -139,6 +139,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         queryset=MenuItem.objects.all(),
     )
     voided_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
+    menu_item_name = serializers.CharField(source="menu_item.name", read_only=True)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -154,6 +155,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "order",
             "ticket",
             "menu_item",
+            "menu_item_name",
             "guest_slot",
             "quantity",
             "comment",
