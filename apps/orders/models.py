@@ -6,7 +6,7 @@ from common.models import RestaurantScopedModel
 class SessionStatus(models.TextChoices):
     OPEN = "open", "Open"
     CLOSED = "closed", "Closed"
-    CANCELLED = "cancelled", "Cancelled"
+    VOIDED = "voided", "Voided"
 
 
 class OrderSource(models.TextChoices):
@@ -68,12 +68,10 @@ class Session(RestaurantScopedModel):
         on_delete=models.PROTECT,
         related_name="sessions",
     )
-    reservation = models.ForeignKey(
+    reservation = models.OneToOneField(
         "reservations.Reservation",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="sessions",
+        on_delete=models.CASCADE,
+        related_name="session",
     )
     opened_by = models.ForeignKey(
         "authentication.User",
@@ -85,13 +83,13 @@ class Session(RestaurantScopedModel):
     guest_count = models.PositiveIntegerField()
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.OPEN)
     currency = models.CharField(max_length=3)
-    running_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
-    final_total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
-    started_at = models.DateTimeField()
-    closed_at = models.DateTimeField(null=True, blank=True)
+    subtotal = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    tax = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    opened_at = models.DateTimeField()
 
     class Meta:
-        ordering = ["-started_at", "-id"]
+        ordering = ["-opened_at", "-id"]
         indexes = [
             models.Index(
                 fields=["restaurant", "table"],

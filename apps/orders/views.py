@@ -22,8 +22,8 @@ class SessionViewSet(
     queryset = Session.objects.all()
     serializer_class = SessionSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
-    filterset_fields = ["table", "reservation", "opened_by", "status", "currency"]
-    ordering_fields = ["created_at", "updated_at", "started_at", "closed_at"]
+    filterset_fields = ["table", "table__public_id", "reservation", "opened_by", "status", "currency"]
+    ordering_fields = ["created_at", "updated_at", "opened_at"]
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(
@@ -43,6 +43,7 @@ class OrderViewSet(
     http_method_names = ["get", "post", "patch", "head", "options"]
     filterset_fields = [
         "session",
+        "session__public_id",
         "created_by",
         "created_by_source",
         "source",
@@ -92,6 +93,7 @@ class OrderItemViewSet(
     http_method_names = ["get", "post", "patch", "head", "options"]
     filterset_fields = [
         "order",
+        "order__public_id",
         "ticket",
         "menu_item",
         "status",
