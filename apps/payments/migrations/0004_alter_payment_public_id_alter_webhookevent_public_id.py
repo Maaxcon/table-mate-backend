@@ -6,20 +6,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('payments', '0003_alter_payment_public_id_alter_webhookevent_public_id'),
+        ("payments", "0003_alter_payment_public_id_alter_webhookevent_public_id"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='payment',
-            name='public_id',
+            model_name="payment",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
         migrations.AlterField(
-            model_name='webhookevent',
-            name='public_id',
+            model_name="webhookevent",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
     ]

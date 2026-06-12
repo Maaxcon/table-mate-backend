@@ -6,9 +6,7 @@ from apps.authentication.models import User
 
 from .models import Restaurant, RestaurantSettings
 
-RESTAURANT_UPDATABLE = frozenset(
-    {"name", "address", "phone", "telegram_url", "facebook_url"}
-)
+RESTAURANT_UPDATABLE = frozenset({"name", "address", "phone", "telegram_url", "facebook_url"})
 SETTINGS_UPDATABLE = frozenset(
     {
         "timezone",

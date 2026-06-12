@@ -97,9 +97,7 @@ class MenuItem(RestaurantScopedModel):
     def clean(self) -> None:
         super().clean()
         if self.category is not None and self.menu_id and self.category.menu_id != self.menu_id:
-            raise ValidationError(
-                {"category": "Category must belong to the same menu as this item."}
-            )
+            raise ValidationError({"category": "Category must belong to the same menu as this item."})
 
     def __str__(self) -> str:
         return self.name

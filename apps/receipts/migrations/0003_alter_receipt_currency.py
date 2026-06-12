@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('receipts', '0002_receiptitem_menu_item_alter_receiptitem_name'),
+        ("receipts", "0002_receiptitem_menu_item_alter_receiptitem_name"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='receipt',
-            name='currency',
-            field=models.CharField(default='UAH', max_length=3),
+            model_name="receipt",
+            name="currency",
+            field=models.CharField(default="UAH", max_length=3),
         ),
     ]

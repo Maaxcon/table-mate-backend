@@ -4,6 +4,35 @@ info:
   version: 1.0.0
   description: Real-time multi-tenant restaurant operational ecosystem backend.
 paths:
+  /api/auth/customer/context/:
+    post:
+      operationId: auth_customer_context_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerContext'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomerContext'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomerContext'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleContextResponse'
+          description: ''
+        '403':
+          description: User is not a participant in this reservation.
   /api/auth/google/:
     post:
       operationId: auth_google_create
@@ -64,6 +93,32 @@ paths:
           description: User is not a member of this restaurant.
         '404':
           description: Restaurant not found.
+  /api/auth/guest-init/:
+    post:
+      operationId: auth_guest_init_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestInit'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GuestInit'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GuestInit'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          description: Guest JWT issued.
+        '400':
+          description: Invalid request.
   /api/auth/logout/:
     post:
       operationId: auth_logout_create
@@ -1259,6 +1314,211 @@ paths:
               schema:
                 $ref: '#/components/schemas/Menu'
           description: ''
+  /api/orders/cart/sessions/:
+    get:
+      operationId: orders_cart_sessions_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCartSessionList'
+          description: ''
+    post:
+      operationId: orders_cart_sessions_create
+      tags:
+      - Cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartSession'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CartSession'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CartSession'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartSession'
+          description: ''
+  /api/orders/cart/sessions/{id}/:
+    get:
+      operationId: orders_cart_sessions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartSession'
+          description: ''
+  /api/orders/cart/sessions/{session_pk}/items/:
+    get:
+      operationId: orders_cart_sessions_items_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCartItemList'
+          description: ''
+    post:
+      operationId: orders_cart_sessions_items_create
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCartItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AddCartItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AddCartItem'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+          description: ''
+  /api/orders/cart/sessions/{session_pk}/items/{id}/:
+    patch:
+      operationId: orders_cart_sessions_items_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdateCartItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdateCartItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdateCartItem'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+          description: ''
+    delete:
+      operationId: orders_cart_sessions_items_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/orders/order-items/:
     get:
       operationId: orders_order_items_list
@@ -2672,6 +2932,25 @@ components:
         * `set_available` - set_available
         * `set_category` - set_category
         * `delete` - delete
+    AddCartItem:
+      type: object
+      properties:
+        menu_item:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        comment:
+          type: string
+          nullable: true
+        guest_slot:
+          type: integer
+          minimum: 1
+          nullable: true
+      required:
+      - menu_item
+      - quantity
     AdminMenu:
       type: object
       description: Writable menu serializer for the admin panel.
@@ -2867,6 +3146,120 @@ components:
       required:
       - action
       - ids
+    CartItem:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        menu_item:
+          type: string
+          format: uuid
+          readOnly: true
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        comment:
+          type: string
+          nullable: true
+        added_by:
+          type: string
+          format: uuid
+          readOnly: true
+        guest_slot:
+          type: integer
+          readOnly: true
+          nullable: true
+        device_id:
+          type: string
+          readOnly: true
+          nullable: true
+        is_paid:
+          type: boolean
+          readOnly: true
+        cart_session:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - added_by
+      - cart_session
+      - created_at
+      - device_id
+      - guest_slot
+      - is_paid
+      - menu_item
+      - public_id
+      - quantity
+      - restaurant
+      - updated_at
+    CartSession:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        reservation:
+          type: string
+          format: uuid
+        status:
+          allOf:
+          - $ref: '#/components/schemas/CartSessionStatusEnum'
+          readOnly: true
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+        participants:
+          type: array
+          items:
+            type: string
+            format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - created_by
+      - participants
+      - public_id
+      - reservation
+      - restaurant
+      - status
+      - updated_at
+    CartSessionStatusEnum:
+      enum:
+      - active
+      - closed
+      type: string
+      description: |-
+        * `active` - Active
+        * `closed` - Closed
     CreatedBySourceEnum:
       enum:
       - staff
@@ -2900,6 +3293,14 @@ components:
       - email
       - password
       - refresh
+    CustomerContext:
+      type: object
+      properties:
+        reservation:
+          type: string
+          format: uuid
+      required:
+      - reservation
     EditorTable:
       type: object
       properties:
@@ -3044,6 +3445,17 @@ components:
           readOnly: true
       required:
       - access
+    GuestInit:
+      type: object
+      properties:
+        device_id:
+          type: string
+          maxLength: 255
+        reservation_id:
+          type: string
+      required:
+      - device_id
+      - reservation_id
     Layout:
       type: object
       properties:
@@ -3531,6 +3943,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BookingSettings'
+    PaginatedCartItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+    PaginatedCartSessionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartSession'
     PaginatedEditorTableList:
       type: object
       required:
@@ -4468,6 +4926,19 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PatchedUpdateCartItem:
+      type: object
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+        comment:
+          type: string
+          nullable: true
+        guest_slot:
+          type: integer
+          minimum: 1
+          nullable: true
     Payment:
       type: object
       properties:

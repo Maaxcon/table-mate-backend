@@ -6,15 +6,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('authentication', '0003_merge_20260526_1321'),
+        ("authentication", "0003_merge_20260526_1321"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='user',
-            name='public_id',
+            model_name="user",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
     ]

@@ -196,9 +196,7 @@ class RestaurantSettingsViewSet(
         return qs.none()
 
     def perform_update(self, serializer: BaseSerializer[RestaurantSettings]) -> None:
-        services.update_restaurant_settings(
-            cast(RestaurantSettings, serializer.instance), **serializer.validated_data
-        )
+        services.update_restaurant_settings(cast(RestaurantSettings, serializer.instance), **serializer.validated_data)
 
 
 @extend_schema(tags=["Restaurants"])

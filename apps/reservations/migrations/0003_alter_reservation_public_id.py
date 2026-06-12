@@ -6,15 +6,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('reservations', '0002_remove_reservation_reservations_no_overlap_per_table_and_more'),
+        ("reservations", "0002_remove_reservation_reservations_no_overlap_per_table_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='reservation',
-            name='public_id',
+            model_name="reservation",
+            name="public_id",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
     ]

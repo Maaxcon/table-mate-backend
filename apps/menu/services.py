@@ -16,10 +16,7 @@ def reorder(queryset: QuerySet[Any], entries: list[dict[str, Any]]) -> None:
     """Apply a list of {public_id, sort_order} to a (restaurant-scoped) queryset
     in one atomic bulk update. Unknown/foreign ids are ignored. Works for both
     categories and items."""
-    objs_by_id = {
-        obj.public_id: obj
-        for obj in queryset.filter(public_id__in=[e["public_id"] for e in entries])
-    }
+    objs_by_id = {obj.public_id: obj for obj in queryset.filter(public_id__in=[e["public_id"] for e in entries])}
     # bulk_update bypasses save(), so refresh updated_at by hand.
     now = timezone.now()
     to_update: list[Any] = []
@@ -48,16 +45,12 @@ def bulk_update_items(*, restaurant_id: int, data: dict[str, Any]) -> dict[str, 
 
     # update() bypasses save(), so set updated_at explicitly to keep it fresh.
     if data["action"] == "set_available":
-        return {
-            "updated": items.update(is_available=data["is_available"], updated_at=timezone.now())
-        }
+        return {"updated": items.update(is_available=data["is_available"], updated_at=timezone.now())}
 
     # set_category: resolve a restaurant-owned category (or null to clear).
     category = None
     if data.get("category") is not None:
-        category = MenuCategory.objects.filter(
-            public_id=data["category"], menu__restaurant_id=restaurant_id
-        ).first()
+        category = MenuCategory.objects.filter(public_id=data["category"], menu__restaurant_id=restaurant_id).first()
         if category is None:
             raise serializers.ValidationError({"category": "Category not found."})
         # A category can only hold dishes from its own menu.

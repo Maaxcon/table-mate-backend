@@ -5,21 +5,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('menu', '0010_alter_menuitem_allergens'),
-        ('receipts', '0001_initial'),
+        ("menu", "0010_alter_menuitem_allergens"),
+        ("receipts", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='receiptitem',
-            name='menu_item',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='receipt_items', to='menu.menuitem'),
+            model_name="receiptitem",
+            name="menu_item",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="receipt_items",
+                to="menu.menuitem",
+            ),
         ),
         migrations.AlterField(
-            model_name='receiptitem',
-            name='name',
+            model_name="receiptitem",
+            name="name",
             field=models.CharField(blank=True, max_length=120),
         ),
     ]

@@ -57,9 +57,7 @@ class MenuItemAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_filter = ["restaurant", "category", "is_available"]
     search_fields = ["name"]
 
-    def get_form(
-        self, request: HttpRequest, obj: MenuItem | None = None, change: bool = False, **kwargs: Any
-    ) -> Any:
+    def get_form(self, request: HttpRequest, obj: MenuItem | None = None, change: bool = False, **kwargs: Any) -> Any:
         # Stored on the request, not self: admin instances are shared across
         # threads/requests, so self-state can leak between concurrent edits.
         request._menuitem_menu_id = obj.menu_id if obj else None  # type: ignore[attr-defined]
