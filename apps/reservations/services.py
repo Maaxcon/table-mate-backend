@@ -5,11 +5,11 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
-from apps.restaurants.models import Table, TableStatus
+from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
 
 from ..editor.selectors import get_available_tables
-from .models import Reservation, ReservationStatus
+from .models import Reservation, ReservationStatus, ReservationType
 
 
 def check_availability(
@@ -90,9 +90,6 @@ def create_reservation(
 
 @transaction.atomic
 def seat_walk_in_customer(table: Table, guest_count: int) -> Reservation:
-    table.status = TableStatus.OCCUPIED
-    table.save(update_fields=["status"])
-
     end_at = timezone.now() + timedelta(hours=2)
 
     reservation = Reservation.objects.create(
@@ -101,6 +98,7 @@ def seat_walk_in_customer(table: Table, guest_count: int) -> Reservation:
         guest_count=guest_count,
         start_at=timezone.now(),
         end_at=end_at,
+        type=ReservationType.WALK_IN,
         status=ReservationStatus.ACTIVE,
         customer=None,
     )

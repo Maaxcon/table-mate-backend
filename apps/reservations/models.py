@@ -20,6 +20,11 @@ class ReservationStatus(models.TextChoices):
     CANCELLED = "cancelled", "Cancelled"
 
 
+class ReservationType(models.TextChoices):
+    PRE_BOOKED = "pre_booked", "Pre-booked"
+    WALK_IN = "walk_in", "Walk-in"
+
+
 class Reservation(RestaurantScopedModel):
     customer = models.ForeignKey(
         "authentication.User",
@@ -36,6 +41,11 @@ class Reservation(RestaurantScopedModel):
         blank=True,
         related_name="reservations",
     )
+    type = models.CharField(
+        max_length=20,
+        choices=ReservationType.choices,
+        default=ReservationType.PRE_BOOKED,
+    )
     guest_count = models.PositiveIntegerField()
     start_at = models.DateTimeField()
     end_at = models.DateTimeField()
@@ -44,6 +54,7 @@ class Reservation(RestaurantScopedModel):
         choices=ReservationStatus.choices,
         default=ReservationStatus.PENDING,
     )
+    created_by_staff = models.BooleanField(default=False)
     notes = models.TextField(null=True, blank=True)
 
     class Meta:
@@ -52,6 +63,10 @@ class Reservation(RestaurantScopedModel):
             models.CheckConstraint(
                 condition=Q(status__in=ReservationStatus.values),
                 name="reservations_reservation_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=Q(type__in=ReservationType.values),
+                name="reservations_reservation_type_valid",
             ),
             models.CheckConstraint(
                 condition=Q(end_at__gt=F("start_at")),
