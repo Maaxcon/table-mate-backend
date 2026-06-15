@@ -3,8 +3,9 @@ from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 
+from apps.authentication.models import RoleCode, User
 from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
 
@@ -133,4 +134,31 @@ def reschedule_reservation(
             setattr(reservation, field, validated_data[field])
 
     reservation.save()
+    return reservation
+
+
+_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    ReservationStatus.PENDING: {ReservationStatus.ACTIVE, ReservationStatus.CANCELLED},
+    ReservationStatus.ACTIVE: {ReservationStatus.COMPLETED, ReservationStatus.CANCELLED},
+}
+
+_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER})
+
+
+@transaction.atomic
+def update_reservation_status(
+    reservation: Reservation,
+    *,
+    new_status: str,
+    actor: User,
+) -> Reservation:
+    if actor.role not in _ALLOWED_ROLES:
+        raise PermissionDenied("Only admin and waiter roles may update reservation status.")
+
+    allowed = _STATUS_TRANSITIONS.get(reservation.status, set())
+    if new_status not in allowed:
+        raise ReservationConflictError(f"Cannot transition reservation from '{reservation.status}' to '{new_status}'.")
+
+    reservation.status = new_status
+    reservation.save(update_fields=["status", "updated_at"])
     return reservation

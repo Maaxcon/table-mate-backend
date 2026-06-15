@@ -22,7 +22,7 @@ from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
 from .serializers import ReservationSerializer
-from .services import create_reservation, reschedule_reservation
+from .services import create_reservation, reschedule_reservation, update_reservation_status
 
 
 def _parse_time(value: str) -> time_type:
@@ -100,12 +100,13 @@ class ReservationViewSet(
         serializer.is_valid(raise_exception=True)
 
         status_val = serializer.validated_data.pop("status", None)
-        if status_val == ReservationStatus.CANCELLED:
-            if instance.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
-                raise ValidationError("Only pending or active reservations can be cancelled.")
-            instance.status = ReservationStatus.CANCELLED
-            instance.save(update_fields=["status"])
-            result_serializer = self.get_serializer(instance)
+        if status_val is not None:
+            reservation = update_reservation_status(
+                instance,
+                new_status=status_val,
+                actor=request.user,  # type: ignore[arg-type]
+            )
+            result_serializer = self.get_serializer(reservation)
             return Response(result_serializer.data)
 
         reservation = reschedule_reservation(
