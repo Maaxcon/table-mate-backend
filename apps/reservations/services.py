@@ -6,10 +6,10 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.models import Session
+from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
 from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
-from common.hall_events import emit_hall_new_reservation
+from common.hall_events import emit_hall_new_reservation, emit_hall_table_status_changed
 
 from ..editor.selectors import get_available_tables
 from .models import Reservation, ReservationStatus, ReservationType
@@ -103,6 +103,64 @@ def create_reservation(
 
 
 @transaction.atomic
+def create_staff_reservation(
+    *,
+    restaurant_id: int,
+    table_id: str,
+    guest_count: int,
+    start_at: datetime,
+    end_at: datetime,
+    guest_name: str,
+    guest_phone: str = "",
+    notes: str | None = None,
+    actor: User,
+) -> Reservation:
+    table = (
+        Table.objects.filter(restaurant_id=restaurant_id, public_id=table_id, active=True).select_for_update().first()
+    )
+
+    if not table:
+        raise NotFound("Table not found or inactive.")
+
+    _check_reservation_conflict(
+        restaurant_id=restaurant_id,
+        table=table,
+        start_at=start_at,
+        end_at=end_at,
+    )
+
+    staff_notes = f"Guest: {guest_name}"
+    if guest_phone:
+        staff_notes += f", Phone: {guest_phone}"
+    if notes:
+        staff_notes += f"\n{notes}"
+
+    reservation = Reservation.objects.create(
+        restaurant_id=restaurant_id,
+        customer=None,
+        table=table,
+        guest_count=guest_count,
+        start_at=start_at,
+        end_at=end_at,
+        type=ReservationType.PRE_BOOKED,
+        status=ReservationStatus.PENDING,
+        created_by_staff=True,
+        notes=staff_notes,
+    )
+
+    emit_hall_new_reservation(
+        restaurant_id,
+        reservation_id=str(reservation.public_id),
+        table_id=str(table.public_id),
+        start_at=start_at.isoformat(),
+        end_at=end_at.isoformat(),
+        actor=actor,
+    )
+
+    return reservation
+
+
+@transaction.atomic
 def seat_walk_in_customer(
     table: Table,
     guest_count: int,
@@ -191,3 +249,122 @@ def update_reservation_status(
     reservation.status = new_status
     reservation.save(update_fields=["status", "updated_at"])
     return reservation
+
+
+@transaction.atomic
+def move_session_to_table(
+    session: Session,
+    *,
+    new_table_id: str,
+    actor: User,
+) -> Session:
+    if session.status != SessionStatus.OPEN:
+        raise ReservationConflictError("Can only move an open session.")
+
+    try:
+        new_table = Table.objects.get(public_id=new_table_id, active=True)
+    except Table.DoesNotExist:
+        raise NotFound("Target table not found or inactive.") from None
+
+    if new_table.pk == session.table_id:
+        raise ReservationConflictError("Session is already at this table.")
+
+    now = timezone.now()
+    reservation = session.reservation
+
+    new_end_at = max(reservation.end_at, now + timedelta(hours=2))
+
+    _check_reservation_conflict(
+        restaurant_id=session.restaurant_id,
+        table=new_table,
+        start_at=now,
+        end_at=new_end_at,
+    )
+
+    OrderItem.objects.filter(
+        order__session=session,
+        status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
+    ).update(
+        status=OrderItemStatus.VOIDED,
+        voided_at=now,
+        voided_by=actor,
+        void_reason_note="Moved to another table",
+    )
+
+    old_table = session.table
+    reservation.status = ReservationStatus.CANCELLED
+    reservation.save(update_fields=["status", "updated_at"])
+
+    new_reservation = Reservation.objects.create(
+        restaurant_id=session.restaurant_id,
+        table=new_table,
+        guest_count=session.guest_count,
+        start_at=now,
+        end_at=new_end_at,
+        type=reservation.type,
+        status=ReservationStatus.ACTIVE,
+        created_by_staff=True,
+        notes=f"Moved from table {session.table.table_number}",
+    )
+
+    session.table = new_table
+    session.reservation = new_reservation
+    session.save(update_fields=["table", "reservation", "updated_at"])
+
+    emit_hall_table_status_changed(
+        session.restaurant_id,
+        table_id=str(old_table.public_id),
+        previous_status="occupied",
+        current_status="free",
+        session_id=str(session.public_id),
+        actor=actor,
+    )
+
+    emit_hall_table_status_changed(
+        session.restaurant_id,
+        table_id=str(new_table.public_id),
+        previous_status="free",
+        current_status="occupied",
+        session_id=str(session.public_id),
+        actor=actor,
+    )
+
+    return session
+
+
+@transaction.atomic
+def close_session(
+    session: Session,
+    *,
+    actor: User,
+) -> Session:
+    if session.status != SessionStatus.OPEN:
+        raise ReservationConflictError("Session is not open.")
+
+    pending_items = OrderItem.objects.filter(
+        order__session=session,
+        status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
+    ).exists()
+
+    if pending_items:
+        raise ReservationConflictError("Cannot close check: all items must be served or voided first.")
+
+    session.status = SessionStatus.CLOSED
+    session.save(update_fields=["status", "updated_at"])
+
+    reservation = session.reservation
+    if reservation.status == ReservationStatus.ACTIVE:
+        reservation.status = ReservationStatus.COMPLETED
+        reservation.end_at = timezone.now()
+        reservation.save(update_fields=["status", "end_at", "updated_at"])
+
+    emit_hall_table_status_changed(
+        session.restaurant_id,
+        table_id=str(session.table.public_id),
+        previous_status="occupied",
+        current_status="free",
+        session_id=str(session.public_id),
+        actor=actor,
+    )
+
+    return session
