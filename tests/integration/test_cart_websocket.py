@@ -70,6 +70,18 @@ async def _connect(session: CartSession, token: str | None) -> WebsocketCommunic
     return communicator
 
 
+async def _connect_via_subprotocol(session: CartSession, token: str) -> WebsocketCommunicator:
+    communicator = WebsocketCommunicator(
+        application,
+        f"/ws/cart/{session.public_id}/",
+        subprotocols=["access_token", token],
+    )
+    connected, subprotocol = await communicator.connect()
+    assert connected
+    assert subprotocol == "access_token"
+    return communicator
+
+
 async def _issue_access_token(user, restaurant_id: int) -> str:  # type: ignore[no-untyped-def]
     access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant_id)
     return access
@@ -200,4 +212,23 @@ async def test_reconnect_sends_immediate_event(cart_context) -> None:  # type: i
     communicator = await _connect(cart_context["session"], access)
     reconnection_event = await communicator.receive_json_from()
     assert reconnection_event["type"] == "cart_updated"
+    await communicator.disconnect()
+
+
+@pytest.mark.anyio
+async def test_guest_connects_via_subprotocol(cart_context, item) -> None:  # type: ignore[no-untyped-def]
+    token = _issue_guest_token(cart_context["session"])
+    communicator = await _connect_via_subprotocol(cart_context["session"], token)
+
+    initial = await communicator.receive_json_from()
+    assert initial["type"] == "cart_updated"
+
+    await sync_to_async(add_item_to_cart)(
+        session=cart_context["session"],
+        menu_item_id=str(item.public_id),
+        quantity=1,
+    )
+
+    event = await communicator.receive_json_from(timeout=1)
+    assert event["type"] == "cart_updated"
     await communicator.disconnect()

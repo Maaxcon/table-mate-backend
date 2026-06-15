@@ -17,7 +17,12 @@ from apps.orders.selectors import is_cart_participant
 from common.channels import cart_group_name
 
 
+_TOKEN_SUBPROTOCOL = "access_token"
+
+
 class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
+    _accept_subprotocol: str | None = None
+
     async def connect(self) -> None:
         session_id = self.scope.get("url_route", {}).get("kwargs", {}).get("session_id")
         if not isinstance(session_id, uuid.UUID):
@@ -63,7 +68,7 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         self.group_name = cart_group_name(session_id)
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
-        await self.accept()
+        await self.accept(subprotocol=self._accept_subprotocol)
         await self._send_event("cart_updated")
 
     async def disconnect(self, code: int) -> None:
@@ -88,6 +93,13 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         return bool(await self._session_is_active(session_id))
 
     def _extract_token(self) -> str | None:
+        # Prefer the Sec-WebSocket-Protocol header so the token is never written
+        # to access logs or browser history; fall back to the query string.
+        subprotocols = self.scope.get("subprotocols") or []
+        if len(subprotocols) >= 2 and subprotocols[0] == _TOKEN_SUBPROTOCOL:
+            self._accept_subprotocol = _TOKEN_SUBPROTOCOL
+            return subprotocols[1]
+
         raw_query_string = self.scope.get("query_string", b"")
         if isinstance(raw_query_string, bytes):
             query_string = raw_query_string.decode()
