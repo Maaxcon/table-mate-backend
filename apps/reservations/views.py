@@ -87,6 +87,7 @@ class ReservationViewSet(
             start_at=serializer.validated_data["start_at"],
             end_at=serializer.validated_data["end_at"],
             notes=serializer.validated_data.get("notes"),
+            actor=request.user,  # type: ignore[arg-type]
         )
 
         result_serializer = self.get_serializer(reservation)

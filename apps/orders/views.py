@@ -1,19 +1,39 @@
-from django.db import transaction
+from collections.abc import Sequence
+
 from drf_spectacular.utils import extend_schema
-from rest_framework import viewsets
+from rest_framework import serializers, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
-from common.exceptions import TableOccupiedError
+from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
-from .models import Order, OrderItem, Session, SessionStatus, Ticket
+from .models import Order, OrderItem, Session, Ticket, VoidReason
 from .serializers import (
+    CreateOrderSerializer,
     OrderItemSerializer,
     OrderSerializer,
     SessionSerializer,
     TicketSerializer,
+    VoidReasonSerializer,
 )
-from .services import create_walk_in_reservation
+from .services import (
+    create_order_with_items,
+    open_session,
+    update_session_status,
+    void_order_item,
+)
+
+
+@extend_schema(tags=["Orders"])
+class VoidReasonViewSet(viewsets.ReadOnlyModelViewSet[VoidReason]):
+    permission_classes = [IsAuthenticated]
+    queryset = VoidReason.objects.all()
+    serializer_class = VoidReasonSerializer
+    pagination_class = None
 
 
 @extend_schema(tags=["Orders"])
@@ -29,20 +49,36 @@ class SessionViewSet(
     ordering_fields = ["created_at", "updated_at", "opened_at"]
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
-        table = serializer.validated_data["table"]
-        if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
-            raise TableOccupiedError()
-        guest_count = serializer.validated_data["guest_count"]
-        with transaction.atomic():
-            reservation = create_walk_in_reservation(
-                table=table,
-                guest_count=guest_count,
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        if not self.request.user.is_authenticated or restaurant_id is None:
+            raise serializers.ValidationError("Authentication required")
+        instance = open_session(
+            restaurant_id=restaurant_id,
+            table=serializer.validated_data["table"],
+            guest_count=serializer.validated_data["guest_count"],
+            opened_by=self.request.user,
+            currency=serializer.validated_data["currency"],
+            opened_at=serializer.validated_data["opened_at"],
+            actor=self.request.user,
+        )
+        serializer.instance = instance
+
+    def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
+        instance = self.get_object()
+
+        new_status = request.data.get("status")
+        if new_status and new_status != instance.status:
+            instance = update_session_status(
+                instance,
+                new_status=new_status,
+                actor=request.user,  # type: ignore[arg-type]
             )
-            serializer.save(
-                restaurant_id=get_restaurant_id_from_auth(self.request),
-                opened_by=self.request.user,
-                reservation=reservation,
-            )
+
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(serializer.data)
 
 
 @extend_schema(tags=["Orders"])
@@ -65,6 +101,41 @@ class OrderViewSet(
         "currency",
     ]
     ordering_fields = ["created_at", "updated_at", "status", "payment_status"]
+
+    def get_permissions(self) -> Sequence[object]:  # type: ignore[override]
+        if self.action == "create":
+            return [IsFloor()]
+        return super().get_permissions()
+
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        items_data = request.data.get("items")
+        if items_data is not None:
+            serializer = CreateOrderSerializer(
+                data=request.data,
+                context={"request": request},
+            )
+            serializer.is_valid(raise_exception=True)
+
+            order = create_order_with_items(
+                session=serializer.validated_data["session"],
+                items=[
+                    {
+                        "menu_item": item["menu_item"],
+                        "guest_slot": item["guest_slot"],
+                        "quantity": item["quantity"],
+                        "comment": item["comment"],
+                    }
+                    for item in serializer.validated_data["items"]
+                ],
+                actor=request.user,  # type: ignore[arg-type]
+            )
+
+            return Response(
+                self.get_serializer(order).data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(
@@ -92,7 +163,20 @@ class TicketViewSet(
     ]
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
-        serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
+        instance = serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
+        table_number = ""
+        if instance.session_id:
+            try:
+                session_obj = Session.objects.get(pk=instance.session_id)
+                table_number = session_obj.table.table_number
+            except (Session.DoesNotExist, AttributeError):
+                pass
+        emit_kitchen_ticket_injected(
+            instance.restaurant_id,
+            ticket_id=str(instance.public_id),
+            table_number=table_number,
+            items_count=instance.items.count(),
+        )
 
 
 @extend_schema(tags=["Orders"])
@@ -118,3 +202,68 @@ class OrderItemViewSet(
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
+
+    def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
+        instance = self.get_object()
+        previous_status = instance.status
+
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        instance.refresh_from_db()
+
+        if previous_status != instance.status:
+            table_number = ""
+            try:
+                order_session = instance.order.session
+                table_number = order_session.table.table_number
+            except AttributeError:
+                pass
+
+            emit_order_item_status_changed(
+                instance.restaurant_id,
+                order_item_id=str(instance.public_id),
+                table_number=table_number,
+                menu_item_name=instance.menu_item.name if instance.menu_item else "",
+                status=instance.status,
+            )
+
+        return Response(serializer.data)
+
+    @extend_schema(
+        request=serializers.Serializer(
+            {
+                "void_reason": serializers.CharField(),
+                "note": serializers.CharField(required=False, allow_null=True, default=None),
+            }
+        ),
+        responses=OrderItemSerializer,
+    )
+    @action(detail=True, methods=["post"], url_path="void", permission_classes=[IsFloor])
+    def void(self, request: Request, *args: object, **kwargs: object) -> Response:
+        item = self.get_object()
+        void_reason = request.data.get("void_reason")
+        note = request.data.get("note")
+
+        if not void_reason:
+            return Response(
+                {"detail": "void_reason is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = void_order_item(
+                item,
+                actor=request.user,  # type: ignore[arg-type]
+                void_reason_code=void_reason,
+                note=note,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = self.get_serializer(result)
+        return Response(serializer.data)
