@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import uuid
 from typing import Any
-from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -15,10 +14,7 @@ from apps.authentication.models import User
 from apps.orders.broadcast import cart_event_payload
 from apps.orders.models import CartSession, CartSessionStatus
 from apps.orders.selectors import is_cart_participant
-from common.channels import cart_group_name
-
-
-_TOKEN_SUBPROTOCOL = "access_token"
+from common.channels import TOKEN_SUBPROTOCOL, cart_group_name, extract_ws_token
 
 
 class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
@@ -99,23 +95,10 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         return bool(await self._session_is_active(session_id))
 
     def _extract_token(self) -> str | None:
-        # Prefer the Sec-WebSocket-Protocol header so the token is never written
-        # to access logs or browser history; fall back to the query string.
-        subprotocols = self.scope.get("subprotocols") or []
-        if len(subprotocols) >= 2 and subprotocols[0] == _TOKEN_SUBPROTOCOL:
-            self._accept_subprotocol = _TOKEN_SUBPROTOCOL
-            return subprotocols[1]
-
-        raw_query_string = self.scope.get("query_string", b"")
-        if isinstance(raw_query_string, bytes):
-            query_string = raw_query_string.decode()
-        else:
-            query_string = str(raw_query_string)
-        params: dict[str, list[str]] = parse_qs(query_string)
-        tokens = params.get("token")
-        if not tokens:
-            return None
-        return tokens[0]
+        token, via_subprotocol = extract_ws_token(self.scope)
+        if via_subprotocol:
+            self._accept_subprotocol = TOKEN_SUBPROTOCOL
+        return token
 
     async def _resolve_user(self, jwt_auth: TokenVersionJWTAuthentication, validated_token: Any) -> User | None:
         try:
