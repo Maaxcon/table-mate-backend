@@ -47,10 +47,14 @@ class SessionViewSet(
     def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()
         previous_status = instance.status
-        response = super().partial_update(request, *args, **kwargs)
+
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        instance.refresh_from_db()
 
         if previous_status == SessionStatus.OPEN and instance.status != SessionStatus.OPEN:
-            instance.refresh_from_db()
             table = instance.table
             if table:
                 emit_hall_table_status_changed(
@@ -62,7 +66,7 @@ class SessionViewSet(
                     actor=request.user,  # type: ignore[arg-type]
                 )
 
-        return response
+        return Response(serializer.data)
 
 
 @extend_schema(tags=["Orders"])
