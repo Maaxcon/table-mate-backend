@@ -97,9 +97,9 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         return value
 
     def validate_status(self, value: str) -> str:
-        if value == ReservationStatus.CANCELLED:
+        if value in ReservationStatus.values:
             return value
-        raise serializers.ValidationError("Only cancellation is allowed.")
+        raise serializers.ValidationError(f"Invalid status: {value}.")
 
     def validate(self, attrs: dict[str, object]) -> dict[str, object]:
         start_at = attrs.get("start_at")
