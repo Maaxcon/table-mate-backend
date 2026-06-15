@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.models import Session, SessionStatus
+from apps.orders.models import Session
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
 
@@ -46,35 +46,9 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"No customer users for {restaurant.name}. Skipping."))
                 continue
 
-            # Close all open sessions for this restaurant's reservations
-            open_sessions = Session.objects.filter(
-                restaurant=restaurant,
-                reservation__isnull=False,
-                status=SessionStatus.OPEN,
-            )
-            closed_count = open_sessions.update(status=SessionStatus.CLOSED)
-            if closed_count:
-                self.stdout.write(f"  Closed {closed_count} open session(s)")
-
-            # Mark all past reservations (ended before now) as completed
-            past_reservations = Reservation.objects.filter(
-                restaurant=restaurant,
-                end_at__lt=now,
-                status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-            )
-            completed_count = past_reservations.update(status=ReservationStatus.COMPLETED)
-            if completed_count:
-                self.stdout.write(f"  Completed {completed_count} past reservation(s)")
-
-            # Delete only reservations that have no sessions (safe to delete)
-            orphan_reservations = Reservation.objects.filter(
-                restaurant=restaurant,
-                session__isnull=True,
-                status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED],
-            )
-            deleted_count, _ = orphan_reservations.delete()
-            if deleted_count:
-                self.stdout.write(f"  Deleted {deleted_count} old orphan reservation(s)")
+            # Delete all existing sessions and reservations for a clean seed
+            Session.objects.filter(restaurant=restaurant).delete()
+            Reservation.objects.filter(restaurant=restaurant).delete()
 
             reservations_config: list[dict[str, Any]] = [
                 # ── Active reservations (ongoing now → sessions created → OCCUPIED) ──
@@ -198,7 +172,7 @@ class Command(BaseCommand):
             ]
 
             for data in reservations_config:
-                _, was_created = Reservation.objects.get_or_create(
+                reservation, was_created = Reservation.objects.get_or_create(
                     restaurant=restaurant,
                     table=data["table"],
                     start_at=data["start_at"],
@@ -212,5 +186,23 @@ class Command(BaseCommand):
                 )
                 if was_created:
                     created_reservations += 1
+
+                # Create Session for ACTIVE reservations (required for is_occupied)
+                if data["status"] == ReservationStatus.ACTIVE:
+                    session_exists = Session.objects.filter(reservation=reservation).exists()
+                    if not session_exists:
+                        staff_user = User.objects.filter(
+                            restaurant=restaurant,
+                            role__in=[RoleCode.WAITER, RoleCode.ADMIN],
+                        ).first()
+                        Session.objects.create(
+                            restaurant=restaurant,
+                            table=data["table"],
+                            reservation=reservation,
+                            opened_by=staff_user,
+                            guest_count=reservation.guest_count,
+                            currency="EUR",
+                            opened_at=reservation.start_at,
+                        )
 
         self.stdout.write(self.style.SUCCESS(f"Done: {created_reservations} reservations created"))
