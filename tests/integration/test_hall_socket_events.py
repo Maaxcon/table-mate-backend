@@ -101,8 +101,9 @@ def test_create_reservation_emits_hall_event(restaurant: Any, table: Any) -> Non
         )
 
         mock_emit.assert_called_once()
-        call_kwargs = mock_emit.call_args[1]
-        assert call_kwargs["restaurant_id"] == restaurant.id
+        call_args = mock_emit.call_args
+        assert call_args[0][0] == restaurant.id
+        call_kwargs = call_args[1]
         assert call_kwargs["reservation_id"] == str(reservation.public_id)
         assert call_kwargs["table_id"] == str(table.public_id)
         assert call_kwargs["actor"] == user
@@ -230,6 +231,19 @@ def test_session_create_emits_table_status_changed(restaurant: Any, table: Any) 
     admin = UserFactory.build(role=RoleCode.ADMIN)
     admin.save()
 
+    customer = UserFactory.build(role=RoleCode.CUSTOMER)
+    customer.save()
+
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        customer=customer,
+        guest_count=2,
+        start_at=timezone.now(),
+        end_at=timezone.now() + timedelta(hours=2),
+        status=ReservationStatus.ACTIVE,
+    )
+
     with patch("apps.orders.views.emit_hall_table_status_changed") as mock_emit:
         client = APIClient()
         access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
@@ -239,6 +253,7 @@ def test_session_create_emits_table_status_changed(restaurant: Any, table: Any) 
             "/api/orders/sessions/",
             {
                 "table": table.public_id,
+                "reservation": reservation.public_id,
                 "guest_count": 2,
                 "currency": "UAH",
                 "opened_at": timezone.now().isoformat(),
@@ -259,9 +274,23 @@ def test_session_close_emits_table_status_changed(restaurant: Any, table: Any) -
     admin = UserFactory.build(role=RoleCode.ADMIN)
     admin.save()
 
+    customer = UserFactory.build(role=RoleCode.CUSTOMER)
+    customer.save()
+
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        customer=customer,
+        guest_count=2,
+        start_at=timezone.now(),
+        end_at=timezone.now() + timedelta(hours=2),
+        status=ReservationStatus.ACTIVE,
+    )
+
     session = Session.objects.create(
         restaurant=restaurant,
         table=table,
+        reservation=reservation,
         opened_by=admin,
         guest_count=2,
         status=SessionStatus.OPEN,
@@ -289,11 +318,7 @@ def test_session_close_emits_table_status_changed(restaurant: Any, table: Any) -
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize(
-    "role",
-    [RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK],
-)
-def test_hall_consumer_rejects_customer_role(role: str) -> None:
+def test_hall_consumer_rejects_customer_role() -> None:
     async def _test() -> None:
         communicator = WebsocketCommunicator(HallConsumer.as_asgi(), "/ws/hall/")
         connected, _ = await communicator.connect()
