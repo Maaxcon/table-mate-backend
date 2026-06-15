@@ -355,7 +355,7 @@ class TableViewSet(
         occupied_subquery = Session.objects.filter(
             table=OuterRef("pk"),
             status=SessionStatus.OPEN,
-            reservation__status="active",
+            reservation__status=ReservationStatus.ACTIVE,
         )
         return qs.annotate(is_occupied=Exists(occupied_subquery))
 
