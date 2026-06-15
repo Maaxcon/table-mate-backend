@@ -318,11 +318,12 @@ def test_session_close_emits_table_status_changed(restaurant: Any, table: Any) -
 
 
 @pytest.mark.django_db
-def test_hall_consumer_rejects_customer_role() -> None:
+def test_hall_consumer_rejects_unauthenticated() -> None:
     async def _test() -> None:
         communicator = WebsocketCommunicator(HallConsumer.as_asgi(), "/ws/hall/")
-        connected, _ = await communicator.connect()
-        assert not connected
-        await communicator.disconnect()
+        await communicator.connect()
+        close_code = await communicator.receive_output(timeout=5)
+        assert close_code["type"] == "websocket.close"
+        assert close_code["code"] == 4001
 
     asyncio.run(_test())
