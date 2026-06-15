@@ -281,16 +281,6 @@ def move_session_to_table(
         end_at=new_end_at,
     )
 
-    OrderItem.objects.filter(
-        order__session=session,
-        status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
-    ).update(
-        status=OrderItemStatus.VOIDED,
-        voided_at=now,
-        voided_by=actor,
-        void_reason_note="Moved to another table",
-    )
-
     old_table = session.table
     reservation.status = ReservationStatus.CANCELLED
     reservation.save(update_fields=["status", "updated_at"])
@@ -298,6 +288,7 @@ def move_session_to_table(
     new_reservation = Reservation.objects.create(
         restaurant_id=session.restaurant_id,
         table=new_table,
+        customer=reservation.customer,
         guest_count=session.guest_count,
         start_at=now,
         end_at=new_end_at,
