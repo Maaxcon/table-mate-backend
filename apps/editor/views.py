@@ -23,6 +23,7 @@ from common.permissions import HasAnyRole
 from .models import Layout
 from .selectors import get_available_tables
 from .serializers import EditorTableSerializer, LayoutSerializer
+from .services import update_table_position
 
 
 @extend_schema(tags=["Editor"])
@@ -160,3 +161,17 @@ class EditorTableViewSet(
         )
         serializer = self.get_serializer(tables, many=True)
         return Response(serializer.data)
+
+    def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        update_table_position(
+            instance,
+            position_x=serializer.validated_data.get("position_x"),
+            position_y=serializer.validated_data.get("position_y"),
+        )
+
+        result_serializer = self.get_serializer(instance)
+        return Response(result_serializer.data)
