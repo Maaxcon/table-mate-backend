@@ -89,7 +89,7 @@ class VerifyTableScanView(APIView):
     @extend_schema(
         summary="Verify a table QR scan",
         description="Checks for an imminent PENDING reservation for the scanned table. "
-        "If found and owned by the user, flips the reservation to ACTIVE.",
+        "Requires authentication. If found and owned by the caller, flips the reservation to ACTIVE.",
         request={
             "application/json": {
                 "type": "object",
@@ -113,26 +113,36 @@ class VerifyTableScanView(APIView):
         now = timezone.now()
         deadline = now + timedelta(minutes=15)
 
-        reservation = Reservation.objects.filter(
-            table=table,
-            status=ReservationStatus.PENDING,
-            start_at__gte=now,
-            start_at__lte=deadline,
-        ).first()
-
-        if not reservation:
-            return Response(
-                {"valid": False, "detail": "No imminent reservation found for this table."},
+        with transaction.atomic():
+            reservation = (
+                Reservation.objects.select_for_update()
+                .filter(
+                    table=table,
+                    status=ReservationStatus.PENDING,
+                    start_at__gte=now,
+                    start_at__lte=deadline,
+                )
+                .first()
             )
 
-        user = request.user
-        if user.is_authenticated and reservation.customer_id != user.pk:
-            return Response(
-                {"valid": False, "detail": "This reservation belongs to another guest."},
-            )
+            if not reservation:
+                return Response(
+                    {"valid": False, "detail": "No imminent reservation found for this table."},
+                )
 
-        reservation.status = ReservationStatus.ACTIVE
-        reservation.save(update_fields=["status"])
+            user = request.user
+            if not user.is_authenticated:
+                return Response(
+                    {"valid": False, "detail": "Authentication required to activate this reservation."},
+                    status=401,
+                )
+            if reservation.customer_id != user.pk:
+                return Response(
+                    {"valid": False, "detail": "This reservation belongs to another guest."},
+                )
+
+            reservation.status = ReservationStatus.ACTIVE
+            reservation.save(update_fields=["status"])
 
         return Response({"valid": True, "detail": "Table verified and activated."})
 
