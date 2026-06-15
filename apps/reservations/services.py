@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
 from apps.authentication.models import RoleCode, User
+from apps.orders.models import Session
 from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
 from common.hall_events import emit_hall_new_reservation
@@ -102,18 +103,34 @@ def create_reservation(
 
 
 @transaction.atomic
-def seat_walk_in_customer(table: Table, guest_count: int) -> Reservation:
-    end_at = timezone.now() + timedelta(hours=2)
+def seat_walk_in_customer(
+    table: Table,
+    guest_count: int,
+    opened_by: User | None = None,
+) -> Reservation:
+    now = timezone.now()
+    end_at = now + timedelta(hours=2)
 
     reservation = Reservation.objects.create(
         table=table,
         restaurant_id=table.restaurant_id,
         guest_count=guest_count,
-        start_at=timezone.now(),
+        start_at=now,
         end_at=end_at,
         type=ReservationType.WALK_IN,
         status=ReservationStatus.ACTIVE,
         customer=None,
+    )
+
+    restaurant = table.restaurant
+    Session.objects.create(
+        restaurant_id=table.restaurant_id,
+        table=table,
+        reservation=reservation,
+        opened_by=opened_by,
+        guest_count=guest_count,
+        currency=restaurant.settings.currency,
+        opened_at=now,
     )
 
     return reservation

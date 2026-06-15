@@ -2882,7 +2882,8 @@ paths:
     post:
       operationId: restaurants_tables_verify_scan_create
       description: Checks for an imminent PENDING reservation for the scanned table.
-        If found and owned by the user, flips the reservation to ACTIVE.
+        Requires authentication. If found and owned by the caller, flips the reservation
+        to ACTIVE.
       summary: Verify a table QR scan
       tags:
       - Restaurants
