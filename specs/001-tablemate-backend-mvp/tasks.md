@@ -38,7 +38,7 @@
 - [ ] T011 Configure Channels + Redis layer in `core/settings/base.py` and websocket entry in `core/asgi.py`.
 - [ ] T012 Update root routing in `core/urls.py` and `core/routing.py` for API includes and websocket routes (`ws/cart/:session_id/`, `ws/hall/`).
 - [ ] T013 Add backend quality gates to `.github/workflows/main.yml` for lint/security/tests (`flake8`, `bandit`, `safety`, test suite).
-- [ ] T013A Establish project-wide enum convention: use `models.TextChoices` (not plain Python enums) for role and all status fields (`table`, `order`, `order_item`, `ticket`, `session`) to keep DB constraints and generated client types aligned.
+- [ ] T013A Establish project-wide enum convention: use `models.TextChoices` (not plain Python enums) for role and all status fields (`order`, `order_item`, `ticket`, `session`) to keep DB constraints and generated client types aligned. `Table` has no stored `status` — occupancy is derived from `Session`.
 - [ ] T013B Add TypeScript types pipeline as a foundational gate: generate OpenAPI via `drf-spectacular` (`manage.py spectacular --validate --file schema.yaml`), fail CI on schema drift, and wire frontend `npm run gen:types` to consume backend schema.
 - [ ] T013C Add foundational `VoidReason` model/seed migration with required codes: `mispick`, `guest_changed_mind`, `quality_issue`, `out_of_stock`.
 - [ ] T013D Move `RestaurantSettings` schema to foundational migrations with required fields `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, `default_service_charge`; keep US5 focused on API/service usage.
@@ -86,7 +86,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T024 [US2] Implement `apps/editor/models.py` table fields (position, shape, status, active, capacity) using mixins.
+- [ ] T024 [US2] Implement `apps/editor/models.py` table fields (position, shape, active, capacity) using mixins. Occupancy status is derived from open `Session` — no stored `status` column on `Table`.
 - [ ] T025 [US2] Implement `apps/reservations/models.py` reservation model with guest/table/time interval/status fields.
 - [ ] T026 [US2] Implement availability selectors in `apps/editor/selectors.py` and guest reservation selectors in `apps/reservations/selectors.py`.
 - [ ] T027 [US2] Implement `check_availability()` and transaction-safe `create_reservation()` in `apps/reservations/services.py`.

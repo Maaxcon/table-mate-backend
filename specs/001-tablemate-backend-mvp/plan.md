@@ -9,14 +9,14 @@ Implement backend MVP for Tablemate using Django 5 + DRF + JWT + Google OAuth, w
 
 ## Technical Context
 
-**Language/Version**: Python 3.12, Django 5+  
-**Primary Dependencies**: DRF, `djangorestframework-simplejwt`, Redis, Django Channels  
-**Storage**: PostgreSQL (transactional reservation safety)  
-**Testing**: Django test suite (`pytest` or Django test runner), contract + integration tests  
-**Target Platform**: Linux containers via Docker/Docker Compose  
-**Project Type**: Backend web service (REST + WebSocket)  
-**Performance Goals**: Deterministic reservation conflict handling, low-latency cart/hall event delivery  
-**Constraints**: Service-layer business logic only, selector-layer complex queries, role-based permissions, no AI and no multi-restaurant tenancy  
+**Language/Version**: Python 3.12, Django 5+
+**Primary Dependencies**: DRF, `djangorestframework-simplejwt`, Redis, Django Channels
+**Storage**: PostgreSQL (transactional reservation safety)
+**Testing**: Django test suite (`pytest` or Django test runner), contract + integration tests
+**Target Platform**: Linux containers via Docker/Docker Compose
+**Project Type**: Backend web service (REST + WebSocket)
+**Performance Goals**: Deterministic reservation conflict handling, low-latency cart/hall event delivery
+**Constraints**: Service-layer business logic only, selector-layer complex queries, role-based permissions, no AI and no multi-restaurant tenancy
 **Scale/Scope**: MVP domains `users/authentication/restaurants/editor/reservations/orders/menu/payments` plus webhook-confirmed payment transition path
 
 ## Constitution Check
@@ -97,7 +97,7 @@ requirements/
 
 1. Implement `UUIDMixin` and `TimestampMixin`.
 2. Implement domain exceptions and permission classes.
-3. Establish enum convention: `models.TextChoices` for role and all status fields (`table`, `order`, `order_item`, `ticket`, `session`).
+3. Establish enum convention: `models.TextChoices` for role and all status fields (`order`, `order_item`, `ticket`, `session`). `Table` has no stored `status` — occupancy is derived from open `Session`.
 4. Add schema/type contract pipeline: generate validated OpenAPI (`spectacular --validate --file schema.yaml`) and enforce CI drift checks with frontend type generation.
 5. Seed foundational `VoidReason` codes (`mispick`, `guest_changed_mind`, `quality_issue`, `out_of_stock`).
 6. Add foundational `RestaurantSettings` fields (`timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, `default_service_charge`) and wire reservation/payment dependencies.

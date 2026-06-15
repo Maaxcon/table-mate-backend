@@ -169,7 +169,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 - **FR-043**: Backend hot read paths MUST be indexed with `Ticket(restaurant, status, injected_at)`, `OrderItem(restaurant, status, menu_item)`, and partial index `Session(restaurant, table_id) WHERE status='open'`.
 - **FR-044**: `AUTH_USER_MODEL` MUST be set in `core/settings/base.py` to the actual custom user model path (`<app_label>.User`, for example `authentication.User`) before the first `manage.py migrate`; auth model swapping after initial migration is out of scope and forbidden for MVP rollout.
 - **FR-045**: Custom `User` model MUST use `AbstractBaseUser + PermissionsMixin` with email as `USERNAME_FIELD` (no required username field).
-- **FR-046**: Role/status enums MUST use Django `models.TextChoices` (not plain Python enums) across the codebase, including `table`, `order`, `order_item`, `ticket`, and `session` status fields.
+- **FR-046**: Role/status enums MUST use Django `models.TextChoices` (not plain Python enums) across the codebase, including `order`, `order_item`, `ticket`, and `session` status fields. `Table` has no stored `status` field — occupancy is derived from `Session`.
 - **FR-047**: Provider webhook endpoints MUST live in a dedicated `payments` app (signature-authenticated callback surface) and MUST NOT be mixed into customer-facing orders REST endpoints.
 - **FR-048**: Payments persistence MUST use dedicated models in `apps/payments`: `Payment(order, provider, provider_transaction_id UNIQUE, amount, currency, status, raw_payload jsonb)` and `WebhookEvent(provider, event_id UNIQUE, payload, received_at, processed_at)` as required idempotency primitives for FR-032.
 - **FR-049**: OpenAPI/TypeScript contract pipeline MUST be foundational: backend MUST generate validated schema (`manage.py spectacular --validate --file schema.yaml`) and CI MUST fail on contract drift; frontend type generation MUST consume this schema.
@@ -204,7 +204,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 | `CART_ITEM_REMOVED` | `1` | Cart service | Cart participants | `event_id`, `session_id`, `item_id`, `actor_id`, `occurred_at` | Replay on reconnect within retention | Deduplicate by `event_id` |
 | `CART_PARTICIPANT_JOINED` | `1` | Cart presence service | Cart participants | `event_id`, `session_id`, `user_id`, `occurred_at` | Replay within retention for missed presence transitions | Deduplicate by `event_id` |
 | `CART_PARTICIPANT_LEFT` | `1` | Cart presence service | Cart participants | `event_id`, `session_id`, `user_id`, `occurred_at` | Replay within retention for missed presence transitions | Deduplicate by `event_id` |
-| `HALL_TABLE_STATUS_CHANGED` | `1` | Table state service | Hall subscribers (staff) | `event_id`, `table_id`, `previous_status`, `current_status`, `session_id`, `actor_id`, `actor_role`, `occurred_at` | Replay if change occurred after cursor | Deduplicate by `event_id` |
+| `HALL_TABLE_STATUS_CHANGED` | `1` | Table state service | Hall subscribers (staff) | `event_id`, `table_id`, `previous_status`, `current_status`, `session_id`, `actor_id`, `actor_role`, `occurred_at` | Replay if change occurred after cursor | Deduplicate by `event_id`; `current_status` is derived (`free` when no open `Session` exists for the table, `occupied` when an open `Session` exists) — `Table` model has no stored `status` column |
 | `HALL_NEW_RESERVATION` | `1` | Reservation service | Hall subscribers (staff) | `event_id`, `reservation_id`, `table_id`, `start_at`, `end_at`, `actor_id`, `occurred_at` | Replay within retention to restore hall timeline | Deduplicate by `event_id` |
 | `PAYMENT_CONFIRMED` | `1` | Payment webhook service | waiter and kitchen channels | `event_id`, `provider_event_id`, `order_id`, `payment_status`, `amount`, `currency`, `occurred_at` | Replay for subscribers that missed confirmation | Deduplicate by `provider_event_id` |
 | `KITCHEN_TICKET_INJECTED` | `1` | Ticket injection service | Kitchen channel | `event_id`, `ticket_id`, `order_id`, `injected_at`, `priority`, `occurred_at` | Replay for disconnected kitchen clients | Deduplicate by `event_id` |
@@ -227,7 +227,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 
 | Transition Domain | Authoritative Backend Service | Allowed Transition Rule | Client Restriction |
 |---|---|---|---|
-| Table status | Table state service | `free <-> occupied` only through backend validation | Clients MAY request; clients MUST NOT set canonical table status directly |
+| Table status | Table state service (derived from `Session`) | `free` = no open `Session` for table; `occupied` = open `Session` exists. Transitions occur on session open/close — no stored `status` column on `Table` | Clients MAY request; clients MUST NOT set canonical table status directly |
 | Session lifecycle | Session lifecycle service | Open on waiter manual flow or prepaid confirmation; close only on explicit waiter close action | No client-side auto-close or timeout-driven canonical close |
 | Order lifecycle | Order orchestration service | `draft -> submitted -> unpaid -> paid -> settled` with policy checks | Clients cannot mark paid/settled directly |
 | Order item lifecycle | Kitchen workflow service | `pending -> in_progress -> ready -> served` and void branch by policy | Frontend cannot bypass kitchen policy or set terminal status directly |
@@ -252,7 +252,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 - **User**: Account identity with role-scoped authorization context. Role (`admin`/`waiter`/`cook`/`customer`) is a direct attribute on `User`; a separate `RoleAssignment` entity is not used in MVP.
 - **Restaurant**: Venue metadata, active floor-plan reference, and staff membership relation.
 - **RestaurantSettings**: One-to-one restaurant settings entity carrying `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, and `default_service_charge`.
-- **Table**: Hall table identity and occupancy state.
+- **Table**: Hall table identity, position, and capacity. Occupancy state is derived — a table is `occupied` when an open `Session` exists for it, `free` otherwise. No stored `status` column.
 - **Reservation**: Time-bounded customer booking linked to table.
 - **Menu**: Top-level menu container per restaurant (for example breakfast/lunch/dinner).
 - **MenuCategory**: Grouping entity for menu organization within a menu.
