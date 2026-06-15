@@ -64,6 +64,11 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
                 return
             self.scope["user"] = user
 
+        if self.channel_layer is None:
+            await self.accept()
+            await self.close(code=1011)
+            return
+
         self.session_id = session_id
         self.group_name = cart_group_name(session_id)
 
