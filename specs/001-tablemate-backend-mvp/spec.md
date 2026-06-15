@@ -204,8 +204,8 @@ As the operations platform, payment confirmation is accepted only from a verifie
 | `CART_ITEM_REMOVED` | `1` | Cart service | Cart participants | `event_id`, `session_id`, `item_id`, `actor_id`, `occurred_at` | Replay on reconnect within retention | Deduplicate by `event_id` |
 | `CART_PARTICIPANT_JOINED` | `1` | Cart presence service | Cart participants | `event_id`, `session_id`, `user_id`, `occurred_at` | Replay within retention for missed presence transitions | Deduplicate by `event_id` |
 | `CART_PARTICIPANT_LEFT` | `1` | Cart presence service | Cart participants | `event_id`, `session_id`, `user_id`, `occurred_at` | Replay within retention for missed presence transitions | Deduplicate by `event_id` |
-| `HALL_TABLE_STATUS_CHANGED` | `1` | Table state service | Hall subscribers (staff) | `event_id`, `table_id`, `previous_status`, `current_status`, `session_id`, `actor_id`, `actor_role`, `occurred_at` | Replay if change occurred after cursor | Deduplicate by `event_id` |
-| `HALL_NEW_RESERVATION` | `1` | Reservation service | Hall subscribers (staff) | `event_id`, `reservation_id`, `table_id`, `start_at`, `end_at`, `actor_id`, `occurred_at` | Replay within retention to restore hall timeline | Deduplicate by `event_id` |
+| `HALL_TABLE_STATUS_CHANGED` | `1` | Table state service | Hall subscribers (staff) | `event_id`, `table_id`, `previous_status`, `current_status`, `session_id`, `actor_id`, `actor_role`, `occurred_at` | Replay if change occurred after cursor | Deduplicate by `event_id`; `current_status` is derived (`free` when no open `Session` exists for the table, `occupied` when an open `Session` exists) — `Table` model has no stored `status` column |
+| `HALL_NEW_RESERVATION` | `1` | Reservation service | Hall subscribers (staff) | `event_id`, `reservation_id`, `table_id`, `start_at`, `end_at`, `actor_id`, `actor_role`, `occurred_at` | Replay within retention to restore hall timeline | Deduplicate by `event_id` |
 | `PAYMENT_CONFIRMED` | `1` | Payment webhook service | waiter and kitchen channels | `event_id`, `provider_event_id`, `order_id`, `payment_status`, `amount`, `currency`, `occurred_at` | Replay for subscribers that missed confirmation | Deduplicate by `provider_event_id` |
 | `KITCHEN_TICKET_INJECTED` | `1` | Ticket injection service | Kitchen channel | `event_id`, `ticket_id`, `order_id`, `injected_at`, `priority`, `occurred_at` | Replay for disconnected kitchen clients | Deduplicate by `event_id` |
 | `ORDER_ITEM_STATUS_CHANGED` | `1` | Kitchen workflow service | waiter and kitchen channels | `event_id`, `order_item_id`, `previous_status`, `current_status`, `actor_id`, `actor_role`, `occurred_at` | Replay after cursor within retention | Deduplicate by `event_id` |
@@ -227,7 +227,7 @@ As the operations platform, payment confirmation is accepted only from a verifie
 
 | Transition Domain | Authoritative Backend Service | Allowed Transition Rule | Client Restriction |
 |---|---|---|---|
-| Table status | Table state service | `free <-> occupied` only through backend validation | Clients MAY request; clients MUST NOT set canonical table status directly |
+| Table status | Table state service (derived from `Session`) | `free` = no open `Session` for table; `occupied` = open `Session` exists. Transitions occur on session open/close — no stored `status` column on `Table` | Clients MAY request; clients MUST NOT set canonical table status directly |
 | Session lifecycle | Session lifecycle service | Open on waiter manual flow or prepaid confirmation; close only on explicit waiter close action | No client-side auto-close or timeout-driven canonical close |
 | Order lifecycle | Order orchestration service | `draft -> submitted -> unpaid -> paid -> settled` with policy checks | Clients cannot mark paid/settled directly |
 | Order item lifecycle | Kitchen workflow service | `pending -> in_progress -> ready -> served` and void branch by policy | Frontend cannot bypass kitchen policy or set terminal status directly |
@@ -252,7 +252,7 @@ Frontend applications may request actions but MUST NOT perform authoritative bus
 - **User**: Account identity with role-scoped authorization context. Role (`admin`/`waiter`/`cook`/`customer`) is a direct attribute on `User`; a separate `RoleAssignment` entity is not used in MVP.
 - **Restaurant**: Venue metadata, active floor-plan reference, and staff membership relation.
 - **RestaurantSettings**: One-to-one restaurant settings entity carrying `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, and `default_service_charge`.
-- **Table**: Hall table identity and occupancy state.
+- **Table**: Hall table identity, position, and capacity. Occupancy state is derived — a table is `occupied` when an open `Session` exists for it, `free` otherwise. No stored `status` column.
 - **Reservation**: Time-bounded customer booking linked to table.
 - **Menu**: Top-level menu container per restaurant (for example breakfast/lunch/dinner).
 - **MenuCategory**: Grouping entity for menu organization within a menu.
