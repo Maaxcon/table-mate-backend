@@ -223,6 +223,15 @@ def update_cart_item_quantity(
         if not item.menu_item.is_available:
             raise MenuItemUnavailableError(f"Menu item '{item.menu_item.name}' is not available.")
 
+        changed = quantity != item.quantity
+        if comment is not _UNSET and comment != item.comment:
+            changed = True
+        if guest_slot is not _UNSET and guest_slot != item.guest_slot:
+            changed = True
+
+        if not changed:
+            return item
+
         update_fields: dict[str, object] = {
             "quantity": quantity,
             "updated_at": timezone.now(),
