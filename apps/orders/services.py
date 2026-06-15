@@ -12,7 +12,7 @@ from typing import Final, cast
 
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db.models import F, Max
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -50,6 +50,24 @@ def _broadcast_cart_updated(session: CartSession) -> None:
         cart_group_send(session_id)
 
     transaction.on_commit(_emit)
+
+
+def _assign_guest_slot(session: CartSession, device_id: str) -> int:
+    # Server owns the slot so two devices can't collide on a client-derived
+    # number. Reuse this device's existing slot in the session, else take the
+    # next free one. Safe under the session's select_for_update lock.
+    existing = (
+        CartItem.objects.filter(cart_session=session, device_id=device_id)
+        .exclude(guest_slot__isnull=True)
+        .values_list("guest_slot", flat=True)
+        .first()
+    )
+    if existing is not None:
+        return existing
+    highest = CartItem.objects.filter(cart_session=session).aggregate(highest=Max("guest_slot"))[
+        "highest"
+    ]
+    return (highest or 0) + 1
 
 
 def create_cart_session(
@@ -104,6 +122,9 @@ def add_item_to_cart(
 
         if not menu_item.is_available:
             raise MenuItemUnavailableError(f"Menu item '{menu_item.name}' is not available.")
+
+        if device_id is not None:
+            guest_slot = _assign_guest_slot(session, device_id)
 
         defaults: dict[str, object] = {
             "quantity": quantity,
