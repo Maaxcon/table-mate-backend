@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from apps.authentication.models import User
 
 
-TOKEN_SUBPROTOCOL = "access_token"
+TOKEN_SUBPROTOCOL = "access_token"  # nosec B105
 
 
 def extract_ws_token(scope: dict) -> tuple[str | None, bool]:  # type: ignore[type-arg]
