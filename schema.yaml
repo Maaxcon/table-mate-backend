@@ -3499,9 +3499,12 @@ components:
           maxLength: 255
         reservation_id:
           type: string
+          format: uuid
+        table_id:
+          type: string
+          format: uuid
       required:
       - device_id
-      - reservation_id
     Layout:
       type: object
       properties:
