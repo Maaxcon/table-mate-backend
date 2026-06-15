@@ -7,6 +7,7 @@ from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 from apps.authentication.authentication import TokenVersionJWTAuthentication
@@ -119,7 +120,7 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def _resolve_user(self, jwt_auth: TokenVersionJWTAuthentication, validated_token: Any) -> User | None:
         try:
             user = await database_sync_to_async(jwt_auth.get_user)(validated_token)
-        except InvalidToken:
+        except (InvalidToken, AuthenticationFailed):
             return None
         if not isinstance(user, User):
             return None
