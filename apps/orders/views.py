@@ -1,10 +1,13 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
+from rest_framework.request import Request
+from rest_framework.response import Response
 
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
+from common.hall_events import emit_hall_table_status_changed
 
-from .models import Order, OrderItem, Session, Ticket
+from .models import Order, OrderItem, Session, SessionStatus, Ticket
 from .serializers import (
     OrderItemSerializer,
     OrderSerializer,
@@ -26,10 +29,40 @@ class SessionViewSet(
     ordering_fields = ["created_at", "updated_at", "opened_at"]
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
-        serializer.save(
+        instance = serializer.save(
             restaurant_id=get_restaurant_id_from_auth(self.request),
             opened_by=self.request.user,
         )
+        table = instance.table
+        if table:
+            emit_hall_table_status_changed(
+                instance.restaurant_id,
+                table_id=str(table.public_id),
+                previous_status="free",
+                current_status="occupied",
+                session_id=str(instance.public_id),
+                actor=self.request.user,  # type: ignore[arg-type]
+            )
+
+    def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
+        instance = self.get_object()
+        previous_status = instance.status
+        response = super().partial_update(request, *args, **kwargs)
+
+        if previous_status == SessionStatus.OPEN and instance.status != SessionStatus.OPEN:
+            instance.refresh_from_db()
+            table = instance.table
+            if table:
+                emit_hall_table_status_changed(
+                    instance.restaurant_id,
+                    table_id=str(table.public_id),
+                    previous_status="occupied",
+                    current_status="free",
+                    session_id=str(instance.public_id),
+                    actor=request.user,  # type: ignore[arg-type]
+                )
+
+        return response
 
 
 @extend_schema(tags=["Orders"])

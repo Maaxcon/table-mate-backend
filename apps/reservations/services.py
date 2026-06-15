@@ -8,6 +8,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from apps.authentication.models import RoleCode, User
 from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
+from common.hall_events import emit_hall_new_reservation
 
 from ..editor.selectors import get_available_tables
 from .models import Reservation, ReservationStatus, ReservationType
@@ -60,6 +61,7 @@ def create_reservation(
     start_at: datetime,
     end_at: datetime,
     notes: str | None = None,
+    actor: User | None = None,
 ) -> Reservation:
     table = (
         Table.objects.filter(restaurant_id=restaurant_id, public_id=table_id, active=True).select_for_update().first()
@@ -85,6 +87,16 @@ def create_reservation(
         status=ReservationStatus.PENDING,
         notes=notes or "",
     )
+
+    if actor is not None:
+        emit_hall_new_reservation(
+            restaurant_id,
+            reservation_id=str(reservation.public_id),
+            table_id=str(table.public_id),
+            start_at=start_at.isoformat(),
+            end_at=end_at.isoformat(),
+            actor=actor,
+        )
 
     return reservation
 
