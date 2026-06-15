@@ -242,6 +242,7 @@ class GuestInitView(APIView):
         table_id = serializer.validated_data.get("table_id")
 
         from apps.orders.models import CartSession, CartSessionStatus
+        from apps.reservations.models import ReservationStatus
 
         filters: dict[str, Any] = {"status": CartSessionStatus.ACTIVE}
         error_detail = "No active cart session found for this reservation."
@@ -249,9 +250,10 @@ class GuestInitView(APIView):
             filters["reservation__public_id"] = reservation_id
         else:
             filters["reservation__table__public_id"] = table_id
+            filters["reservation__status"] = ReservationStatus.ACTIVE
             error_detail = "No active cart session found for this table."
 
-        session = CartSession.objects.filter(**filters).first()
+        session = CartSession.objects.filter(**filters).order_by("-created_at").first()
         if session is None:
             return Response(
                 {"detail": error_detail},
