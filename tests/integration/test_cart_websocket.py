@@ -100,11 +100,23 @@ async def test_guest_connection_requires_token(cart_context) -> None:  # type: i
 
 @pytest.mark.anyio
 async def test_guest_connection_wrong_session_rejected(cart_context) -> None:  # type: ignore[no-untyped-def]
-    other_session = await sync_to_async(CartSession.objects.create)(
-        restaurant=cart_context["restaurant"],
-        reservation=cart_context["session"].reservation,
-        created_by=cart_context["owner"],
-    )
+    def _make_other_session() -> CartSession:
+        existing = cart_context["session"]
+        other_reservation = Reservation.objects.create(
+            restaurant=cart_context["restaurant"],
+            table=existing.reservation.table,
+            customer=None,
+            guest_count=2,
+            start_at=datetime.now(UTC) + timedelta(hours=3),
+            end_at=datetime.now(UTC) + timedelta(hours=4),
+        )
+        return CartSession.objects.create(
+            restaurant=cart_context["restaurant"],
+            reservation=other_reservation,
+            created_by=cart_context["owner"],
+        )
+
+    other_session = await sync_to_async(_make_other_session)()
     token = _issue_guest_token(other_session)
     communicator = await _connect(cart_context["session"], token)
     close = await communicator.receive_output(timeout=1)

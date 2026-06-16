@@ -82,11 +82,25 @@ def create_cart_session(
         raise PermissionDenied("Only reservation participants may open a cart session.")
 
     with transaction.atomic():
-        session = CartSession.objects.create(
-            restaurant_id=restaurant_id,
-            reservation=reservation,
-            created_by=user,
+        existing = (
+            CartSession.objects.select_for_update()
+            .filter(reservation=reservation, status=CartSessionStatus.ACTIVE)
+            .first()
         )
+        if existing is not None:
+            existing.participants.add(*allowed_participants)
+            return existing
+        try:
+            with transaction.atomic():
+                session = CartSession.objects.create(
+                    restaurant_id=restaurant_id,
+                    reservation=reservation,
+                    created_by=user,
+                )
+        except IntegrityError:
+            session = CartSession.objects.get(
+                reservation=reservation, status=CartSessionStatus.ACTIVE
+            )
         session.participants.add(*allowed_participants)
     return session
 

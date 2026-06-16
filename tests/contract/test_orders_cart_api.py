@@ -39,6 +39,18 @@ def reservation(restaurant: Restaurant, table: Table) -> Reservation:
 
 
 @pytest.fixture
+def second_reservation(restaurant: Restaurant, table: Table) -> Reservation:
+    return Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        customer=None,
+        guest_count=2,
+        start_at=datetime.now(UTC) + timedelta(hours=3),
+        end_at=datetime.now(UTC) + timedelta(hours=4),
+    )
+
+
+@pytest.fixture
 def cart_item(menu: Any, category: Any) -> MenuItem:
     return cast(
         MenuItem,
@@ -815,6 +827,7 @@ class TestGuestSessionScope:
         self,
         api_client: Client,
         reservation: Reservation,
+        second_reservation: Reservation,
         restaurant: Restaurant,
         cart_item: MenuItem,
     ) -> None:
@@ -823,7 +836,7 @@ class TestGuestSessionScope:
         from apps.orders.models import CartSession
 
         session_a = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
-        session_b = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        session_b = CartSession.objects.create(restaurant=restaurant, reservation=second_reservation)
 
         token = self._issue_token("device-a", str(session_a.public_id))
         guest_client = APIClient()
@@ -872,6 +885,7 @@ class TestGuestSessionScope:
         self,
         api_client: Client,
         reservation: Reservation,
+        second_reservation: Reservation,
         restaurant: Restaurant,
         cart_item: MenuItem,
     ) -> None:
@@ -880,7 +894,7 @@ class TestGuestSessionScope:
         from apps.orders.models import CartSession
 
         session_a = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
-        session_b = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        session_b = CartSession.objects.create(restaurant=restaurant, reservation=second_reservation)
 
         token = self._issue_token("device-c", str(session_a.public_id))
         guest_client = APIClient()
@@ -902,6 +916,7 @@ class TestGuestSessionScope:
         self,
         api_client: Client,
         reservation: Reservation,
+        second_reservation: Reservation,
         restaurant: Restaurant,
         cart_item: MenuItem,
     ) -> None:
@@ -910,7 +925,7 @@ class TestGuestSessionScope:
         from apps.orders.models import CartSession
 
         session_a = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
-        session_b = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        session_b = CartSession.objects.create(restaurant=restaurant, reservation=second_reservation)
         other_item = CartItem.objects.create(
             cart_session=session_b,
             menu_item=cart_item,
