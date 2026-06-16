@@ -3,8 +3,9 @@ from rest_framework import viewsets
 
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
+from common.exceptions import TableOccupiedError
 
-from .models import Order, OrderItem, Session, Ticket
+from .models import Order, OrderItem, Session, SessionStatus, Ticket
 from .serializers import (
     OrderItemSerializer,
     OrderSerializer,
@@ -28,6 +29,8 @@ class SessionViewSet(
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         table = serializer.validated_data["table"]
+        if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+            raise TableOccupiedError()
         guest_count = serializer.validated_data["guest_count"]
         reservation = create_walk_in_reservation(
             table=table,

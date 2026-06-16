@@ -13,6 +13,12 @@ class ReservationConflictError(DomainError):
     default_status_code = HTTPStatus.CONFLICT
 
 
+class TableOccupiedError(DomainError):
+    default_detail = "Table already has an active session."
+    default_code = "table_occupied"
+    default_status_code = HTTPStatus.CONFLICT
+
+
 class CartSessionNotFoundError(DomainError):
     default_detail = "Cart session not found."
     default_code = "cart_session_not_found"
