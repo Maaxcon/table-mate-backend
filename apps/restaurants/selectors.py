@@ -1,4 +1,6 @@
+from datetime import datetime as datetime_cls
 from typing import Any, TypedDict
+from zoneinfo import ZoneInfo
 
 from django.db.models import Exists, OuterRef, QuerySet
 from django.utils import timezone
@@ -50,7 +52,22 @@ class LayoutData(TypedDict):
 
 def get_layout_data(restaurant_id: int) -> LayoutData:
     now = timezone.now()
-    today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
+    tz = ZoneInfo(settings.timezone) if settings else ZoneInfo("UTC")
+    today_local = now.astimezone(tz).date()
+    today_end_local = datetime_cls(
+        today_local.year,
+        today_local.month,
+        today_local.day,
+        23,
+        59,
+        59,
+        999999,
+        tzinfo=tz,
+    )
+    today_end = today_end_local.astimezone(ZoneInfo("UTC"))
+
     reservations = Reservation.objects.filter(
         restaurant_id=restaurant_id,
         status=ReservationStatus.PENDING,
