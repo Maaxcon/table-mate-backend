@@ -728,17 +728,23 @@ class TestGuestInit:
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_guest_init_missing_device_id_returns_400(
+    def test_guest_init_without_device_id_succeeds(
         self,
         api_client: Client,
         reservation: Reservation,
+        restaurant: Restaurant,
     ) -> None:
+        from apps.orders.models import CartSession
+
+        CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+
         response = api_client.post(
             self.url,
             {"reservation_id": str(reservation.public_id)},
             content_type="application/json",
         )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.status_code == status.HTTP_200_OK
+        assert "access" in response.json()
 
     def test_guest_init_missing_target_returns_400(self, api_client: Client) -> None:
         response = api_client.post(
@@ -782,7 +788,7 @@ class TestGuestInit:
         data = response.json()
         assert data["quantity"] == 2
         assert data["guest_slot"] == 1
-        assert data["device_id"] == "test-device-uuid"
+        assert data["is_mine"] is True
 
     def test_guest_init_closed_session_returns_404(
         self,
