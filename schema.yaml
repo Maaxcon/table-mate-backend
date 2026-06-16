@@ -110,7 +110,6 @@ paths:
             schema:
               $ref: '#/components/schemas/GuestInit'
       security:
-      - jwtAuth: []
       - jwt_Auth: []
       - {}
       responses:
