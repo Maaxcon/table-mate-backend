@@ -26,17 +26,12 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
     table: PublicIdRelatedField[Table] = PublicIdRelatedField(
         queryset=Table.objects.all(),
     )
-    reservation: PublicIdRelatedField[Reservation] = PublicIdRelatedField(
-        queryset=Reservation.objects.all(),
-        allow_null=True,
-        required=False,
-    )
+    reservation: PublicIdRelatedField[Reservation] = PublicIdRelatedField(read_only=True)
     opened_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         _scope_to_request_restaurant(self.fields["table"], self.context)
-        _scope_to_request_restaurant(self.fields["reservation"], self.context)
 
     class Meta:
         model = Session

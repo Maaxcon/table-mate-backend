@@ -167,7 +167,26 @@ def seat_walk_in_customer(
     opened_by: User | None = None,
 ) -> Reservation:
     now = timezone.now()
-    end_at = now + timedelta(hours=2)
+    default_end = now + timedelta(hours=2)
+
+    next_reservation = (
+        Reservation.objects.filter(
+            table=table,
+            restaurant_id=table.restaurant_id,
+            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+            start_at__gt=now,
+        )
+        .order_by("start_at")
+        .first()
+    )
+
+    if next_reservation is not None:
+        end_at = min(default_end, next_reservation.start_at)
+    else:
+        end_at = default_end
+
+    if end_at <= now:
+        raise ReservationConflictError("Table has no available time for a walk-in reservation.")
 
     reservation = Reservation.objects.create(
         table=table,
@@ -222,6 +241,40 @@ def reschedule_reservation(
 
     reservation.save()
     return reservation
+
+
+@transaction.atomic
+def activate_reservation_by_scan(
+    *,
+    table: Table,
+    user: Any,
+) -> tuple[bool, str]:
+    now = timezone.now()
+    deadline = now + timedelta(minutes=15)
+
+    reservation = (
+        Reservation.objects.select_for_update()
+        .filter(
+            table=table,
+            status=ReservationStatus.PENDING,
+            start_at__gte=now,
+            start_at__lte=deadline,
+        )
+        .first()
+    )
+
+    if not reservation:
+        return False, "No imminent reservation found for this table."
+
+    if not user.is_authenticated:
+        return False, "Authentication required to activate this reservation."
+
+    if reservation.customer_id != user.pk:
+        return False, "This reservation belongs to another guest."
+
+    reservation.status = ReservationStatus.ACTIVE
+    reservation.save(update_fields=["status"])
+    return True, "Table verified and activated."
 
 
 _STATUS_TRANSITIONS: dict[str, set[str]] = {

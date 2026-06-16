@@ -2876,7 +2876,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Table'
+                $ref: '#/components/schemas/LayoutResponse'
           description: ''
   /api/restaurants/tables/verify-scan/:
     post:
@@ -2905,7 +2905,17 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyScanResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyScanResponse'
+          description: ''
   /api/restaurants/zones/:
     get:
       operationId: restaurants_zones_list
@@ -3531,6 +3541,20 @@ components:
       - restaurant
       - updated_at
       - version
+    LayoutResponse:
+      type: object
+      properties:
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/Table'
+        upcoming_reservations:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpcomingReservation'
+      required:
+      - tables
+      - upcoming_reservations
     MeUpdate:
       type: object
       description: |-
@@ -4896,7 +4920,7 @@ components:
         reservation:
           type: string
           format: uuid
-          nullable: true
+          readOnly: true
         opened_by:
           type: string
           format: uuid
@@ -5482,7 +5506,7 @@ components:
         reservation:
           type: string
           format: uuid
-          nullable: true
+          readOnly: true
         opened_by:
           type: string
           format: uuid
@@ -5526,6 +5550,7 @@ components:
       - opened_at
       - opened_by
       - public_id
+      - reservation
       - restaurant
       - table
       - updated_at
@@ -5737,6 +5762,22 @@ components:
       description: |-
         * `pre_booked` - Pre-booked
         * `walk_in` - Walk-in
+    UpcomingReservation:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+        table_id:
+          type: string
+          format: uuid
+        start_at:
+          type: string
+          format: date-time
+      required:
+      - public_id
+      - start_at
+      - table_id
     User:
       type: object
       properties:
@@ -5780,6 +5821,16 @@ components:
       - public_id
       - restaurant_public_id
       - updated_at
+    VerifyScanResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        detail:
+          type: string
+      required:
+      - detail
+      - valid
     WorkingHours:
       type: object
       description: |-
