@@ -11,7 +11,7 @@ from .models import RoleCode, User
 
 
 class GuestInitSerializer(serializers.Serializer[None]):
-    device_id = serializers.CharField(max_length=255, required=True, allow_blank=False)
+    device_id = serializers.CharField(max_length=255, required=False, allow_blank=True)
     reservation_id = serializers.UUIDField(required=False)
     table_id = serializers.UUIDField(required=False)
 
