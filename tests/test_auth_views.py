@@ -86,6 +86,61 @@ class TestGoogleAuthView:
 
 
 @pytest.mark.django_db
+class TestGoogleContextView:
+    url = "/api/auth/google/context/"
+
+    def test_valid_restaurant_issues_full_tokens(self) -> None:
+        restaurant = Restaurant.objects.create(name="Test Restaurant")
+        user = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
+        access, _ = issue_tokens(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post(self.url, {"restaurant_id": restaurant.pk}, format="json")
+
+        assert response.status_code == 200
+        assert "access" in response.data
+        assert "refresh_token" in response.cookies
+
+    def test_wrong_restaurant_returns_403(self) -> None:
+        restaurant = Restaurant.objects.create(name="Restaurant A")
+        other = Restaurant.objects.create(name="Restaurant B")
+        user = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
+        access, _ = issue_tokens(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post(self.url, {"restaurant_id": other.pk}, format="json")
+
+        assert response.status_code == 403
+        assert "detail" in response.data
+
+    def test_unauthenticated_returns_401(self) -> None:
+        response = APIClient().post(self.url, {"restaurant_id": 1}, format="json")
+        assert response.status_code == 401
+
+    def test_customer_cannot_use_context_endpoint(self) -> None:
+        user = UserFactory.create(role=RoleCode.CUSTOMER)
+        access, _ = issue_tokens(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post(self.url, {"restaurant_id": 1}, format="json")
+
+        assert response.status_code == 403
+
+    def test_missing_restaurant_id_returns_400(self) -> None:
+        user = UserFactory.create(role=RoleCode.WAITER)
+        access, _ = issue_tokens(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post(self.url, {}, format="json")
+
+        assert response.status_code == 400
+
+
+@pytest.mark.django_db
 class TestTokenClaims:
     def test_full_token_contains_restaurant_id(self) -> None:
         from rest_framework_simplejwt.tokens import AccessToken, Token
