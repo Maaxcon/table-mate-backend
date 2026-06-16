@@ -11,6 +11,7 @@ from .serializers import (
     SessionSerializer,
     TicketSerializer,
 )
+from .services import create_walk_in_reservation
 
 
 @extend_schema(tags=["Orders"])
@@ -26,9 +27,16 @@ class SessionViewSet(
     ordering_fields = ["created_at", "updated_at", "opened_at"]
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
+        table = serializer.validated_data["table"]
+        guest_count = serializer.validated_data["guest_count"]
+        reservation = create_walk_in_reservation(
+            table=table,
+            guest_count=guest_count,
+        )
         serializer.save(
             restaurant_id=get_restaurant_id_from_auth(self.request),
             opened_by=self.request.user,
+            reservation=reservation,
         )
 
 
