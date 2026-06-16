@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from datetime import date as date_type
 from datetime import datetime, timedelta
 from datetime import time as time_type
+from typing import cast
 from zoneinfo import ZoneInfo
 
 from django.db.models import QuerySet
@@ -14,7 +15,7 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.authentication.models import RoleCode
+from apps.authentication.models import RoleCode, User
 from apps.orders.models import Session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
@@ -87,7 +88,7 @@ class ReservationViewSet(
             table = serializer.validated_data["table"]
             restaurant_id = table.restaurant_id
 
-        user = request.user  # type: ignore[arg-type]
+        user = cast(User, request.user)
         guest_name = request.data.get("guest_name")
 
         if guest_name and getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
@@ -282,7 +283,7 @@ class ReservationViewSet(
     @action(detail=True, methods=["post"], url_path="move-table")
     def move_table(self, request: Request, public_id: str | None = None) -> Response:
         reservation = self.get_object()
-        user = request.user  # type: ignore[arg-type]
+        user = cast(User, request.user)
 
         if getattr(user, "role", None) not in (RoleCode.ADMIN, RoleCode.WAITER):
             raise PermissionDenied("Only staff can move tables.")
@@ -307,7 +308,7 @@ class ReservationViewSet(
     @action(detail=True, methods=["post"], url_path="close-check")
     def close_check(self, request: Request, public_id: str | None = None) -> Response:
         reservation = self.get_object()
-        user = request.user  # type: ignore[arg-type]
+        user = cast(User, request.user)
 
         if getattr(user, "role", None) not in (RoleCode.ADMIN, RoleCode.WAITER):
             raise PermissionDenied("Only staff can close checks.")
