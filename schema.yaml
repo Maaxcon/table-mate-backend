@@ -109,7 +109,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/GuestInit'
-        required: true
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -3220,10 +3219,9 @@ components:
           type: integer
           readOnly: true
           nullable: true
-        device_id:
-          type: string
+        is_mine:
+          type: boolean
           readOnly: true
-          nullable: true
         is_paid:
           type: boolean
           readOnly: true
@@ -3247,8 +3245,8 @@ components:
       - added_by
       - cart_session
       - created_at
-      - device_id
       - guest_slot
+      - is_mine
       - is_paid
       - menu_item
       - public_id
@@ -3503,8 +3501,6 @@ components:
         table_id:
           type: string
           format: uuid
-      required:
-      - device_id
     Layout:
       type: object
       properties:
