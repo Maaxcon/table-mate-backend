@@ -259,19 +259,15 @@ class GuestInitView(APIView):
             )
         cart_session_id = str(session.public_id)
 
-        token = _issue_guest_token(
-            device_id=serializer.validated_data["device_id"],
-            cart_session_id=cart_session_id,
-        )
+        token = _issue_guest_token(cart_session_id=cart_session_id)
         return Response({"access": token})
 
 
-def _issue_guest_token(*, device_id: str, cart_session_id: str | None) -> str:
+def _issue_guest_token(*, cart_session_id: str | None) -> str:
     from rest_framework_simplejwt.tokens import AccessToken
 
     token = AccessToken()
     token.payload["is_guest"] = True
-    token.payload["device_id"] = device_id
     if cart_session_id:
         token.payload["cart_session_id"] = cart_session_id
     token.set_exp(lifetime=timedelta(hours=4))

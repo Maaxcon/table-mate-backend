@@ -52,12 +52,9 @@ def _broadcast_cart_updated(session: CartSession) -> None:
     transaction.on_commit(_emit)
 
 
-def _assign_guest_slot(session: CartSession, device_id: str) -> int:
-    # Server owns the slot so two devices can't collide on a client-derived
-    # number. Reuse this device's existing slot in the session, else take the
-    # next free one. Safe under the session's select_for_update lock.
+def _assign_guest_slot(session: CartSession, guest_identity: str) -> int:
     existing = (
-        CartItem.objects.filter(cart_session=session, device_id=device_id)
+        CartItem.objects.filter(cart_session=session, guest_identity=guest_identity)
         .exclude(guest_slot__isnull=True)
         .values_list("guest_slot", flat=True)
         .first()
@@ -100,7 +97,7 @@ def add_item_to_cart(
     menu_item_id: str,
     quantity: int,
     user: User | AnonymousUser | None = None,
-    device_id: str | None = None,
+    guest_identity: str | None = None,
     guest_slot: int | None = None,
     comment: str | None = None,
 ) -> CartItem:
@@ -123,14 +120,14 @@ def add_item_to_cart(
         if not menu_item.is_available:
             raise MenuItemUnavailableError(f"Menu item '{menu_item.name}' is not available.")
 
-        if device_id is not None:
-            guest_slot = _assign_guest_slot(session, device_id)
+        if guest_identity is not None:
+            guest_slot = _assign_guest_slot(session, guest_identity)
 
         defaults: dict[str, object] = {
             "quantity": quantity,
             "comment": comment,
             "guest_slot": guest_slot,
-            "device_id": device_id,
+            "guest_identity": guest_identity,
         }
         if _is_authenticated_user(user):
             user = cast(User, user)

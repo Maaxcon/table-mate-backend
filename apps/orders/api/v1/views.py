@@ -46,12 +46,12 @@ def _is_guest_request(request: Request) -> bool:
     return False
 
 
-def _get_device_id_from_request(request: Request) -> str | None:
+def _get_guest_identity_from_request(request: Request) -> str | None:
     auth = getattr(request, "auth", None)
     if auth is not None:
         payload = getattr(auth, "payload", {})
         if payload.get("is_guest"):
-            return payload.get("device_id")
+            return payload.get("jti")
     return None
 
 
@@ -177,7 +177,7 @@ class CartSessionItemViewSet(
             menu_item_id=str(serializer.validated_data["menu_item"].public_id),
             quantity=serializer.validated_data["quantity"],
             user=self._get_user_or_anon(),
-            device_id=_get_device_id_from_request(request),
+            guest_identity=_get_guest_identity_from_request(request),
             guest_slot=serializer.validated_data.get("guest_slot"),
             comment=serializer.validated_data.get("comment"),
         )
