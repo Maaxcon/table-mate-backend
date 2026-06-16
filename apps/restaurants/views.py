@@ -32,10 +32,12 @@ from .serializers import (
     BookingSettingsSerializer,
     EmployeeCreateSerializer,
     EmployeeSerializer,
+    LayoutResponseSerializer,
     PublicRestaurantSerializer,
     RestaurantSerializer,
     RestaurantSettingsSerializer,
     TableSerializer,
+    VerifyScanResponseSerializer,
     ZoneSerializer,
 )
 
@@ -96,6 +98,7 @@ class VerifyTableScanView(APIView):
                 "required": ["table_id"],
             }
         },
+        responses={200: VerifyScanResponseSerializer, 401: VerifyScanResponseSerializer},
     )
     def post(self, request: Request) -> Response:
         table_id = request.data.get("table_id")
@@ -321,6 +324,7 @@ class TableViewSet(
     @extend_schema(
         summary="Tables layout with upcoming reservations",
         description="Returns all active tables and today's PENDING reservations for the floor plan.",
+        responses=LayoutResponseSerializer,
     )
     @action(detail=False, methods=["get"])
     def layout(self, request: Request) -> Response:

@@ -217,3 +217,19 @@ class TableSerializer(serializers.ModelSerializer[Table]):
             "updated_at",
         ]
         read_only_fields = ["public_id", "is_occupied", "created_at", "updated_at"]
+
+
+class VerifyScanResponseSerializer(serializers.Serializer[None]):
+    valid = serializers.BooleanField()
+    detail = serializers.CharField()
+
+
+class UpcomingReservationSerializer(serializers.Serializer[None]):
+    public_id = serializers.UUIDField()
+    table_id = serializers.UUIDField()
+    start_at = serializers.DateTimeField()
+
+
+class LayoutResponseSerializer(serializers.Serializer[None]):
+    tables = TableSerializer(many=True)
+    upcoming_reservations = UpcomingReservationSerializer(many=True)
