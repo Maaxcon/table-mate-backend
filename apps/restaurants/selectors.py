@@ -1,8 +1,13 @@
-from django.db.models import QuerySet
+from typing import Any, TypedDict
+
+from django.db.models import Exists, OuterRef, QuerySet
+from django.utils import timezone
 
 from apps.authentication.models import RoleCode, User
+from apps.orders.models import Session, SessionStatus
+from apps.reservations.models import Reservation, ReservationStatus
 
-from .models import Restaurant, RestaurantSettings
+from .models import Restaurant, RestaurantSettings, Table
 
 
 def get_restaurant(restaurant_id: int) -> Restaurant | None:
@@ -23,9 +28,53 @@ def get_employee(employee_id: str, restaurant_id: int) -> User | None:
     )
 
 
+def get_tables_with_occupancy(restaurant_id: int) -> QuerySet[Table]:
+    qs = Table.objects.select_related("zone").filter(restaurant_id=restaurant_id)
+    occupied_subquery = Session.objects.filter(
+        table=OuterRef("pk"),
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+    )
+    return qs.annotate(is_occupied=Exists(occupied_subquery))
+
+
+class _UpcomingReservation(TypedDict):
+    public_id: Any
+    table_id: Any
+    start_at: Any
+
+
+class LayoutData(TypedDict):
+    upcoming_reservations: list[_UpcomingReservation]
+
+
+def get_layout_data(restaurant_id: int) -> LayoutData:
+    now = timezone.now()
+    today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+    reservations = Reservation.objects.filter(
+        restaurant_id=restaurant_id,
+        status=ReservationStatus.PENDING,
+        start_at__gte=now,
+        start_at__lte=today_end,
+    ).select_related("table")
+
+    upcoming: list[_UpcomingReservation] = [
+        {
+            "public_id": r.public_id,
+            "table_id": r.table.public_id,
+            "start_at": r.start_at,
+        }
+        for r in reservations
+        if r.table is not None
+    ]
+    return {"upcoming_reservations": upcoming}
+
+
 __all__ = [
+    "get_employee",
+    "get_layout_data",
     "get_restaurant",
     "get_restaurant_settings",
+    "get_tables_with_occupancy",
     "list_employees",
-    "get_employee",
 ]

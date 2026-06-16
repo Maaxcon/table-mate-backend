@@ -171,3 +171,37 @@ def reschedule_reservation(
 
     reservation.save()
     return reservation
+
+
+@transaction.atomic
+def activate_reservation_by_scan(
+    *,
+    table: Table,
+    user: Any,
+) -> tuple[bool, str]:
+    now = timezone.now()
+    deadline = now + timedelta(minutes=15)
+
+    reservation = (
+        Reservation.objects.select_for_update()
+        .filter(
+            table=table,
+            status=ReservationStatus.PENDING,
+            start_at__gte=now,
+            start_at__lte=deadline,
+        )
+        .first()
+    )
+
+    if not reservation:
+        return False, "No imminent reservation found for this table."
+
+    if not user.is_authenticated:
+        return False, "Authentication required to activate this reservation."
+
+    if reservation.customer_id != user.pk:
+        return False, "This reservation belongs to another guest."
+
+    reservation.status = ReservationStatus.ACTIVE
+    reservation.save(update_fields=["status"])
+    return True, "Table verified and activated."
