@@ -1,7 +1,8 @@
+from collections import defaultdict
 from datetime import timedelta
 from typing import Any
 
-from django.db import migrations, models
+from django.db import IntegrityError, migrations, models
 
 
 def migrate_cancelled_to_voided(apps: Any, schema_editor: Any) -> None:
@@ -29,6 +30,23 @@ def backfill_reservations_for_orphaned_sessions(apps: Any, schema_editor: Any) -
         )
         session.reservation_id = reservation.pk
         session.save(update_fields=["reservation"])
+
+
+def ensure_no_duplicate_reservations(apps: Any, schema_editor: Any) -> None:
+    Session = apps.get_model("orders", "Session")
+    dupes: dict[int, list[int]] = defaultdict(list)
+    for session_id, reservation_id in Session.objects.filter(reservation_id__isnull=False).values_list(
+        "id", "reservation_id"
+    ):
+        dupes[reservation_id].append(session_id)
+
+    for reservation_id, session_ids in dupes.items():
+        if len(session_ids) > 1:
+            raise IntegrityError(
+                f"Migration aborting for data safety: Reservation {reservation_id} "
+                f"is shared by Session IDs {session_ids}. "
+                "Resolve the duplicates before converting reservation to OneToOneField."
+            )
 
 
 class Migration(migrations.Migration):
@@ -96,7 +114,9 @@ class Migration(migrations.Migration):
                 name="orders_session_status_valid",
             ),
         ),
-        # 9. Change reservation FK to OneToOneField (now safe: no nulls, no duplicates)
+        # 9. Validate no duplicate reservations before enforcing uniqueness
+        migrations.RunPython(ensure_no_duplicate_reservations, migrations.RunPython.noop),
+        # 10. Change reservation FK to OneToOneField (now safe: no nulls, no duplicates)
         migrations.AlterField(
             model_name="session",
             name="reservation",
@@ -106,7 +126,7 @@ class Migration(migrations.Migration):
                 to="reservations.reservation",
             ),
         ),
-        # 10. Update index to use opened_at
+        # 11. Update index to use opened_at
         migrations.RemoveIndex(
             model_name="session",
             name="ord_sess_rest_tbl_open_idx",
