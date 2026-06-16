@@ -282,18 +282,18 @@ def _issue_guest_token(*, cart_session_id: str | None, guest_id: str | None = No
 
 def _carry_forward_guest_id(request: Request) -> str | None:
     import jwt as pyjwt
+    from rest_framework_simplejwt.settings import api_settings
 
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return None
     raw_token = auth_header[len("Bearer ") :].strip()
-    signing_key = settings.SIMPLE_JWT.get("SIGNING_KEY") or settings.SECRET_KEY
-    algorithm = settings.SIMPLE_JWT.get("ALGORITHM", "HS256")
+    verifying_key = api_settings.VERIFYING_KEY or api_settings.SIGNING_KEY
     try:
         payload = pyjwt.decode(
             raw_token,
-            signing_key,
-            algorithms=[algorithm],
+            verifying_key,
+            algorithms=[api_settings.ALGORITHM],
             options={"verify_exp": False},
         )
     except pyjwt.PyJWTError:
