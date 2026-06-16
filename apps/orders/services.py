@@ -61,9 +61,7 @@ def _assign_guest_slot(session: CartSession, guest_identity: str) -> int:
     )
     if existing is not None:
         return existing
-    highest = CartItem.objects.filter(cart_session=session).aggregate(highest=Max("guest_slot"))[
-        "highest"
-    ]
+    highest = CartItem.objects.filter(cart_session=session).aggregate(highest=Max("guest_slot"))["highest"]
     return (highest or 0) + 1
 
 
@@ -98,9 +96,7 @@ def create_cart_session(
                     created_by=user,
                 )
         except IntegrityError:
-            session = CartSession.objects.get(
-                reservation=reservation, status=CartSessionStatus.ACTIVE
-            )
+            session = CartSession.objects.get(reservation=reservation, status=CartSessionStatus.ACTIVE)
         session.participants.add(*allowed_participants)
     return session
 
