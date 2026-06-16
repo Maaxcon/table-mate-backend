@@ -76,5 +76,8 @@ jobs:
           uv run python manage.py spectacular --validate --file /tmp/schema.yaml
           diff /tmp/schema.yaml schema.yaml
 
+      - name: Migration drift gate
+        run: uv run python manage.py makemigrations --check --dry-run
+
       - name: Run tests
         run: uv run pytest
