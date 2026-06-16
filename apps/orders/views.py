@@ -1,3 +1,4 @@
+from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 
@@ -32,15 +33,16 @@ class SessionViewSet(
         if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
             raise TableOccupiedError()
         guest_count = serializer.validated_data["guest_count"]
-        reservation = create_walk_in_reservation(
-            table=table,
-            guest_count=guest_count,
-        )
-        serializer.save(
-            restaurant_id=get_restaurant_id_from_auth(self.request),
-            opened_by=self.request.user,
-            reservation=reservation,
-        )
+        with transaction.atomic():
+            reservation = create_walk_in_reservation(
+                table=table,
+                guest_count=guest_count,
+            )
+            serializer.save(
+                restaurant_id=get_restaurant_id_from_auth(self.request),
+                opened_by=self.request.user,
+                reservation=reservation,
+            )
 
 
 @extend_schema(tags=["Orders"])
