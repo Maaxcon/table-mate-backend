@@ -52,7 +52,7 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
             user = await self._resolve_user(jwt_auth, validated_token)
             if user is None:
                 await self.accept()
-                await self.close(code=4001)
+                await self.close(code=4003)
                 return
             has_access = await self._user_has_access(session_id, user)
             if not has_access:
