@@ -118,9 +118,6 @@ async def test_authenticated_participant_receives_event_on_add(cart_context, ite
     access = await _issue_access_token(cart_context["owner"], cart_context["restaurant"].id)
     communicator = await _connect(cart_context["session"], access)
 
-    initial = await communicator.receive_json_from()
-    assert initial["type"] == "cart_updated"
-
     await sync_to_async(add_item_to_cart)(
         session=cart_context["session"],
         menu_item_id=str(item.public_id),
@@ -145,8 +142,6 @@ async def test_authenticated_participant_receives_event_on_update(cart_context, 
     access = await _issue_access_token(cart_context["owner"], cart_context["restaurant"].id)
     communicator = await _connect(cart_context["session"], access)
 
-    await communicator.receive_json_from()
-
     await sync_to_async(update_cart_item_quantity)(
         session=cart_context["session"],
         item_id=str(added.public_id),
@@ -170,8 +165,6 @@ async def test_authenticated_participant_receives_event_on_delete(cart_context, 
     access = await _issue_access_token(cart_context["owner"], cart_context["restaurant"].id)
     communicator = await _connect(cart_context["session"], access)
 
-    await communicator.receive_json_from()
-
     await sync_to_async(remove_item_from_cart)(
         session=cart_context["session"],
         item_id=str(added.public_id),
@@ -188,8 +181,6 @@ async def test_guest_receives_broadcast(cart_context, item) -> None:  # type: ig
     token = _issue_guest_token(cart_context["session"])
     communicator = await _connect(cart_context["session"], token)
 
-    await communicator.receive_json_from()
-
     await sync_to_async(add_item_to_cart)(
         session=cart_context["session"],
         menu_item_id=str(item.public_id),
@@ -202,16 +193,28 @@ async def test_guest_receives_broadcast(cart_context, item) -> None:  # type: ig
 
 
 @pytest.mark.anyio
-async def test_reconnect_sends_immediate_event(cart_context) -> None:  # type: ignore[no-untyped-def]
+async def test_connect_sends_no_unsolicited_event(cart_context) -> None:  # type: ignore[no-untyped-def]
     access = await _issue_access_token(cart_context["owner"], cart_context["restaurant"].id)
     communicator = await _connect(cart_context["session"], access)
-    first = await communicator.receive_json_from()
-    assert first["type"] == "cart_updated"
+    assert await communicator.receive_nothing(timeout=0.5)
     await communicator.disconnect()
 
-    communicator = await _connect(cart_context["session"], access)
-    reconnection_event = await communicator.receive_json_from()
-    assert reconnection_event["type"] == "cart_updated"
+
+@pytest.mark.anyio
+async def test_broadcast_carries_originating_client_id(cart_context, item) -> None:  # type: ignore[no-untyped-def]
+    token = _issue_guest_token(cart_context["session"])
+    communicator = await _connect(cart_context["session"], token)
+
+    await sync_to_async(add_item_to_cart)(
+        session=cart_context["session"],
+        menu_item_id=str(item.public_id),
+        quantity=1,
+        client_id="client-abc",
+    )
+
+    event = await communicator.receive_json_from(timeout=1)
+    assert event["type"] == "cart_updated"
+    assert event["client_id"] == "client-abc"
     await communicator.disconnect()
 
 
@@ -219,9 +222,6 @@ async def test_reconnect_sends_immediate_event(cart_context) -> None:  # type: i
 async def test_guest_connects_via_subprotocol(cart_context, item) -> None:  # type: ignore[no-untyped-def]
     token = _issue_guest_token(cart_context["session"])
     communicator = await _connect_via_subprotocol(cart_context["session"], token)
-
-    initial = await communicator.receive_json_from()
-    assert initial["type"] == "cart_updated"
 
     await sync_to_async(add_item_to_cart)(
         session=cart_context["session"],

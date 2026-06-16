@@ -55,6 +55,16 @@ def _get_guest_identity_from_request(request: Request) -> str | None:
     return None
 
 
+_MAX_CLIENT_ID_LENGTH = 64
+
+
+def _get_client_id_from_request(request: Request) -> str | None:
+    client_id = request.headers.get("X-Client-Id")
+    if not client_id:
+        return None
+    return client_id[:_MAX_CLIENT_ID_LENGTH]
+
+
 @extend_schema(tags=["Cart"])
 class CartSessionViewSet(
     GuestFallbackAuthMixin,
@@ -180,6 +190,7 @@ class CartSessionItemViewSet(
             guest_identity=_get_guest_identity_from_request(request),
             guest_slot=serializer.validated_data.get("guest_slot"),
             comment=serializer.validated_data.get("comment"),
+            client_id=_get_client_id_from_request(request),
         )
 
         result = CartItemSerializer(item, context=self.get_serializer_context())
@@ -192,6 +203,7 @@ class CartSessionItemViewSet(
             session=session,
             item_id=self.kwargs["pk"],
             user=self._get_user_or_anon(),
+            client_id=_get_client_id_from_request(request),
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -212,6 +224,7 @@ class CartSessionItemViewSet(
                 "item_id": self.kwargs["pk"],
                 "quantity": serializer.validated_data["quantity"],
                 "user": self._get_user_or_anon(),
+                "client_id": _get_client_id_from_request(request),
             },
         )
         if "comment" in serializer.validated_data:

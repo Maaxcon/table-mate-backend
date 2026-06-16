@@ -11,7 +11,6 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 from apps.authentication.authentication import TokenVersionJWTAuthentication
 from apps.authentication.models import User
-from apps.orders.broadcast import cart_event_payload
 from apps.orders.models import CartSession, CartSessionStatus
 from apps.orders.selectors import is_cart_participant
 from common.channels import TOKEN_SUBPROTOCOL, cart_group_name, extract_ws_token
@@ -71,7 +70,6 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept(subprotocol=self._accept_subprotocol)
-        await self._send_event("cart_updated")
 
     async def disconnect(self, code: int) -> None:
         if hasattr(self, "group_name"):
@@ -83,10 +81,6 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
     async def cart_event(self, message: dict[str, Any]) -> None:
         await self.send(text_data=json.dumps(message["event"]))
-
-    async def _send_event(self, event_type: str) -> None:
-        payload = cart_event_payload(self.session_id, event_type)
-        await self.send(text_data=json.dumps(payload))
 
     async def _authorize_guest(self, payload: dict[str, Any], session_id: uuid.UUID) -> bool:
         token_session = payload.get("cart_session_id")

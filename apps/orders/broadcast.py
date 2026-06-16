@@ -10,18 +10,29 @@ from common.channels import cart_group_name
 
 logger = logging.getLogger(__name__)
 
-_CART_EVENT_SCHEMA_VERSION = 1
+_CART_EVENT_SCHEMA_VERSION = 2
 
 
-def cart_event_payload(session_id: uuid.UUID, event_type: str = "cart_updated") -> dict[str, str | int]:
-    return {
+def cart_event_payload(
+    session_id: uuid.UUID,
+    event_type: str = "cart_updated",
+    client_id: str | None = None,
+) -> dict[str, str | int]:
+    payload: dict[str, str | int] = {
         "type": event_type,
         "session_id": str(session_id),
         "schema_version": _CART_EVENT_SCHEMA_VERSION,
     }
+    if client_id is not None:
+        payload["client_id"] = client_id
+    return payload
 
 
-def cart_group_send(session_id: uuid.UUID, event_type: str = "cart_updated") -> None:
+def cart_group_send(
+    session_id: uuid.UUID,
+    event_type: str = "cart_updated",
+    client_id: str | None = None,
+) -> None:
     channel_layer = get_channel_layer()
     if channel_layer is None:
         return
@@ -31,7 +42,7 @@ def cart_group_send(session_id: uuid.UUID, event_type: str = "cart_updated") -> 
             cart_group_name(session_id),
             {
                 "type": "cart.event",
-                "event": cart_event_payload(session_id, event_type),
+                "event": cart_event_payload(session_id, event_type, client_id),
             },
         )
     except Exception:

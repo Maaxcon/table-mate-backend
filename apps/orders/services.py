@@ -43,11 +43,11 @@ def _is_authenticated_user(user: User | AnonymousUser | None) -> bool:
     return user is not None and user.is_authenticated
 
 
-def _broadcast_cart_updated(session: CartSession) -> None:
+def _broadcast_cart_updated(session: CartSession, client_id: str | None = None) -> None:
     session_id = session.public_id
 
     def _emit() -> None:
-        cart_group_send(session_id)
+        cart_group_send(session_id, client_id=client_id)
 
     transaction.on_commit(_emit)
 
@@ -100,6 +100,7 @@ def add_item_to_cart(
     guest_identity: str | None = None,
     guest_slot: int | None = None,
     comment: str | None = None,
+    client_id: str | None = None,
 ) -> CartItem:
     with transaction.atomic():
         session = CartSession.objects.select_for_update().get(pk=session.pk)
@@ -168,7 +169,7 @@ def add_item_to_cart(
         if _is_authenticated_user(user):
             user = cast(User, user)
             item.added_by = user
-        _broadcast_cart_updated(session)
+        _broadcast_cart_updated(session, client_id)
     return item
 
 
@@ -177,6 +178,7 @@ def remove_item_from_cart(
     session: CartSession,
     item_id: str,
     user: User | AnonymousUser | None = None,
+    client_id: str | None = None,
 ) -> None:
     with transaction.atomic():
         session = CartSession.objects.select_for_update().get(pk=session.pk)
@@ -195,7 +197,7 @@ def remove_item_from_cart(
             raise CartItemNotFoundError(f"Cart item {item_id} not found.")
 
         item.delete()
-        _broadcast_cart_updated(session)
+        _broadcast_cart_updated(session, client_id)
 
 
 class _UnsetType:
@@ -216,6 +218,7 @@ def update_cart_item_quantity(
     user: User | AnonymousUser | None = None,
     comment: str | None | _UnsetType = _UNSET,
     guest_slot: int | None | _UnsetType = _UNSET,
+    client_id: str | None = None,
 ) -> CartItem:
     with transaction.atomic():
         session = CartSession.objects.select_for_update().get(pk=session.pk)
@@ -260,7 +263,7 @@ def update_cart_item_quantity(
             update_fields["guest_slot"] = guest_slot
         CartItem.objects.filter(pk=item.pk).update(**update_fields)
         item.refresh_from_db()
-        _broadcast_cart_updated(session)
+        _broadcast_cart_updated(session, client_id)
         return item
 
 
