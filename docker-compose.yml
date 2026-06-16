@@ -44,9 +44,12 @@ services:
       - .:/app
     environment:
       DATABASE_URL: postgresql://table_mate_user:table_mate_pass@db:5432/table_mate
+      REDIS_URL: redis://redis:6379/0
       DJANGO_SETTINGS_MODULE: core.settings.local
     depends_on:
       db:
+        condition: service_started
+      redis:
         condition: service_started
 volumes:
   postgres_data:
