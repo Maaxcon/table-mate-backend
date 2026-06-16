@@ -701,7 +701,10 @@ class TestGuestInit:
         restaurant: Restaurant,
     ) -> None:
         from apps.orders.models import CartSession
+        from apps.reservations.models import ReservationStatus
 
+        reservation.status = ReservationStatus.ACTIVE
+        reservation.save(update_fields=["status"])
         CartSession.objects.create(restaurant=restaurant, reservation=reservation)
 
         table = reservation.table
@@ -715,6 +718,38 @@ class TestGuestInit:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "access" in data
+
+    def test_guest_init_table_id_skips_stale_reservation(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        second_reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        from apps.orders.models import CartSession
+        from apps.reservations.models import ReservationStatus
+
+        table = reservation.table
+        assert table is not None
+
+        reservation.status = ReservationStatus.ACTIVE
+        reservation.save(update_fields=["status"])
+        active_session = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+
+        second_reservation.status = ReservationStatus.COMPLETED
+        second_reservation.save(update_fields=["status"])
+        CartSession.objects.create(restaurant=restaurant, reservation=second_reservation)
+
+        response = api_client.post(
+            self.url,
+            {"table_id": str(table.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        token = AccessToken(response.json()["access"])
+        assert str(token["cart_session_id"]) == str(active_session.public_id)
 
     def test_guest_init_no_active_session_returns_404(
         self,
