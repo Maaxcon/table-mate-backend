@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import uuid
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from common.channels import cart_group_name
+
+logger = logging.getLogger(__name__)
 
 _CART_EVENT_SCHEMA_VERSION = 1
 
@@ -23,13 +26,16 @@ def cart_group_send(session_id: uuid.UUID, event_type: str = "cart_updated") -> 
     if channel_layer is None:
         return
 
-    async_to_sync(channel_layer.group_send)(
-        cart_group_name(session_id),
-        {
-            "type": "cart.event",
-            "event": cart_event_payload(session_id, event_type),
-        },
-    )
+    try:
+        async_to_sync(channel_layer.group_send)(
+            cart_group_name(session_id),
+            {
+                "type": "cart.event",
+                "event": cart_event_payload(session_id, event_type),
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast cart event for session %s", session_id)
 
 
 __all__ = ["cart_event_payload", "cart_group_send"]

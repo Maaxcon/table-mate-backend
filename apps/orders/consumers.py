@@ -117,12 +117,7 @@ class CartConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
     async def _user_has_access(self, session_id: uuid.UUID, user: User) -> bool:
         def _check() -> bool:
-            session = (
-                CartSession.objects.select_related("reservation")
-                .prefetch_related("participants")
-                .filter(public_id=session_id)
-                .first()
-            )
+            session = CartSession.objects.select_related("reservation").filter(public_id=session_id).first()
             if session is None or session.status != CartSessionStatus.ACTIVE:
                 return False
             return is_cart_participant(user, session)
