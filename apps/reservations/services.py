@@ -97,7 +97,26 @@ def seat_walk_in_customer(
     opened_by: User | None = None,
 ) -> Reservation:
     now = timezone.now()
-    end_at = now + timedelta(hours=2)
+    default_end = now + timedelta(hours=2)
+
+    next_reservation = (
+        Reservation.objects.filter(
+            table=table,
+            restaurant_id=table.restaurant_id,
+            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+            start_at__gt=now,
+        )
+        .order_by("start_at")
+        .first()
+    )
+
+    if next_reservation is not None:
+        end_at = min(default_end, next_reservation.start_at)
+    else:
+        end_at = default_end
+
+    if end_at <= now:
+        raise ReservationConflictError("Table has no available time for a walk-in reservation.")
 
     reservation = Reservation.objects.create(
         table=table,
