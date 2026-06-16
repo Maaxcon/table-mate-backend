@@ -42,7 +42,7 @@ def _build_order(
         opened_by=waiter,
         guest_count=2,
         currency="UAH",
-        started_at=datetime(2026, 5, 18, 19, 30, tzinfo=UTC),
+        opened_at=datetime(2026, 5, 18, 19, 30, tzinfo=UTC),
     )
     order = Order.objects.create(
         restaurant=restaurant,
@@ -122,6 +122,7 @@ def test_create_receipt_is_idempotent(
     second = create_receipt_from_order(order)
 
     assert first is not None
+    assert second is not None
     assert first.pk == second.pk
     assert Receipt.objects.filter(order=order).count() == 1
 
@@ -157,13 +158,21 @@ def test_no_receipt_without_customer(
     waiter.save()
     # Session/reservation without a customer, order created by a waiter.
     now = timezone.now()
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=now - timedelta(hours=1),
+        end_at=now + timedelta(hours=1),
+    )
     session = Session.objects.create(
         restaurant=restaurant,
         table=table,
+        reservation=reservation,
         opened_by=waiter,
         guest_count=2,
         currency="UAH",
-        started_at=now,
+        opened_at=now,
     )
     order = Order.objects.create(
         restaurant=restaurant,

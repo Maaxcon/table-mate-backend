@@ -5,11 +5,13 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
-from apps.restaurants.models import Table, TableStatus
+from apps.authentication.models import User
+from apps.orders.models import Session
+from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
 
 from ..editor.selectors import get_available_tables
-from .models import Reservation, ReservationStatus
+from .models import Reservation, ReservationStatus, ReservationType
 
 
 def check_availability(
@@ -89,20 +91,53 @@ def create_reservation(
 
 
 @transaction.atomic
-def seat_walk_in_customer(table: Table, guest_count: int) -> Reservation:
-    table.status = TableStatus.OCCUPIED
-    table.save(update_fields=["status"])
+def seat_walk_in_customer(
+    table: Table,
+    guest_count: int,
+    opened_by: User | None = None,
+) -> Reservation:
+    now = timezone.now()
+    default_end = now + timedelta(hours=2)
 
-    end_at = timezone.now() + timedelta(hours=2)
+    next_reservation = (
+        Reservation.objects.filter(
+            table=table,
+            restaurant_id=table.restaurant_id,
+            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+            end_at__gt=now,
+        )
+        .order_by("start_at")
+        .first()
+    )
+
+    if next_reservation is not None:
+        end_at = min(default_end, next_reservation.start_at)
+    else:
+        end_at = default_end
+
+    if end_at <= now:
+        raise ReservationConflictError("Table has no available time for a walk-in reservation.")
 
     reservation = Reservation.objects.create(
         table=table,
         restaurant_id=table.restaurant_id,
         guest_count=guest_count,
-        start_at=timezone.now(),
+        start_at=now,
         end_at=end_at,
+        type=ReservationType.WALK_IN,
         status=ReservationStatus.ACTIVE,
         customer=None,
+    )
+
+    restaurant = table.restaurant
+    Session.objects.create(
+        restaurant_id=table.restaurant_id,
+        table=table,
+        reservation=reservation,
+        opened_by=opened_by,
+        guest_count=guest_count,
+        currency=restaurant.settings.currency,
+        opened_at=now,
     )
 
     return reservation
@@ -136,3 +171,37 @@ def reschedule_reservation(
 
     reservation.save()
     return reservation
+
+
+@transaction.atomic
+def activate_reservation_by_scan(
+    *,
+    table: Table,
+    user: Any,
+) -> tuple[bool, str]:
+    now = timezone.now()
+    deadline = now + timedelta(minutes=15)
+
+    reservation = (
+        Reservation.objects.select_for_update()
+        .filter(
+            table=table,
+            status=ReservationStatus.PENDING,
+            start_at__gte=now,
+            start_at__lte=deadline,
+        )
+        .first()
+    )
+
+    if not reservation:
+        return False, "No imminent reservation found for this table."
+
+    if not user.is_authenticated:
+        return False, "Authentication required to activate this reservation."
+
+    if reservation.customer_id != user.pk:
+        return False, "This reservation belongs to another guest."
+
+    reservation.status = ReservationStatus.ACTIVE
+    reservation.save(update_fields=["status"])
+    return True, "Table verified and activated."

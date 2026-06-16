@@ -1,23 +1,13 @@
-from datetime import datetime, timedelta
-from typing import Any, TypedDict
+from datetime import timedelta
+from typing import Any
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode, User
-from apps.reservations.models import Reservation, ReservationStatus
+from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
-
-
-class _ReservationData(TypedDict):
-    customer: User | None
-    table: Table | None
-    guest_count: int
-    start_at: datetime
-    end_at: datetime
-    status: str
-    notes: str | None
 
 
 class Command(BaseCommand):
@@ -55,102 +45,131 @@ class Command(BaseCommand):
                 continue
 
             now = timezone.now()
-            today_noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
 
-            reservations_data: list[_ReservationData] = [
+            Reservation.objects.filter(restaurant=restaurant).delete()
+
+            reservations_config: list[dict[str, Any]] = [
+                # ── Active reservations (ongoing now → sessions created → OCCUPIED) ──
+                # Tables 1, 2, 3, 5
                 {
-                    "customer": customers[0],
-                    "table": tables[0],
+                    "table": tables[0 % len(tables)],
+                    "customer": customers[0 % len(customers)],
                     "guest_count": 2,
-                    "start_at": today_noon + timedelta(hours=1),
-                    "end_at": today_noon + timedelta(hours=2, minutes=30),
+                    "start_at": now - timedelta(hours=1),
+                    "end_at": now + timedelta(hours=2),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": "Алергія на горіхи",
                 },
                 {
-                    "customer": customers[1 % len(customers)],
                     "table": tables[1 % len(tables)],
+                    "customer": customers[1 % len(customers)],
                     "guest_count": 4,
-                    "start_at": today_noon + timedelta(hours=2),
-                    "end_at": today_noon + timedelta(hours=3, minutes=30),
+                    "start_at": now - timedelta(minutes=45),
+                    "end_at": now + timedelta(hours=1, minutes=30),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
                 {
-                    "customer": customers[2 % len(customers)],
                     "table": tables[2 % len(tables)],
+                    "customer": customers[2 % len(customers)],
                     "guest_count": 3,
-                    "start_at": today_noon + timedelta(hours=3),
-                    "end_at": today_noon + timedelta(hours=4),
+                    "start_at": now - timedelta(minutes=90),
+                    "end_at": now + timedelta(minutes=90),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": "Дитячий стільчик",
                 },
                 {
-                    "customer": customers[0],
+                    "table": tables[4 % len(tables)],
+                    "customer": customers[0 % len(customers)],
+                    "guest_count": 5,
+                    "start_at": now - timedelta(minutes=30),
+                    "end_at": now + timedelta(hours=3),
+                    "type": ReservationType.PRE_BOOKED,
+                    "status": ReservationStatus.ACTIVE,
+                    "notes": None,
+                },
+                # ── Pending reservations (upcoming soon → no sessions → RESERVED) ──
+                # Tables 8, 9 (the two the user reported as broken)
+                {
+                    "table": tables[7 % len(tables)],
+                    "customer": customers[1 % len(customers)],
+                    "guest_count": 4,
+                    "start_at": now + timedelta(minutes=8),
+                    "end_at": now + timedelta(hours=2, minutes=30),
+                    "type": ReservationType.PRE_BOOKED,
+                    "status": ReservationStatus.PENDING,
+                    "notes": "Потрібен високий стільчик",
+                },
+                {
+                    "table": tables[8 % len(tables)],
+                    "customer": customers[2 % len(customers)],
+                    "guest_count": 3,
+                    "start_at": now + timedelta(minutes=12),
+                    "end_at": now + timedelta(hours=2),
+                    "type": ReservationType.PRE_BOOKED,
+                    "status": ReservationStatus.PENDING,
+                    "notes": None,
+                },
+                # ── Far future pending (outside 15 min window → shows FREE) ──
+                {
+                    "table": tables[9 % len(tables)],
+                    "customer": customers[0 % len(customers)],
+                    "guest_count": 4,
+                    "start_at": now + timedelta(days=2, hours=1),
+                    "end_at": now + timedelta(days=2, hours=3),
+                    "type": ReservationType.PRE_BOOKED,
+                    "status": ReservationStatus.PENDING,
+                    "notes": None,
+                },
+                # ── Past reservations (history, no effect on current floor plan) ──
+                {
                     "table": tables[3 % len(tables)],
+                    "customer": customers[1 % len(customers)],
                     "guest_count": 6,
-                    "start_at": today_noon + timedelta(days=1, hours=0),
-                    "end_at": today_noon + timedelta(days=1, hours=2),
+                    "start_at": now - timedelta(days=2),
+                    "end_at": now - timedelta(days=2) + timedelta(hours=2),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": "День народження",
                 },
                 {
-                    "customer": customers[1 % len(customers)],
-                    "table": tables[4 % len(tables)],
-                    "guest_count": 2,
-                    "start_at": today_noon + timedelta(days=1, hours=3),
-                    "end_at": today_noon + timedelta(days=1, hours=4, minutes=30),
-                    "status": ReservationStatus.ACTIVE,
-                    "notes": None,
-                },
-                {
-                    "customer": customers[0],
-                    "table": tables[5 % len(tables)],
-                    "guest_count": 5,
-                    "start_at": today_noon - timedelta(days=2, hours=1),
-                    "end_at": today_noon - timedelta(days=2),
-                    "status": ReservationStatus.ACTIVE,
-                    "notes": "Все сподобалось",
-                },
-                {
-                    "customer": customers[2 % len(customers)],
                     "table": tables[6 % len(tables)],
+                    "customer": customers[0 % len(customers)],
                     "guest_count": 8,
-                    "start_at": today_noon - timedelta(days=1, hours=2),
-                    "end_at": today_noon - timedelta(days=1),
+                    "start_at": now - timedelta(days=1),
+                    "end_at": now - timedelta(days=1) + timedelta(hours=2),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
+                # ── Cancelled reservation ──
                 {
-                    "customer": customers[1 % len(customers)],
-                    "table": tables[7 % len(tables)],
+                    "table": tables[5 % len(tables)],
+                    "customer": customers[2 % len(customers)],
                     "guest_count": 4,
-                    "start_at": today_noon - timedelta(days=3),
-                    "end_at": today_noon - timedelta(days=3, hours=-1, minutes=30),
+                    "start_at": now + timedelta(days=3),
+                    "end_at": now + timedelta(days=3, hours=2),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.CANCELLED,
                     "notes": "Захворіли",
                 },
+                # ── Future reservation (for table 1, different slot) ──
                 {
-                    "customer": customers[0],
-                    "table": tables[0],
-                    "guest_count": 2,
-                    "start_at": today_noon + timedelta(days=2, hours=1),
-                    "end_at": today_noon + timedelta(days=2, hours=2, minutes=30),
-                    "status": ReservationStatus.ACTIVE,
-                    "notes": "Веганське меню",
-                },
-                {
+                    "table": tables[0 % len(tables)],
                     "customer": customers[2 % len(customers)],
-                    "table": tables[2 % len(tables)],
                     "guest_count": 3,
-                    "start_at": today_noon + timedelta(days=2, hours=3),
-                    "end_at": today_noon + timedelta(days=2, hours=4),
+                    "start_at": now + timedelta(days=1, hours=3),
+                    "end_at": now + timedelta(days=1, hours=5),
+                    "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.ACTIVE,
                     "notes": None,
                 },
             ]
 
-            for data in reservations_data:
+            for data in reservations_config:
                 _, was_created = Reservation.objects.get_or_create(
                     restaurant=restaurant,
                     table=data["table"],

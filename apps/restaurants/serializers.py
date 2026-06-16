@@ -198,6 +198,7 @@ class ZoneSerializer(serializers.ModelSerializer[Zone]):
 class TableSerializer(serializers.ModelSerializer[Table]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     zone = ZoneSerializer(read_only=True, allow_null=True)
+    is_occupied = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Table
@@ -206,7 +207,7 @@ class TableSerializer(serializers.ModelSerializer[Table]):
             "restaurant",
             "table_number",
             "capacity",
-            "status",
+            "is_occupied",
             "shape",
             "active",
             "position_x",
@@ -215,4 +216,20 @@ class TableSerializer(serializers.ModelSerializer[Table]):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "is_occupied", "created_at", "updated_at"]
+
+
+class VerifyScanResponseSerializer(serializers.Serializer[None]):
+    valid = serializers.BooleanField()
+    detail = serializers.CharField()
+
+
+class UpcomingReservationSerializer(serializers.Serializer[None]):
+    public_id = serializers.UUIDField()
+    table_id = serializers.UUIDField()
+    start_at = serializers.DateTimeField()
+
+
+class LayoutResponseSerializer(serializers.Serializer[None]):
+    tables = TableSerializer(many=True)
+    upcoming_reservations = UpcomingReservationSerializer(many=True)

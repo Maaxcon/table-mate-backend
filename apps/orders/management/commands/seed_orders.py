@@ -19,8 +19,10 @@ from apps.orders.models import (
     Ticket,
     TicketStatus,
 )
-from apps.reservations.models import Reservation, ReservationStatus
+from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
+
+WALKIN_SESSION_COUNT = 3
 
 
 class Command(BaseCommand):
@@ -63,12 +65,12 @@ class Command(BaseCommand):
             active_reservations = list(
                 Reservation.objects.filter(
                     restaurant=restaurant,
-                    start_at__lte=now,
-                    end_at__gt=now,
-                    status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+                    table__isnull=False,
+                    status=ReservationStatus.ACTIVE,
                 ).select_related("table")
             )
 
+            sessions_from_res = 0
             for res in active_reservations:
                 if not res.table:
                     continue
@@ -82,13 +84,14 @@ class Command(BaseCommand):
                         "guest_count": res.guest_count,
                         "status": SessionStatus.OPEN,
                         "currency": "UAH",
-                        "running_total": 0,
-                        "final_total": 0,
-                        "started_at": res.start_at,
+                        "subtotal": 0,
+                        "tax": 0,
+                        "total": 0,
+                        "opened_at": now,
                     },
                 )
-                if not created:
-                    continue
+
+                sessions_from_res += 1
 
                 items_data = (
                     [
@@ -150,38 +153,64 @@ class Command(BaseCommand):
                         },
                     )
 
-                session.running_total = (
+                session.subtotal = (
                     Order.objects.filter(session=session).aggregate(total=models.Sum("total_amount"))["total"] or 0
                 )
-                session.save(update_fields=["running_total"])
+                session.tax = session.subtotal * 10 // 100
+                session.total = session.subtotal + session.tax
+                session.save(update_fields=["subtotal", "tax", "total"])
 
-            sessions_from_res = len(active_reservations)
             self.stdout.write(f"  Created {sessions_from_res} session(s) from active reservations.")
 
-            # Optionally create a walk-in session on a free table
-            free_table = (
+            # Create walk-in sessions on free tables (no open sessions AND no active/pending reservations)
+            tables_with_reservations = set(
+                Reservation.objects.filter(
+                    restaurant=restaurant,
+                    status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+                ).values_list("table_id", flat=True)
+            )
+            free_tables = list(
                 Table.objects.filter(restaurant=restaurant, active=True)
                 .exclude(
                     id__in=Session.objects.filter(restaurant=restaurant, status=SessionStatus.OPEN).values("table_id")
                 )
-                .exclude(id__in=[r.table_id for r in active_reservations if r.table_id])
-                .first()
-            )
-            if free_table and menu_items:
+                .exclude(id__in=tables_with_reservations)
+            )[:WALKIN_SESSION_COUNT]
+
+            for free_table in free_tables:
+                if not menu_items:
+                    continue
+
+                walk_in_reservation = Reservation.objects.create(
+                    restaurant=restaurant,
+                    table=free_table,
+                    guest_count=3,
+                    start_at=now - timedelta(minutes=45),
+                    end_at=now + timedelta(hours=2),
+                    type=ReservationType.WALK_IN,
+                    status=ReservationStatus.ACTIVE,
+                    created_by_staff=True,
+                    customer=None,
+                    notes=None,
+                )
+
                 session, created = Session.objects.get_or_create(
                     restaurant=restaurant,
                     table=free_table,
+                    reservation=walk_in_reservation,
                     opened_by=waiter,
                     defaults={
                         "guest_count": 3,
                         "status": SessionStatus.OPEN,
                         "currency": "UAH",
-                        "running_total": 0,
-                        "final_total": 0,
-                        "started_at": now - timedelta(minutes=45),
+                        "subtotal": 0,
+                        "tax": 0,
+                        "total": 0,
+                        "opened_at": now - timedelta(minutes=45),
                     },
                 )
-                if created and menu_items:
+
+                if menu_items:
                     mi = menu_items[0]
                     order, _ = Order.objects.get_or_create(
                         restaurant=restaurant,
@@ -222,8 +251,10 @@ class Command(BaseCommand):
                             "tax_amount": mi.price * 2 * 10 // 100,
                         },
                     )
-                    session.running_total = mi.price * 2
-                    session.save(update_fields=["running_total"])
+                    session.subtotal = mi.price * 2
+                    session.tax = session.subtotal * 10 // 100
+                    session.total = session.subtotal + session.tax
+                    session.save(update_fields=["subtotal", "tax", "total"])
                     self.stdout.write(f"  Walk-in session on Table {free_table.table_number}.")
 
 

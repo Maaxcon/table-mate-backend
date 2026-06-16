@@ -1,11 +1,13 @@
 __all__ = [
     "add_item_to_cart",
     "create_cart_session",
+    "create_walk_in_reservation",
     "remove_item_from_cart",
     "update_cart_item_quantity",
 ]
 
 
+from datetime import timedelta
 from typing import Final, cast
 
 from django.contrib.auth.models import AnonymousUser
@@ -15,11 +17,14 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
+from apps.reservations.models import Reservation, ReservationStatus, ReservationType
+from apps.restaurants.models import Table
 from common.exceptions import (
     CartItemNotFoundError,
     CartSessionClosedError,
     MenuItemNotFoundError,
     MenuItemUnavailableError,
+    ReservationConflictError,
     ReservationNotFoundError,
 )
 
@@ -212,3 +217,43 @@ def update_cart_item_quantity(
         CartItem.objects.filter(pk=item.pk).update(**update_fields)
         item.refresh_from_db()
         return item
+
+
+@transaction.atomic
+def create_walk_in_reservation(
+    *,
+    table: Table,
+    guest_count: int,
+) -> Reservation:
+    now = timezone.now()
+    default_end = now + timedelta(hours=2)
+
+    next_reservation = (
+        Reservation.objects.filter(
+            table=table,
+            restaurant_id=table.restaurant_id,
+            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+            end_at__gt=now,
+        )
+        .order_by("start_at")
+        .first()
+    )
+
+    if next_reservation is not None:
+        end_at = min(default_end, next_reservation.start_at)
+    else:
+        end_at = default_end
+
+    if end_at <= now:
+        raise ReservationConflictError("Table has no available time for a walk-in reservation.")
+
+    return Reservation.objects.create(
+        table=table,
+        restaurant_id=table.restaurant_id,
+        guest_count=guest_count,
+        start_at=now,
+        end_at=end_at,
+        type=ReservationType.WALK_IN,
+        status=ReservationStatus.ACTIVE,
+        customer=None,
+    )

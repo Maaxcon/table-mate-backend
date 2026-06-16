@@ -1,16 +1,19 @@
+from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
+from common.exceptions import TableOccupiedError
 
-from .models import Order, OrderItem, Session, Ticket
+from .models import Order, OrderItem, Session, SessionStatus, Ticket
 from .serializers import (
     OrderItemSerializer,
     OrderSerializer,
     SessionSerializer,
     TicketSerializer,
 )
+from .services import create_walk_in_reservation
 
 
 @extend_schema(tags=["Orders"])
@@ -22,14 +25,24 @@ class SessionViewSet(
     queryset = Session.objects.all()
     serializer_class = SessionSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
-    filterset_fields = ["table", "reservation", "opened_by", "status", "currency"]
-    ordering_fields = ["created_at", "updated_at", "started_at", "closed_at"]
+    filterset_fields = ["table", "table__public_id", "reservation", "opened_by", "status", "currency"]
+    ordering_fields = ["created_at", "updated_at", "opened_at"]
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
-        serializer.save(
-            restaurant_id=get_restaurant_id_from_auth(self.request),
-            opened_by=self.request.user,
-        )
+        table = serializer.validated_data["table"]
+        if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+            raise TableOccupiedError()
+        guest_count = serializer.validated_data["guest_count"]
+        with transaction.atomic():
+            reservation = create_walk_in_reservation(
+                table=table,
+                guest_count=guest_count,
+            )
+            serializer.save(
+                restaurant_id=get_restaurant_id_from_auth(self.request),
+                opened_by=self.request.user,
+                reservation=reservation,
+            )
 
 
 @extend_schema(tags=["Orders"])
@@ -43,6 +56,7 @@ class OrderViewSet(
     http_method_names = ["get", "post", "patch", "head", "options"]
     filterset_fields = [
         "session",
+        "session__public_id",
         "created_by",
         "created_by_source",
         "source",
@@ -92,6 +106,7 @@ class OrderItemViewSet(
     http_method_names = ["get", "post", "patch", "head", "options"]
     filterset_fields = [
         "order",
+        "order__public_id",
         "ticket",
         "menu_item",
         "status",

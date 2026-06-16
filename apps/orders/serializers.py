@@ -26,17 +26,12 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
     table: PublicIdRelatedField[Table] = PublicIdRelatedField(
         queryset=Table.objects.all(),
     )
-    reservation: PublicIdRelatedField[Reservation] = PublicIdRelatedField(
-        queryset=Reservation.objects.all(),
-        allow_null=True,
-        required=False,
-    )
+    reservation: PublicIdRelatedField[Reservation] = PublicIdRelatedField(read_only=True)
     opened_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         _scope_to_request_restaurant(self.fields["table"], self.context)
-        _scope_to_request_restaurant(self.fields["reservation"], self.context)
 
     class Meta:
         model = Session
@@ -49,10 +44,10 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
             "guest_count",
             "status",
             "currency",
-            "running_total",
-            "final_total",
-            "started_at",
-            "closed_at",
+            "subtotal",
+            "tax",
+            "total",
+            "opened_at",
             "created_at",
             "updated_at",
         ]
@@ -139,6 +134,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         queryset=MenuItem.objects.all(),
     )
     voided_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
+    menu_item_name = serializers.CharField(source="menu_item.name", read_only=True)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -154,6 +150,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "order",
             "ticket",
             "menu_item",
+            "menu_item_name",
             "guest_slot",
             "quantity",
             "comment",

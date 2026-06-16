@@ -27,7 +27,7 @@ from .serializers import (
     MeUpdateSerializer,
     UserSerializer,
 )
-from .services import google_authenticate, issue_access_token, issue_tokens, issue_tokens_with_restaurant
+from .services import google_authenticate, issue_tokens, issue_tokens_with_restaurant
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -96,10 +96,6 @@ class GoogleAuthView(APIView):
             )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        if user.role != RoleCode.CUSTOMER:
-            access = issue_access_token(user)
-            return Response({"access": access, "needs_restaurant_context": True})
 
         access, refresh = issue_tokens(user)
         response = Response({"access": access})

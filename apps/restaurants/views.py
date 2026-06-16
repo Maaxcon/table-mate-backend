@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsAdmin, IsStaff
 from apps.menu.models import Menu, MenuCategory, MenuItem
+from apps.reservations.services import activate_reservation_by_scan
 from common.api import (
     PublicLookupMixin,
     PublicRestaurantQueryMixin,
@@ -24,17 +25,19 @@ from common.api import (
     require_restaurant_id_from_auth,
 )
 
-from . import services
+from . import selectors, services
 from .models import Restaurant, RestaurantSettings, Table, Zone
 from .serializers import (
     AdminOverviewSerializer,
     BookingSettingsSerializer,
     EmployeeCreateSerializer,
     EmployeeSerializer,
+    LayoutResponseSerializer,
     PublicRestaurantSerializer,
     RestaurantSerializer,
     RestaurantSettingsSerializer,
     TableSerializer,
+    VerifyScanResponseSerializer,
     ZoneSerializer,
 )
 
@@ -75,6 +78,44 @@ class AdminOverviewView(APIView):
             "staff_active": staff.filter(is_active=True).count(),
         }
         return Response(AdminOverviewSerializer(data).data)
+
+
+@extend_schema(tags=["Restaurants"])
+class VerifyTableScanView(APIView):
+    permission_classes = [AllowAny]
+    serializer_class = None
+
+    @extend_schema(
+        summary="Verify a table QR scan",
+        description="Checks for an imminent PENDING reservation for the scanned table. "
+        "Requires authentication. If found and owned by the caller, flips the reservation to ACTIVE.",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "table_id": {"type": "string", "format": "uuid", "description": "Table public ID"},
+                },
+                "required": ["table_id"],
+            }
+        },
+        responses={200: VerifyScanResponseSerializer, 401: VerifyScanResponseSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        table_id = request.data.get("table_id")
+        if not table_id:
+            raise ValidationError("table_id is required.")
+
+        try:
+            table = Table.objects.get(public_id=table_id, active=True)
+        except Table.DoesNotExist:
+            raise ValidationError("Table not found.") from None
+
+        valid, detail = activate_reservation_by_scan(table=table, user=request.user)
+
+        if not valid and "Authentication" in detail:
+            return Response({"valid": False, "detail": detail}, status=401)
+
+        return Response({"valid": valid, "detail": detail})
 
 
 @extend_schema(tags=["Restaurants"])
@@ -140,9 +181,11 @@ class RestaurantViewSet(
 
 class _PublicRestaurantScopedViewSetMixin(PublicRestaurantQueryMixin):
     def get_restaurant_id(self) -> int | None:
-        restaurant_id = get_restaurant_id_from_auth(self.request)  # type: ignore[attr-defined]
-        if restaurant_id is not None:
-            return restaurant_id
+        user = getattr(self.request, "user", None)  # type: ignore[attr-defined]
+        if user is not None and user.is_authenticated and user.role != RoleCode.CUSTOMER:
+            restaurant_id = get_restaurant_id_from_auth(self.request)  # type: ignore[attr-defined]
+            if restaurant_id is not None:
+                return restaurant_id
         return super().get_restaurant_id()
 
 
@@ -270,11 +313,33 @@ class TableViewSet(
     permission_classes = [AllowAny]
     queryset = Table.objects.select_related("zone").all()
     serializer_class = TableSerializer
-    filterset_fields = ["status", "capacity", "zone__public_id"]
+    filterset_fields = ["capacity", "zone__public_id"]
 
     def get_queryset(self) -> QuerySet[Table]:
-        qs = super().get_queryset()
         restaurant_id = self.get_restaurant_id()
-        if restaurant_id is not None:
-            return qs.filter(restaurant_id=restaurant_id)
-        return qs.none()
+        if restaurant_id is None:
+            return Table.objects.none()
+        return selectors.get_tables_with_occupancy(restaurant_id)
+
+    @extend_schema(
+        summary="Tables layout with upcoming reservations",
+        description="Returns all active tables and today's PENDING reservations for the floor plan.",
+        responses=LayoutResponseSerializer,
+    )
+    @action(detail=False, methods=["get"])
+    def layout(self, request: Request) -> Response:
+        restaurant_id = self.get_restaurant_id()
+        if restaurant_id is None:
+            return Response({"tables": [], "upcoming_reservations": []})
+
+        tables_qs = self.get_queryset().filter(active=True)
+        tables_serializer = self.get_serializer(tables_qs, many=True)
+
+        layout_data = selectors.get_layout_data(restaurant_id)
+
+        return Response(
+            {
+                "tables": tables_serializer.data,
+                "upcoming_reservations": layout_data["upcoming_reservations"],
+            }
+        )

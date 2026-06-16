@@ -43,13 +43,12 @@ class EditorTableViewSet(
     queryset = Table.objects.all()
     serializer_class = EditorTableSerializer
     http_method_names = ["get", "patch", "head", "options"]
-    filterset_fields = ["status", "capacity", "shape", "active"]
+    filterset_fields = ["capacity", "shape", "active"]
     ordering_fields = [
         "created_at",
         "updated_at",
         "table_number",
         "capacity",
-        "status",
     ]
 
     def get_queryset(self) -> QuerySet[Table]:

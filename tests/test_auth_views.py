@@ -67,7 +67,7 @@ class TestGoogleAuthView:
         assert "refresh_token" in response.cookies
         assert "needs_restaurant_context" not in response.data
 
-    def test_staff_gets_partial_token_without_refresh_cookie(self) -> None:
+    def test_staff_gets_refresh_cookie_and_restaurant_id_in_token(self) -> None:
         restaurant = Restaurant.objects.create(name="Test Restaurant")
         user = UserFactory.create(role=RoleCode.WAITER, restaurant=restaurant)
         with patch("apps.authentication.views.google_authenticate", return_value=user):
@@ -77,9 +77,12 @@ class TestGoogleAuthView:
                 format="json",
             )
         assert response.status_code == 200
-        assert response.data["needs_restaurant_context"] is True
         assert "access" in response.data
-        assert "refresh_token" not in response.cookies
+        assert "refresh_token" in response.cookies
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        token = AccessToken(response.data["access"])
+        assert token.payload.get("restaurant_id") == restaurant.pk
 
 
 @pytest.mark.django_db
@@ -136,6 +139,9 @@ class TestGoogleContextView:
 
         assert response.status_code == 400
 
+
+@pytest.mark.django_db
+class TestTokenClaims:
     def test_full_token_contains_restaurant_id(self) -> None:
         from rest_framework_simplejwt.tokens import AccessToken, Token
 

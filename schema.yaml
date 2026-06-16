@@ -330,18 +330,6 @@ paths:
           * `round` - Round
           * `square` - Square
           * `booth` - Booth
-      - in: query
-        name: status
-        schema:
-          type: string
-          enum:
-          - free
-          - occupied
-          - reserved
-        description: |-
-          * `free` - Free
-          * `reserved` - Reserved
-          * `occupied` - Occupied
       tags:
       - Editor
       security:
@@ -1535,6 +1523,11 @@ paths:
         name: order
         schema:
           type: integer
+      - in: query
+        name: order__public_id
+        schema:
+          type: string
+          format: uuid
       - name: ordering
         required: false
         in: query
@@ -1726,6 +1719,11 @@ paths:
         schema:
           type: integer
       - in: query
+        name: session__public_id
+        schema:
+          type: string
+          format: uuid
+      - in: query
         name: source
         schema:
           type: string
@@ -1874,17 +1872,22 @@ paths:
         schema:
           type: string
           enum:
-          - cancelled
           - closed
           - open
+          - voided
         description: |-
           * `open` - Open
           * `closed` - Closed
-          * `cancelled` - Cancelled
+          * `voided` - Voided
       - in: query
         name: table
         schema:
           type: integer
+      - in: query
+        name: table__public_id
+        schema:
+          type: string
+          format: uuid
       tags:
       - Orders
       security:
@@ -2816,18 +2819,6 @@ paths:
         schema:
           type: integer
       - in: query
-        name: status
-        schema:
-          type: string
-          enum:
-          - free
-          - occupied
-          - reserved
-        description: |-
-          * `free` - Free
-          * `reserved` - Reserved
-          * `occupied` - Occupied
-      - in: query
         name: zone__public_id
         schema:
           type: string
@@ -2867,6 +2858,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Table'
+          description: ''
+  /api/restaurants/tables/layout/:
+    get:
+      operationId: restaurants_tables_layout_retrieve
+      description: Returns all active tables and today's PENDING reservations for
+        the floor plan.
+      summary: Tables layout with upcoming reservations
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LayoutResponse'
+          description: ''
+  /api/restaurants/tables/verify-scan/:
+    post:
+      operationId: restaurants_tables_verify_scan_create
+      description: Checks for an imminent PENDING reservation for the scanned table.
+        Requires authentication. If found and owned by the caller, flips the reservation
+        to ACTIVE.
+      summary: Verify a table QR scan
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                table_id:
+                  type: string
+                  format: uuid
+                  description: Table public ID
+              required:
+              - table_id
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyScanResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyScanResponse'
           description: ''
   /api/restaurants/zones/:
     get:
@@ -3318,8 +3366,6 @@ components:
         capacity:
           type: integer
           readOnly: true
-        status:
-          $ref: '#/components/schemas/TableStatus'
         shape:
           $ref: '#/components/schemas/TableShape'
         active:
@@ -3495,6 +3541,20 @@ components:
       - restaurant
       - updated_at
       - version
+    LayoutResponse:
+      type: object
+      properties:
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/Table'
+        upcoming_reservations:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpcomingReservation'
+      required:
+      - tables
+      - upcoming_reservations
     MeUpdate:
       type: object
       description: |-
@@ -3762,6 +3822,9 @@ components:
         menu_item:
           type: string
           format: uuid
+        menu_item_name:
+          type: string
+          readOnly: true
         guest_slot:
           type: integer
           maximum: 2147483647
@@ -3818,6 +3881,7 @@ components:
       - created_at
       - guest_slot
       - menu_item
+      - menu_item_name
       - order
       - public_id
       - quantity
@@ -4484,8 +4548,6 @@ components:
         capacity:
           type: integer
           readOnly: true
-        status:
-          $ref: '#/components/schemas/TableStatus'
         shape:
           $ref: '#/components/schemas/TableShape'
         active:
@@ -4634,6 +4696,9 @@ components:
         menu_item:
           type: string
           format: uuid
+        menu_item_name:
+          type: string
+          readOnly: true
         guest_slot:
           type: integer
           maximum: 2147483647
@@ -4715,6 +4780,8 @@ components:
         customer_name:
           type: string
           readOnly: true
+        type:
+          $ref: '#/components/schemas/TypeEnum'
         guest_count:
           type: integer
           maximum: 2147483647
@@ -4727,6 +4794,8 @@ components:
           format: date-time
         status:
           $ref: '#/components/schemas/ReservationStatus'
+        created_by_staff:
+          type: boolean
         notes:
           type: string
           nullable: true
@@ -4851,7 +4920,7 @@ components:
         reservation:
           type: string
           format: uuid
-          nullable: true
+          readOnly: true
         opened_by:
           type: string
           format: uuid
@@ -4865,21 +4934,21 @@ components:
         currency:
           type: string
           maxLength: 3
-        running_total:
+        subtotal:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
-        final_total:
+        tax:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
-        started_at:
+        total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        opened_at:
           type: string
           format: date-time
-        closed_at:
-          type: string
-          format: date-time
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -5233,6 +5302,8 @@ components:
         customer_name:
           type: string
           readOnly: true
+        type:
+          $ref: '#/components/schemas/TypeEnum'
         guest_count:
           type: integer
           maximum: 2147483647
@@ -5245,6 +5316,8 @@ components:
           format: date-time
         status:
           $ref: '#/components/schemas/ReservationStatus'
+        created_by_staff:
+          type: boolean
         notes:
           type: string
           nullable: true
@@ -5433,7 +5506,7 @@ components:
         reservation:
           type: string
           format: uuid
-          nullable: true
+          readOnly: true
         opened_by:
           type: string
           format: uuid
@@ -5447,21 +5520,21 @@ components:
         currency:
           type: string
           maxLength: 3
-        running_total:
+        subtotal:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
-        final_total:
+        tax:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
-        started_at:
+        total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        opened_at:
           type: string
           format: date-time
-        closed_at:
-          type: string
-          format: date-time
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -5474,22 +5547,23 @@ components:
       - created_at
       - currency
       - guest_count
+      - opened_at
       - opened_by
       - public_id
+      - reservation
       - restaurant
-      - started_at
       - table
       - updated_at
     SessionStatusEnum:
       enum:
       - open
       - closed
-      - cancelled
+      - voided
       type: string
       description: |-
         * `open` - Open
         * `closed` - Closed
-        * `cancelled` - Cancelled
+        * `voided` - Voided
     SourceEnum:
       enum:
       - waiter_manual
@@ -5516,8 +5590,9 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
-        status:
-          $ref: '#/components/schemas/TableStatus'
+        is_occupied:
+          type: boolean
+          readOnly: true
         shape:
           $ref: '#/components/schemas/TableShape'
         active:
@@ -5548,6 +5623,7 @@ components:
       required:
       - capacity
       - created_at
+      - is_occupied
       - public_id
       - restaurant
       - table_number
@@ -5585,16 +5661,6 @@ components:
         * `round` - Round
         * `square` - Square
         * `booth` - Booth
-    TableStatus:
-      enum:
-      - free
-      - reserved
-      - occupied
-      type: string
-      description: |-
-        * `free` - Free
-        * `reserved` - Reserved
-        * `occupied` - Occupied
     Ticket:
       type: object
       properties:
@@ -5688,6 +5754,30 @@ components:
       required:
       - access
       - refresh
+    TypeEnum:
+      enum:
+      - pre_booked
+      - walk_in
+      type: string
+      description: |-
+        * `pre_booked` - Pre-booked
+        * `walk_in` - Walk-in
+    UpcomingReservation:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+        table_id:
+          type: string
+          format: uuid
+        start_at:
+          type: string
+          format: date-time
+      required:
+      - public_id
+      - start_at
+      - table_id
     User:
       type: object
       properties:
@@ -5731,6 +5821,16 @@ components:
       - public_id
       - restaurant_public_id
       - updated_at
+    VerifyScanResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        detail:
+          type: string
+      required:
+      - detail
+      - valid
     WorkingHours:
       type: object
       description: |-

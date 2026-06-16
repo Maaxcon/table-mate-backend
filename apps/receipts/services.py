@@ -77,7 +77,7 @@ def create_receipt_from_order(order: Order) -> Receipt | None:
             "restaurant_id": order.restaurant_id,
             "payment": payment,
             "order_number": f"TM-{order.created_at:%Y%m%d}-{order.id}",
-            "visited_at": session.started_at or order.created_at,
+            "visited_at": session.opened_at or order.created_at,
             "currency": order.currency,
             "table_label": f"Table {session.table.table_number}" if session.table_id else "",
             "server_name": _full_name(session.opened_by),
