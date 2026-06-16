@@ -1,5 +1,6 @@
 from datetime import timedelta
 from typing import Any, cast
+from uuid import uuid4
 
 from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -225,6 +226,7 @@ class LogoutView(APIView):
 
 class GuestInitView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes: list[type] = []
     throttle_scope = "auth"
 
     @extend_schema(
@@ -259,19 +261,44 @@ class GuestInitView(APIView):
             )
         cart_session_id = str(session.public_id)
 
-        token = _issue_guest_token(cart_session_id=cart_session_id)
+        guest_id = _carry_forward_guest_id(request)
+        token = _issue_guest_token(cart_session_id=cart_session_id, guest_id=guest_id)
         return Response({"access": token})
 
 
-def _issue_guest_token(*, cart_session_id: str | None) -> str:
+def _issue_guest_token(*, cart_session_id: str | None, guest_id: str | None = None) -> str:
     from rest_framework_simplejwt.tokens import AccessToken
 
     token = AccessToken()
     token.payload["is_guest"] = True
+    token.payload["guest_id"] = guest_id or str(uuid4())
     if cart_session_id:
         token.payload["cart_session_id"] = cart_session_id
     token.set_exp(lifetime=timedelta(hours=4))
     return str(token)
+
+
+def _carry_forward_guest_id(request: Request) -> str | None:
+    import jwt as pyjwt
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    raw_token = auth_header[len("Bearer ") :].strip()
+    signing_key = settings.SIMPLE_JWT.get("SIGNING_KEY") or settings.SECRET_KEY
+    algorithm = settings.SIMPLE_JWT.get("ALGORITHM", "HS256")
+    try:
+        payload = pyjwt.decode(
+            raw_token,
+            signing_key,
+            algorithms=[algorithm],
+            options={"verify_exp": False},
+        )
+    except pyjwt.PyJWTError:
+        return None
+    if payload.get("is_guest"):
+        return payload.get("guest_id")
+    return None
 
 
 __all__ = [

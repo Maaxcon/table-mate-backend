@@ -69,7 +69,7 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
         auth = getattr(request, "auth", None)
         payload = getattr(auth, "payload", None)
         if payload is not None and payload.get("is_guest"):
-            return obj.guest_identity is not None and obj.guest_identity == payload.get("jti")
+            return obj.guest_identity is not None and obj.guest_identity == payload.get("guest_id")
         user = getattr(request, "user", None)
         return bool(user is not None and not user.is_anonymous and obj.added_by_id == user.id)
 

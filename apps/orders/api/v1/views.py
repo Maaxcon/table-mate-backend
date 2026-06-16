@@ -51,7 +51,7 @@ def _get_guest_identity_from_request(request: Request) -> str | None:
     if auth is not None:
         payload = getattr(auth, "payload", {})
         if payload.get("is_guest"):
-            return payload.get("jti")
+            return payload.get("guest_id")
     return None
 
 

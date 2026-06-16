@@ -1004,7 +1004,72 @@ class TestGuestTokenEdgeCases:
         response = guest_client.get(url)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_guest_reinit_same_device_id(
+    def test_guest_reinit_carries_identity_forward(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        from apps.orders.models import CartSession
+        from tests.conftest import MenuItemFactory
+
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        second_item = cast(
+            MenuItem,
+            MenuItemFactory(restaurant=restaurant, menu__restaurant=restaurant, is_available=True),
+        )
+
+        resp1 = api_client.post(
+            reverse("guest-init"),
+            {"reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+        assert resp1.status_code == status.HTTP_200_OK
+        token1 = resp1.json()["access"]
+
+        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        client1 = APIClient()
+        client1.credentials(HTTP_AUTHORIZATION=f"Bearer {token1}")
+        add1 = client1.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        assert add1.status_code == status.HTTP_201_CREATED
+        assert add1.json()["is_mine"] is True
+        slot = add1.json()["guest_slot"]
+
+        resp2 = api_client.post(
+            reverse("guest-init"),
+            {"reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token1}",
+        )
+        assert resp2.status_code == status.HTTP_200_OK
+        token2 = resp2.json()["access"]
+        assert token2 != token1
+
+        client2 = APIClient()
+        client2.credentials(HTTP_AUTHORIZATION=f"Bearer {token2}")
+
+        listed = client2.get(url)
+        assert listed.status_code == status.HTTP_200_OK
+        first = next(i for i in listed.json()["results"] if i["public_id"] == add1.json()["public_id"])
+        assert first["is_mine"] is True
+
+        add2 = client2.post(
+            url,
+            {"menu_item": str(second_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        assert add2.status_code == status.HTTP_201_CREATED
+        assert add2.json()["is_mine"] is True
+        assert add2.json()["guest_slot"] == slot
+
+    def test_guest_reinit_without_token_gets_new_identity(
         self,
         api_client: Client,
         reservation: Reservation,
@@ -1016,33 +1081,34 @@ class TestGuestTokenEdgeCases:
         from apps.orders.models import CartSession
 
         session = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
 
         resp1 = api_client.post(
             reverse("guest-init"),
-            {"device_id": "device-reinit", "reservation_id": str(reservation.public_id)},
+            {"reservation_id": str(reservation.public_id)},
             content_type="application/json",
         )
-        assert resp1.status_code == status.HTTP_200_OK
         token1 = resp1.json()["access"]
+        client1 = APIClient()
+        client1.credentials(HTTP_AUTHORIZATION=f"Bearer {token1}")
+        add1 = client1.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        assert add1.status_code == status.HTTP_201_CREATED
 
         resp2 = api_client.post(
             reverse("guest-init"),
-            {"device_id": "device-reinit", "reservation_id": str(reservation.public_id)},
+            {"reservation_id": str(reservation.public_id)},
             content_type="application/json",
         )
-        assert resp2.status_code == status.HTTP_200_OK
         token2 = resp2.json()["access"]
-
-        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
-        for token in (token1, token2):
-            client = APIClient()
-            client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
-            response = client.post(
-                url,
-                {"menu_item": str(cart_item.public_id), "quantity": 1},
-                content_type="application/json",
-            )
-            assert response.status_code == status.HTTP_201_CREATED
+        client2 = APIClient()
+        client2.credentials(HTTP_AUTHORIZATION=f"Bearer {token2}")
+        listed = client2.get(url)
+        first = next(i for i in listed.json()["results"] if i["public_id"] == add1.json()["public_id"])
+        assert first["is_mine"] is False
 
 
 @pytest.mark.django_db(databases=["default"])
