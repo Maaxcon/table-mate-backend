@@ -1,18 +1,23 @@
 __all__ = [
     "add_item_to_cart",
     "create_cart_session",
+    "create_order_with_items",
     "create_walk_in_reservation",
+    "open_session",
     "remove_item_from_cart",
     "update_cart_item_quantity",
+    "update_session_status",
+    "void_order_item",
 ]
 
 
-from datetime import timedelta
-from typing import Final, cast
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Any, Final, cast
 
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
-from django.db.models import F, Max
+from django.db.models import F, Max, Sum
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -23,13 +28,30 @@ from apps.restaurants.models import Table
 from common.exceptions import (
     CartItemNotFoundError,
     CartSessionClosedError,
+    DomainError,
     MenuItemNotFoundError,
     MenuItemUnavailableError,
     ReservationConflictError,
     ReservationNotFoundError,
 )
+from common.hall_events import emit_hall_table_status_changed
+from common.notification_events import emit_cart_created
 
-from .models import CartItem, CartSession, CartSessionStatus
+from .models import (
+    CartItem,
+    CartSession,
+    CartSessionStatus,
+    Order,
+    OrderItem,
+    OrderItemStatus,
+    OrderSource,
+    OrderStatus,
+    Session,
+    SessionStatus,
+    Ticket,
+    TicketStatus,
+    VoidReason,
+)
 from .selectors import (
     _resolve_allowed_reservation_participant_ids,
     get_cart_item,
@@ -98,6 +120,13 @@ def create_cart_session(
         except IntegrityError:
             session = CartSession.objects.get(reservation=reservation, status=CartSessionStatus.ACTIVE)
         session.participants.add(*allowed_participants)
+
+    emit_cart_created(
+        restaurant_id,
+        session_id=str(session.public_id),
+        table_number=reservation.table.table_number if reservation.table else "",
+        guest_name=user.get_full_name() if user.get_full_name() else None,
+    )
     return session
 
 
@@ -315,3 +344,205 @@ def create_walk_in_reservation(
         status=ReservationStatus.ACTIVE,
         customer=None,
     )
+
+
+_SESSION_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    SessionStatus.OPEN: {SessionStatus.CLOSED, SessionStatus.VOIDED},
+}
+
+
+@transaction.atomic
+def update_session_status(
+    session: Session,
+    *,
+    new_status: str,
+    actor: User,
+) -> Session:
+    if new_status not in SessionStatus.values:
+        raise DomainError(f"Invalid session status: {new_status}.")
+
+    if session.status in _SESSION_STATUS_TRANSITIONS:
+        if new_status not in _SESSION_STATUS_TRANSITIONS[session.status]:
+            raise ReservationConflictError(f"Cannot transition session from {session.status} to {new_status}.")
+    elif new_status != session.status:
+        raise ReservationConflictError(f"Cannot transition session from terminal state {session.status}.")
+
+    previous_status = session.status
+    session.status = new_status
+    session.save(update_fields=["status", "updated_at"])
+
+    if previous_status == SessionStatus.OPEN and new_status != SessionStatus.OPEN:
+        table = session.table
+        transaction.on_commit(
+            lambda: emit_hall_table_status_changed(
+                session.restaurant_id,
+                table_id=str(table.public_id),
+                previous_status="occupied",
+                current_status="free",
+                session_id=str(session.public_id),
+                actor=actor,
+            )
+        )
+
+    return session
+
+
+@transaction.atomic
+def open_session(
+    *,
+    restaurant_id: int,
+    table: Table,
+    guest_count: int,
+    opened_by: User,
+    currency: str,
+    opened_at: str | datetime,
+    actor: User,
+) -> Session:
+    from common.exceptions import TableOccupiedError
+
+    if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+        raise TableOccupiedError()
+
+    reservation = create_walk_in_reservation(
+        table=table,
+        guest_count=guest_count,
+    )
+
+    session = Session.objects.create(
+        restaurant_id=restaurant_id,
+        table=table,
+        reservation=reservation,
+        opened_by=opened_by,
+        guest_count=guest_count,
+        status=SessionStatus.OPEN,
+        currency=currency,
+        opened_at=opened_at,
+    )
+
+    transaction.on_commit(
+        lambda: emit_hall_table_status_changed(
+            restaurant_id,
+            table_id=str(table.public_id),
+            previous_status="free",
+            current_status="occupied",
+            session_id=str(session.public_id),
+            actor=actor,
+        )
+    )
+
+    return session
+
+
+@transaction.atomic
+def create_order_with_items(
+    *,
+    session: Session,
+    items: list[dict[str, Any]],
+    actor: User,
+) -> Order:
+    if session.status != SessionStatus.OPEN:
+        raise ReservationConflictError("Cannot add items to a session that is not open.")
+
+    order = Order.objects.create(
+        restaurant=session.restaurant,
+        session=session,
+        created_by=actor,
+        created_by_source="staff",
+        source=OrderSource.WAITER_MANUAL,
+        status=OrderStatus.SUBMITTED,
+        currency=session.currency,
+    )
+
+    ticket = Ticket.objects.create(
+        restaurant=session.restaurant,
+        session=session,
+        order=order,
+        status=TicketStatus.INCOMING,
+        injected_at=timezone.now(),
+    )
+
+    total = 0
+    for item_data in items:
+        menu_item = item_data["menu_item"]
+        guest_slot = item_data.get("guest_slot", 1)
+        quantity = item_data.get("quantity", 1)
+        comment = item_data.get("comment")
+        unit_price = menu_item.price
+        total_price = unit_price * quantity
+        total += total_price
+
+        OrderItem.objects.create(
+            restaurant=session.restaurant,
+            order=order,
+            ticket=ticket,
+            menu_item=menu_item,
+            guest_slot=guest_slot,
+            quantity=quantity,
+            comment=comment,
+            unit_price=unit_price,
+            total_price=total_price,
+        )
+
+    order.total_amount = total
+    order.save(update_fields=["total_amount"])
+
+    agg = (
+        OrderItem.objects.filter(
+            order__session=session,
+        )
+        .exclude(
+            status=OrderItemStatus.VOIDED,
+        )
+        .aggregate(
+            subtotal=Sum("total_price"),
+            tax=Sum("tax_amount"),
+        )
+    )
+
+    session.subtotal = agg["subtotal"] or 0
+    session.tax = agg["tax"] or 0
+    session.total = session.subtotal + session.tax
+    session.save(update_fields=["subtotal", "tax", "total"])
+
+    return order
+
+
+@transaction.atomic
+def void_order_item(
+    order_item: OrderItem,
+    *,
+    actor: User,
+    void_reason_code: str,
+    note: str | None = None,
+) -> OrderItem:
+    if order_item.status == OrderItemStatus.VOIDED:
+        raise ValueError("Order item is already voided.")
+
+    try:
+        void_reason = VoidReason.objects.get(code=void_reason_code)
+    except VoidReason.DoesNotExist:
+        raise ValueError(f"Unknown void reason code: {void_reason_code}") from None
+
+    order_item.status = OrderItemStatus.VOIDED
+    order_item.voided_at = timezone.now()
+    order_item.voided_by = actor
+    order_item.void_reason = void_reason
+    order_item.void_reason_note = note
+    order_item.save(
+        update_fields=[
+            "status",
+            "voided_at",
+            "voided_by",
+            "void_reason",
+            "void_reason_note",
+        ]
+    )
+
+    order = order_item.order
+    remaining = (
+        OrderItem.objects.filter(order=order).exclude(status=OrderItemStatus.VOIDED).aggregate(total=Sum("total_price"))
+    )["total"]
+    order.total_amount = remaining if remaining is not None else Decimal(0)
+    order.save(update_fields=["total_amount"])
+
+    return order_item
