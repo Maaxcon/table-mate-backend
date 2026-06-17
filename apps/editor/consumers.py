@@ -15,7 +15,13 @@ _FLOOR_ALLOWED_ROLES: frozenset[str] = frozenset(
 
 class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
-        user, restaurant_id = await authenticate_websocket(self.scope)
+        try:
+            user, restaurant_id = await authenticate_websocket(self.scope)
+        except Exception:
+            await self.accept()
+            await self.close(code=4001)
+            return
+
         if user is None or restaurant_id is None:
             await self.accept()
             await self.close(code=4001)
@@ -52,7 +58,13 @@ def _filter_event_for_floor(event: dict[str, object]) -> dict[str, object]:  # t
 
 class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
-        user, restaurant_id = await authenticate_websocket(self.scope)
+        try:
+            user, restaurant_id = await authenticate_websocket(self.scope)
+        except Exception:
+            await self.accept()
+            await self.close(code=4001)
+            return
+
         if user is None or restaurant_id is None:
             await self.accept()
             await self.close(code=4001)
