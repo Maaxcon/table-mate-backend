@@ -3,7 +3,7 @@ from datetime import time as time_type
 from zoneinfo import ZoneInfo
 
 from django.db import models as dm
-from django.db.models import Case, F, Max, Q, QuerySet, Subquery, Value, When
+from django.db.models import OuterRef, QuerySet, Subquery
 from django.db.models.functions import Greatest
 
 from apps.orders.models import Session, SessionStatus
