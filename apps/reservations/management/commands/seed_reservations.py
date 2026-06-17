@@ -159,16 +159,8 @@ class Command(BaseCommand):
                     "notes": "Захворіли",
                 },
                 # ── Future reservation (for table 1, different slot) ──
-                {
-                    "table": tables[0 % len(tables)],
-                    "customer": customers[2 % len(customers)],
-                    "guest_count": 3,
-                    "start_at": now + timedelta(days=1, hours=3),
-                    "end_at": now + timedelta(days=1, hours=5),
-                    "type": ReservationType.PRE_BOOKED,
-                    "status": ReservationStatus.ACTIVE,
-                    "notes": None,
-                },
+                # Removed: previously had status=ACTIVE with start in the future,
+                # which created a nonsensical multi-day "active" reservation.
             ]
 
             for data in reservations_config:
