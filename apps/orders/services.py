@@ -1,20 +1,23 @@
 __all__ = [
     "add_item_to_cart",
     "create_cart_session",
+    "create_order_with_items",
     "create_walk_in_reservation",
     "open_session",
     "remove_item_from_cart",
     "update_cart_item_quantity",
     "update_session_status",
+    "void_order_item",
 ]
 
 
 from datetime import timedelta
+from decimal import Decimal
 from typing import Final, cast
 
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
-from django.db.models import F, Max
+from django.db.models import F, Max, Sum
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -32,7 +35,21 @@ from common.exceptions import (
 )
 from common.hall_events import emit_hall_table_status_changed
 
-from .models import CartItem, CartSession, CartSessionStatus, Session, SessionStatus
+from .models import (
+    CartItem,
+    CartSession,
+    CartSessionStatus,
+    Order,
+    OrderItem,
+    OrderItemStatus,
+    OrderSource,
+    OrderStatus,
+    Session,
+    SessionStatus,
+    Ticket,
+    TicketStatus,
+    VoidReason,
+)
 from .selectors import (
     _resolve_allowed_reservation_participant_ids,
     get_cart_item,
@@ -391,3 +408,98 @@ def open_session(
     )
 
     return session
+
+
+@transaction.atomic
+def create_order_with_items(
+    *,
+    session: Session,
+    items: list[dict],
+    actor: User,
+) -> Order:
+    order = Order.objects.create(
+        restaurant=session.restaurant,
+        session=session,
+        created_by=actor,
+        created_by_source="staff",
+        source=OrderSource.WAITER_MANUAL,
+        status=OrderStatus.SUBMITTED,
+        currency=session.currency,
+    )
+
+    total = 0
+    for item_data in items:
+        menu_item = item_data["menu_item"]
+        guest_slot = item_data.get("guest_slot", 1)
+        quantity = item_data.get("quantity", 1)
+        comment = item_data.get("comment")
+        unit_price = menu_item.price
+        total_price = unit_price * quantity
+        total += total_price
+
+        OrderItem.objects.create(
+            restaurant=session.restaurant,
+            order=order,
+            menu_item=menu_item,
+            guest_slot=guest_slot,
+            quantity=quantity,
+            comment=comment,
+            unit_price=unit_price,
+            total_price=total_price,
+        )
+
+    order.total_amount = total
+    order.save(update_fields=["total_amount"])
+
+    Ticket.objects.create(
+        restaurant=session.restaurant,
+        session=session,
+        order=order,
+        status=TicketStatus.INCOMING,
+        injected_at=timezone.now(),
+    )
+
+    return order
+
+
+@transaction.atomic
+def void_order_item(
+    order_item: OrderItem,
+    *,
+    actor: User,
+    void_reason_code: str,
+    note: str | None = None,
+) -> OrderItem:
+    if order_item.status == OrderItemStatus.VOIDED:
+        raise ValueError("Order item is already voided.")
+
+    try:
+        void_reason = VoidReason.objects.get(code=void_reason_code)
+    except VoidReason.DoesNotExist:
+        raise ValueError(f"Unknown void reason code: {void_reason_code}") from None
+
+    order_item.status = OrderItemStatus.VOIDED
+    order_item.voided_at = timezone.now()
+    order_item.voided_by = actor
+    order_item.void_reason = void_reason
+    order_item.void_reason_note = note
+    order_item.save(
+        update_fields=[
+            "status",
+            "voided_at",
+            "voided_by",
+            "void_reason",
+            "void_reason_note",
+        ]
+    )
+
+    order = order_item.order
+    remaining = (
+        OrderItem.objects.filter(order=order)
+        .exclude(status=OrderItemStatus.VOIDED)
+        .aggregate(total=Sum("total_price"))
+    )["total"]
+    order.total_amount = remaining if remaining is not None else Decimal(0)
+    order.save(update_fields=["total_amount"])
+
+    return order_item

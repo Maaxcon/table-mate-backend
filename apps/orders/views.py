@@ -1,19 +1,35 @@
 from drf_spectacular.utils import extend_schema
-from rest_framework import viewsets
+from rest_framework import serializers, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 
-from .models import Order, OrderItem, Session, Ticket
+from .models import Order, OrderItem, Session, Ticket, VoidReason
 from .serializers import (
     OrderItemSerializer,
     OrderSerializer,
     SessionSerializer,
     TicketSerializer,
+    VoidReasonSerializer,
 )
-from .services import open_session, update_session_status
+from .services import (
+    create_order_with_items,
+    open_session,
+    update_session_status,
+    void_order_item,
+)
+
+
+@extend_schema(tags=["Orders"])
+class VoidReasonViewSet(viewsets.ReadOnlyModelViewSet[VoidReason]):
+    permission_classes = [IsAuthenticated]
+    queryset = VoidReason.objects.all()
+    serializer_class = VoidReasonSerializer
+    pagination_class = None
 
 
 @extend_schema(tags=["Orders"])
@@ -79,6 +95,69 @@ class OrderViewSet(
     ]
     ordering_fields = ["created_at", "updated_at", "status", "payment_status"]
 
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        items_data = request.data.get("items")
+        if items_data is not None:
+            from apps.menu.models import MenuItem
+
+            restaurant_id = get_restaurant_id_from_auth(request)
+            session_id = request.data.get("session")
+
+            if not session_id:
+                return Response(
+                    {"detail": "session is required when items are provided."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            from .models import Session as SessionModel
+
+            try:
+                session = SessionModel.objects.get(
+                    public_id=session_id,
+                    restaurant_id=restaurant_id,
+                )
+            except SessionModel.DoesNotExist:
+                return Response(
+                    {"detail": "Session not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            items = []
+            for item_data in items_data:
+                menu_item_id = item_data.get("menu_item")
+                if not menu_item_id:
+                    return Response(
+                        {"detail": "Each item must have a menu_item."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                try:
+                    menu_item = MenuItem.objects.get(
+                        public_id=menu_item_id,
+                        restaurant_id=restaurant_id,
+                    )
+                except MenuItem.DoesNotExist:
+                    return Response(
+                        {"detail": f"Menu item {menu_item_id} not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                items.append({
+                    "menu_item": menu_item,
+                    "guest_slot": item_data.get("guest_slot", 1),
+                    "quantity": item_data.get("quantity", 1),
+                    "comment": item_data.get("comment"),
+                })
+
+            order = create_order_with_items(
+                session=session,
+                items=items,
+                actor=request.user,  # type: ignore[arg-type]
+            )
+
+            serializer = self.get_serializer(order)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(
             restaurant_id=get_restaurant_id_from_auth(self.request),
@@ -131,3 +210,38 @@ class OrderItemViewSet(
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
+
+    @extend_schema(
+        request=serializers.Serializer({
+            "void_reason": serializers.CharField(),
+            "note": serializers.CharField(required=False, allow_null=True, default=None),
+        }),
+        responses=OrderItemSerializer,
+    )
+    @action(detail=True, methods=["post"], url_path="void")
+    def void(self, request: Request, *args: object, **kwargs: object) -> Response:
+        item = self.get_object()
+        void_reason = request.data.get("void_reason")
+        note = request.data.get("note")
+
+        if not void_reason:
+            return Response(
+                {"detail": "void_reason is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            result = void_order_item(
+                item,
+                actor=request.user,  # type: ignore[arg-type]
+                void_reason_code=void_reason,
+                note=note,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = self.get_serializer(result)
+        return Response(serializer.data)
