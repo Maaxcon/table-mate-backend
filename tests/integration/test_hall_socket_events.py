@@ -82,6 +82,7 @@ def test_emit_hall_new_reservation_sends_to_group(restaurant: Any, table: Any) -
         assert event["reservation_id"] == "test-reservation-id"
         assert event["table_id"] == str(table.public_id)
         assert event["actor_id"] == user.pk
+        assert event["actor_role"] == RoleCode.WAITER
 
 
 @pytest.mark.django_db(databases=["default"], transaction=True)

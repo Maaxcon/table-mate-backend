@@ -75,6 +75,7 @@ def emit_hall_new_reservation(
             "start_at": start_at,
             "end_at": end_at,
             "actor_id": actor.pk,
+            "actor_role": actor.role,
             "occurred_at": timezone.now().isoformat(),
         },
     )
