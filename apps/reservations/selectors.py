@@ -11,15 +11,16 @@ from .models import Reservation, ReservationParticipant, ReservationStatus
 def get_active_reservation_for_table(table: Table) -> Reservation | None:
     """Return the reservation currently in progress on the table, or None.
 
-    Active means status ACTIVE and now inside the [start_at, end_at) window.
-    Walk-in and pre-booked are treated the same.
+    Once a reservation is ACTIVE the table is open, so the cart stays available
+    for the whole visit until end_at — no lower bound on start_at (a guest may
+    scan/seat a few minutes early). Expired reservations (end_at passed) yield
+    nothing. Walk-in and pre-booked are treated the same.
     """
     now = timezone.now()
     return (
         Reservation.objects.filter(
             table=table,
             status=ReservationStatus.ACTIVE,
-            start_at__lte=now,
             end_at__gt=now,
         )
         .order_by("-created_at")
