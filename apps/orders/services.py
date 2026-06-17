@@ -333,17 +333,16 @@ def update_session_status(
 
     if previous_status == SessionStatus.OPEN and new_status != SessionStatus.OPEN:
         table = session.table
-        if table:
-            transaction.on_commit(
-                lambda: emit_hall_table_status_changed(
-                    session.restaurant_id,
-                    table_id=str(table.public_id),
-                    previous_status="occupied",
-                    current_status="free",
-                    session_id=str(session.public_id),
-                    actor=actor,
-                )
+        transaction.on_commit(
+            lambda: emit_hall_table_status_changed(
+                session.restaurant_id,
+                table_id=str(table.public_id),
+                previous_status="occupied",
+                current_status="free",
+                session_id=str(session.public_id),
+                actor=actor,
             )
+        )
 
     return session
 
