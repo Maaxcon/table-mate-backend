@@ -1658,6 +1658,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrderItem'
           description: ''
+  /api/orders/order-items/{public_id}/void/:
+    post:
+      operationId: orders_order_items_void_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+          description: ''
   /api/orders/orders/:
     get:
       operationId: orders_orders_list
@@ -2108,6 +2130,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
           description: ''
+  /api/orders/void-reasons/:
+    get:
+      operationId: orders_void_reasons_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VoidReason'
+          description: ''
+  /api/orders/void-reasons/{id}/:
+    get:
+      operationId: orders_void_reasons_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this void reason.
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoidReason'
+          description: ''
   /api/payments/payments/:
     get:
       operationId: payments_payments_list
@@ -2333,6 +2401,43 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedReservation'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/reservations/reservations/{public_id}/activate/:
+    post:
+      operationId: reservations_reservations_activate_create
+      description: Activates a pending reservation and creates a session. Only staff
+        can activate. Table must be free with no earlier pending reservations.
+      summary: Activate pending reservation
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reservation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reservation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reservation'
+        required: true
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -3935,7 +4040,8 @@ components:
           format: uuid
           readOnly: true
         void_reason:
-          type: integer
+          type: string
+          readOnly: true
           nullable: true
         is_wasted:
           type: boolean
@@ -3958,6 +4064,7 @@ components:
       - restaurant
       - unit_price
       - updated_at
+      - void_reason
       - voided_by
     OrderItemStatusEnum:
       enum:
@@ -4809,7 +4916,8 @@ components:
           format: uuid
           readOnly: true
         void_reason:
-          type: integer
+          type: string
+          readOnly: true
           nullable: true
         is_wasted:
           type: boolean
@@ -5901,6 +6009,18 @@ components:
       required:
       - detail
       - valid
+    VoidReason:
+      type: object
+      properties:
+        code:
+          type: string
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - label
     WorkingHours:
       type: object
       description: |-
