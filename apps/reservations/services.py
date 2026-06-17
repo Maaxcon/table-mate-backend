@@ -198,15 +198,16 @@ def activate_reservation_by_scan(
     user: Any,
 ) -> tuple[bool, str]:
     now = timezone.now()
-    deadline = now + timedelta(minutes=15)
+    earliest_start = now - timedelta(minutes=30)  # allow up to 30 min late
+    latest_start = now + timedelta(minutes=15)  # and up to 15 min early
 
     reservation = (
         Reservation.objects.select_for_update()
         .filter(
             table=table,
             status=ReservationStatus.PENDING,
-            start_at__gte=now,
-            start_at__lte=deadline,
+            start_at__gte=earliest_start,
+            start_at__lte=latest_start,
         )
         .first()
     )
