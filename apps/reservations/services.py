@@ -90,13 +90,15 @@ def create_reservation(
     )
 
     if actor is not None:
-        emit_hall_new_reservation(
-            restaurant_id,
-            reservation_id=str(reservation.public_id),
-            table_id=str(table.public_id),
-            start_at=start_at.isoformat(),
-            end_at=end_at.isoformat(),
-            actor=actor,
+        transaction.on_commit(
+            lambda: emit_hall_new_reservation(
+                restaurant_id,
+                reservation_id=str(reservation.public_id),
+                table_id=str(table.public_id),
+                start_at=start_at.isoformat(),
+                end_at=end_at.isoformat(),
+                actor=actor,
+            )
         )
 
     return reservation
@@ -148,13 +150,15 @@ def create_staff_reservation(
         notes=staff_notes,
     )
 
-    emit_hall_new_reservation(
-        restaurant_id,
-        reservation_id=str(reservation.public_id),
-        table_id=str(table.public_id),
-        start_at=start_at.isoformat(),
-        end_at=end_at.isoformat(),
-        actor=actor,
+    transaction.on_commit(
+        lambda: emit_hall_new_reservation(
+            restaurant_id,
+            reservation_id=str(reservation.public_id),
+            table_id=str(table.public_id),
+            start_at=start_at.isoformat(),
+            end_at=end_at.isoformat(),
+            actor=actor,
+        )
     )
 
     return reservation
@@ -355,22 +359,26 @@ def move_session_to_table(
     session.reservation = new_reservation
     session.save(update_fields=["table", "reservation", "updated_at"])
 
-    emit_hall_table_status_changed(
-        session.restaurant_id,
-        table_id=str(old_table.public_id),
-        previous_status="occupied",
-        current_status="free",
-        session_id=str(session.public_id),
-        actor=actor,
+    transaction.on_commit(
+        lambda: emit_hall_table_status_changed(
+            session.restaurant_id,
+            table_id=str(old_table.public_id),
+            previous_status="occupied",
+            current_status="free",
+            session_id=str(session.public_id),
+            actor=actor,
+        )
     )
 
-    emit_hall_table_status_changed(
-        session.restaurant_id,
-        table_id=str(new_table.public_id),
-        previous_status="free",
-        current_status="occupied",
-        session_id=str(session.public_id),
-        actor=actor,
+    transaction.on_commit(
+        lambda: emit_hall_table_status_changed(
+            session.restaurant_id,
+            table_id=str(new_table.public_id),
+            previous_status="free",
+            current_status="occupied",
+            session_id=str(session.public_id),
+            actor=actor,
+        )
     )
 
     return session
@@ -402,13 +410,15 @@ def close_session(
         reservation.end_at = timezone.now()
         reservation.save(update_fields=["status", "end_at", "updated_at"])
 
-    emit_hall_table_status_changed(
-        session.restaurant_id,
-        table_id=str(session.table.public_id),
-        previous_status="occupied",
-        current_status="free",
-        session_id=str(session.public_id),
-        actor=actor,
+    transaction.on_commit(
+        lambda: emit_hall_table_status_changed(
+            session.restaurant_id,
+            table_id=str(session.table.public_id),
+            previous_status="occupied",
+            current_status="free",
+            session_id=str(session.public_id),
+            actor=actor,
+        )
     )
 
     return session
