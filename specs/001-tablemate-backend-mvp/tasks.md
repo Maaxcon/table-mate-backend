@@ -151,16 +151,16 @@
 ### Tests for User Story 5
 
 - [ ] T043 [P] [US5] Add restaurants/editor/reservation-status contract tests in `tests/contract/test_staff_ops_api.py`.
-- [ ] T044 [P] [US5] Add hall websocket integration tests in `tests/integration/test_hall_socket_events.py` for `HALL_TABLE_STATUS_CHANGED` and `HALL_NEW_RESERVATION`.
+- [X] T044 [P] [US5] Add hall websocket integration tests in `tests/integration/test_hall_socket_events.py` for `HALL_TABLE_STATUS_CHANGED` and `HALL_NEW_RESERVATION`.
 
 ### Implementation for User Story 5
 
 - [ ] T045 [US5] Implement `apps/restaurants/models.py` usage layer for `Restaurant` + foundational `RestaurantSettings` (`timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, `default_service_charge`) and employee relation to user.
 - [ ] T046 [US5] Implement `apps/restaurants/selectors.py` and `apps/restaurants/services.py` (`get_restaurant()`, `get_restaurant_settings()`, `manage_employees()`).
 - [ ] T047 [US5] Implement restaurants API in `apps/restaurants/api/{serializers.py,views.py,urls.py}` for list/update endpoints.
-- [ ] T048 [US5] Implement table position update service in `apps/editor/services.py` and connect to editor API patch endpoint.
-- [ ] T049 [US5] Implement `apps/editor/consumers.py` and `apps/editor/routing.py` for `ws/hall/` events.
-- [ ] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with `admin`/`waiter` access rules and explicit denial for `customer`/`cook`.
+- [X] T048 [US5] Implement table position update service in `apps/editor/services.py` and connect to editor API patch endpoint.
+- [X] T049 [US5] Implement `apps/editor/consumers.py` and `apps/editor/routing.py` for `ws/hall/` events.
+- [X] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with `admin`/`waiter` access rules and explicit denial for `customer`/`cook`.
 
 **Checkpoint**: Staff operations and hall realtime channels are complete.
 
