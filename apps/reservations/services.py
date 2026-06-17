@@ -2,6 +2,8 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Exists, OuterRef, Subquery
+from django.db.models.functions import Greatest
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
@@ -39,12 +41,26 @@ def _check_reservation_conflict(
     end_at: datetime,
     current_reservation_id: int | None = None,
 ) -> None:
-    qs = Reservation.objects.filter(
-        restaurant_id=restaurant_id,
-        table=table,
-        status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-        start_at__lt=end_at,
-        end_at__gt=start_at,
+    active_session_subquery = (
+        Session.objects.filter(
+            reservation=OuterRef("pk"),
+            status=SessionStatus.OPEN,
+        )
+        .order_by("opened_at")
+        .values("opened_at")[:1]
+    )
+
+    qs = (
+        Reservation.objects.filter(
+            restaurant_id=restaurant_id,
+            table=table,
+            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+        )
+        .annotate(effective_start=Greatest("start_at", Subquery(active_session_subquery)))
+        .filter(
+            effective_start__lt=end_at,
+            end_at__gt=start_at,
+        )
     )
     if current_reservation_id is not None:
         qs = qs.exclude(id=current_reservation_id)
@@ -310,6 +326,65 @@ def update_reservation_status(
 
     reservation.status = new_status
     reservation.save(update_fields=["status", "updated_at"])
+    return reservation
+
+
+@transaction.atomic
+def activate_pending_reservation(
+    reservation: Reservation,
+    *,
+    actor: User,
+) -> Reservation:
+    if reservation.status != ReservationStatus.PENDING:
+        raise ReservationConflictError("Only pending reservations can be activated.")
+
+    table = reservation.table
+    if table is None:
+        raise ReservationConflictError("Reservation has no table assigned.")
+
+    if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+        raise ReservationConflictError("Table already has an active session.")
+
+    now = timezone.now()
+    earlier_pending = (
+        Reservation.objects.filter(
+            restaurant_id=reservation.restaurant_id,
+            table=table,
+            status=ReservationStatus.PENDING,
+            start_at__lt=reservation.start_at,
+            start_at__lte=now,
+        )
+        .exclude(id=reservation.id)
+        .exists()
+    )
+    if earlier_pending:
+        raise ReservationConflictError("There is an earlier pending reservation for this table.")
+
+    reservation.status = ReservationStatus.ACTIVE
+    reservation.save(update_fields=["status", "updated_at"])
+
+    restaurant = table.restaurant
+    Session.objects.create(
+        restaurant_id=reservation.restaurant_id,
+        table=table,
+        reservation=reservation,
+        opened_by=actor,
+        guest_count=reservation.guest_count,
+        currency=restaurant.settings.currency,
+        opened_at=now,
+    )
+
+    transaction.on_commit(
+        lambda: emit_hall_table_status_changed(
+            reservation.restaurant_id,
+            table_id=str(table.public_id),
+            previous_status="free",
+            current_status="occupied",
+            session_id=str(reservation.public_id),
+            actor=actor,
+        )
+    )
+
     return reservation
 
 
