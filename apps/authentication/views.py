@@ -1,5 +1,6 @@
 from datetime import timedelta
 from typing import Any, cast
+from uuid import uuid4
 
 from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -225,6 +226,7 @@ class LogoutView(APIView):
 
 class GuestInitView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes: list[type] = []
     throttle_scope = "auth"
 
     @extend_schema(
@@ -239,40 +241,66 @@ class GuestInitView(APIView):
         serializer.is_valid(raise_exception=True)
 
         reservation_id = serializer.validated_data.get("reservation_id")
+        table_id = serializer.validated_data.get("table_id")
 
+        from apps.orders.models import CartSession, CartSessionStatus
+        from apps.reservations.models import ReservationStatus
+
+        filters: dict[str, Any] = {"status": CartSessionStatus.ACTIVE}
+        error_detail = "No active cart session found for this reservation."
         if reservation_id:
-            from apps.orders.models import CartSession, CartSessionStatus
-
-            session = CartSession.objects.filter(
-                reservation__public_id=reservation_id,
-                status=CartSessionStatus.ACTIVE,
-            ).first()
-            if session is None:
-                return Response(
-                    {"detail": "No active cart session found for this reservation."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            cart_session_id = str(session.public_id)
+            filters["reservation__public_id"] = reservation_id
         else:
-            cart_session_id = None
+            filters["reservation__table__public_id"] = table_id
+            filters["reservation__status"] = ReservationStatus.ACTIVE
+            error_detail = "No active cart session found for this table."
 
-        token = _issue_guest_token(
-            device_id=serializer.validated_data["device_id"],
-            cart_session_id=cart_session_id,
-        )
+        session = CartSession.objects.filter(**filters).order_by("-created_at").first()
+        if session is None:
+            return Response(
+                {"detail": error_detail},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        cart_session_id = str(session.public_id)
+
+        guest_id = _carry_forward_guest_id(request)
+        token = _issue_guest_token(cart_session_id=cart_session_id, guest_id=guest_id)
         return Response({"access": token})
 
 
-def _issue_guest_token(*, device_id: str, cart_session_id: str | None) -> str:
+def _issue_guest_token(*, cart_session_id: str | None, guest_id: str | None = None) -> str:
     from rest_framework_simplejwt.tokens import AccessToken
 
     token = AccessToken()
     token.payload["is_guest"] = True
-    token.payload["device_id"] = device_id
+    token.payload["guest_id"] = guest_id or str(uuid4())
     if cart_session_id:
         token.payload["cart_session_id"] = cart_session_id
     token.set_exp(lifetime=timedelta(hours=4))
     return str(token)
+
+
+def _carry_forward_guest_id(request: Request) -> str | None:
+    import jwt as pyjwt
+    from rest_framework_simplejwt.settings import api_settings
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    raw_token = auth_header[len("Bearer ") :].strip()
+    verifying_key = api_settings.VERIFYING_KEY or api_settings.SIGNING_KEY
+    try:
+        payload = pyjwt.decode(
+            raw_token,
+            verifying_key,
+            algorithms=[api_settings.ALGORITHM],
+            options={"verify_exp": False},
+        )
+    except pyjwt.PyJWTError:
+        return None
+    if payload.get("is_guest"):
+        return payload.get("guest_id")
+    return None
 
 
 __all__ = [

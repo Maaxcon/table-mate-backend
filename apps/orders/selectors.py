@@ -68,5 +68,8 @@ def get_reservation(restaurant_id: int, reservation_id: str) -> Reservation | No
     return Reservation.objects.filter(public_id=reservation_id, restaurant_id=restaurant_id).first()
 
 
-def get_menu_item(restaurant_id: int, menu_item_id: str) -> MenuItem | None:
-    return MenuItem.objects.filter(public_id=menu_item_id, restaurant_id=restaurant_id).first()
+def get_menu_item(restaurant_id: int, menu_item_id: str, *, for_update: bool = False) -> MenuItem | None:
+    qs = MenuItem.objects.filter(public_id=menu_item_id, restaurant_id=restaurant_id)
+    if for_update:
+        qs = qs.select_for_update()
+    return qs.first()

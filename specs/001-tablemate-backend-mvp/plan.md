@@ -9,14 +9,14 @@ Implement backend MVP for Tablemate using Django 5 + DRF + JWT + Google OAuth, w
 
 ## Technical Context
 
-**Language/Version**: Python 3.12, Django 5+  
-**Primary Dependencies**: DRF, `djangorestframework-simplejwt`, Redis, Django Channels  
-**Storage**: PostgreSQL (transactional reservation safety)  
-**Testing**: Django test suite (`pytest` or Django test runner), contract + integration tests  
-**Target Platform**: Linux containers via Docker/Docker Compose  
-**Project Type**: Backend web service (REST + WebSocket)  
-**Performance Goals**: Deterministic reservation conflict handling, low-latency cart/hall event delivery  
-**Constraints**: Service-layer business logic only, selector-layer complex queries, role-based permissions, no AI and no multi-restaurant tenancy  
+**Language/Version**: Python 3.12, Django 5+
+**Primary Dependencies**: DRF, `djangorestframework-simplejwt`, Redis, Django Channels
+**Storage**: PostgreSQL (transactional reservation safety)
+**Testing**: Django test suite (`pytest` or Django test runner), contract + integration tests
+**Target Platform**: Linux containers via Docker/Docker Compose
+**Project Type**: Backend web service (REST + WebSocket)
+**Performance Goals**: Deterministic reservation conflict handling, low-latency cart/hall event delivery
+**Constraints**: Service-layer business logic only, selector-layer complex queries, role-based permissions, no AI and no multi-restaurant tenancy
 **Scale/Scope**: MVP domains `users/authentication/restaurants/editor/reservations/orders/menu/payments` plus webhook-confirmed payment transition path
 
 ## Constitution Check

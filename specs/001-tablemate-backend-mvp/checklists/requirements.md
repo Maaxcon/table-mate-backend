@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Tablemate Backend MVP API (Constitution v2.0.0 Alignment)
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2026-05-11  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2026-05-11
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality

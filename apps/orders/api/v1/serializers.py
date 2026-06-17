@@ -60,6 +60,18 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
     cart_session = PublicIdRelatedField[CartSession](read_only=True)
     menu_item = PublicIdRelatedField[MenuItem](read_only=True)
     added_by = PublicIdRelatedField[User](read_only=True)
+    is_mine = serializers.SerializerMethodField()
+
+    def get_is_mine(self, obj: CartItem) -> bool:
+        request = self.context.get("request")
+        if request is None:
+            return False
+        auth = getattr(request, "auth", None)
+        payload = getattr(auth, "payload", None)
+        if payload is not None and payload.get("is_guest"):
+            return obj.guest_identity is not None and obj.guest_identity == payload.get("guest_id")
+        user = getattr(request, "user", None)
+        return bool(user is not None and not user.is_anonymous and obj.added_by_id == user.id)
 
     class Meta:
         model = CartItem
@@ -70,7 +82,7 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
             "comment",
             "added_by",
             "guest_slot",
-            "device_id",
+            "is_mine",
             "is_paid",
             "cart_session",
             "restaurant",
@@ -84,7 +96,6 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
             "menu_item",
             "added_by",
             "guest_slot",
-            "device_id",
             "is_paid",
             "created_at",
             "updated_at",
