@@ -1,4 +1,3 @@
-from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.request import Request
@@ -6,17 +5,15 @@ from rest_framework.response import Response
 
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
-from common.exceptions import TableOccupiedError
-from common.hall_events import emit_hall_table_status_changed
 
-from .models import Order, OrderItem, Session, SessionStatus, Ticket
+from .models import Order, OrderItem, Session, Ticket
 from .serializers import (
     OrderItemSerializer,
     OrderSerializer,
     SessionSerializer,
     TicketSerializer,
 )
-from .services import create_walk_in_reservation
+from .services import open_session, update_session_status
 
 
 @extend_schema(tags=["Orders"])
@@ -32,52 +29,31 @@ class SessionViewSet(
     ordering_fields = ["created_at", "updated_at", "opened_at"]
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
-        table = serializer.validated_data["table"]
-        if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
-            raise TableOccupiedError()
-        guest_count = serializer.validated_data["guest_count"]
-        with transaction.atomic():
-            reservation = create_walk_in_reservation(
-                table=table,
-                guest_count=guest_count,
-            )
-            instance = serializer.save(
-                restaurant_id=get_restaurant_id_from_auth(self.request),
-                opened_by=self.request.user,
-                reservation=reservation,
-            )
-        table = instance.table
-        if table:
-            emit_hall_table_status_changed(
-                instance.restaurant_id,
-                table_id=str(table.public_id),
-                previous_status="free",
-                current_status="occupied",
-                session_id=str(instance.public_id),
-                actor=self.request.user,  # type: ignore[arg-type]
-            )
+        instance = open_session(
+            restaurant_id=get_restaurant_id_from_auth(self.request),
+            table=serializer.validated_data["table"],
+            guest_count=serializer.validated_data["guest_count"],
+            opened_by=self.request.user,
+            currency=serializer.validated_data["currency"],
+            opened_at=serializer.validated_data["opened_at"],
+            actor=self.request.user,  # type: ignore[arg-type]
+        )
+        serializer.instance = instance
 
     def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()
-        previous_status = instance.status
+
+        new_status = request.data.get("status")
+        if new_status and new_status != instance.status:
+            instance = update_session_status(
+                instance,
+                new_status=new_status,
+                actor=request.user,  # type: ignore[arg-type]
+            )
 
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-
-        instance.refresh_from_db()
-
-        if previous_status == SessionStatus.OPEN and instance.status != SessionStatus.OPEN:
-            table = instance.table
-            if table:
-                emit_hall_table_status_changed(
-                    instance.restaurant_id,
-                    table_id=str(table.public_id),
-                    previous_status="occupied",
-                    current_status="free",
-                    session_id=str(instance.public_id),
-                    actor=request.user,  # type: ignore[arg-type]
-                )
 
         return Response(serializer.data)
 

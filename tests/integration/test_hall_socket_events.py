@@ -228,12 +228,12 @@ def test_update_reservation_status_rejects_invalid_transition(restaurant: Any, t
     assert "cannot transition" in str(exc_info.value).lower()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default"], transaction=True)
 def test_session_create_emits_table_status_changed(restaurant: Any, table: Any) -> None:
     admin = UserFactory.build(role=RoleCode.ADMIN)
     admin.save()
 
-    with patch("apps.orders.views.emit_hall_table_status_changed") as mock_emit:
+    with patch("apps.orders.services.emit_hall_table_status_changed") as mock_emit:
         client = APIClient()
         access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
@@ -257,7 +257,7 @@ def test_session_create_emits_table_status_changed(restaurant: Any, table: Any) 
         assert call_kwargs["actor"] == admin
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default"], transaction=True)
 def test_session_close_emits_table_status_changed(restaurant: Any, table: Any) -> None:
     admin = UserFactory.build(role=RoleCode.ADMIN)
     admin.save()
@@ -286,7 +286,7 @@ def test_session_close_emits_table_status_changed(restaurant: Any, table: Any) -
         opened_at=timezone.now(),
     )
 
-    with patch("apps.orders.views.emit_hall_table_status_changed") as mock_emit:
+    with patch("apps.orders.services.emit_hall_table_status_changed") as mock_emit:
         client = APIClient()
         access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")

@@ -2,8 +2,10 @@ __all__ = [
     "add_item_to_cart",
     "create_cart_session",
     "create_walk_in_reservation",
+    "open_session",
     "remove_item_from_cart",
     "update_cart_item_quantity",
+    "update_session_status",
 ]
 
 
@@ -28,8 +30,9 @@ from common.exceptions import (
     ReservationConflictError,
     ReservationNotFoundError,
 )
+from common.hall_events import emit_hall_table_status_changed
 
-from .models import CartItem, CartSession, CartSessionStatus
+from .models import CartItem, CartSession, CartSessionStatus, Session, SessionStatus
 from .selectors import (
     _resolve_allowed_reservation_participant_ids,
     get_cart_item,
@@ -315,3 +318,77 @@ def create_walk_in_reservation(
         status=ReservationStatus.ACTIVE,
         customer=None,
     )
+
+
+@transaction.atomic
+def update_session_status(
+    session: Session,
+    *,
+    new_status: str,
+    actor: User,
+) -> Session:
+    previous_status = session.status
+    session.status = new_status
+    session.save(update_fields=["status", "updated_at"])
+
+    if previous_status == SessionStatus.OPEN and new_status != SessionStatus.OPEN:
+        table = session.table
+        if table:
+            transaction.on_commit(
+                lambda: emit_hall_table_status_changed(
+                    session.restaurant_id,
+                    table_id=str(table.public_id),
+                    previous_status="occupied",
+                    current_status="free",
+                    session_id=str(session.public_id),
+                    actor=actor,
+                )
+            )
+
+    return session
+
+
+@transaction.atomic
+def open_session(
+    *,
+    restaurant_id: int,
+    table: Table,
+    guest_count: int,
+    opened_by: User,
+    currency: str,
+    opened_at: object,
+    actor: User,
+) -> Session:
+    from common.exceptions import TableOccupiedError
+
+    if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+        raise TableOccupiedError()
+
+    reservation = create_walk_in_reservation(
+        table=table,
+        guest_count=guest_count,
+    )
+
+    session = Session.objects.create(
+        restaurant_id=restaurant_id,
+        table=table,
+        reservation=reservation,
+        opened_by=opened_by,
+        guest_count=guest_count,
+        status=SessionStatus.OPEN,
+        currency=currency,
+        opened_at=opened_at,
+    )
+
+    transaction.on_commit(
+        lambda: emit_hall_table_status_changed(
+            restaurant_id,
+            table_id=str(table.public_id),
+            previous_status="free",
+            current_status="occupied",
+            session_id=str(session.public_id),
+            actor=actor,
+        )
+    )
+
+    return session
