@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -18,7 +19,8 @@ from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.services import create_reservation, update_reservation_status
 from common.channels import hall_group_name
 from common.hall_events import emit_hall_new_reservation, emit_hall_table_status_changed
-from tests.conftest import UserFactory
+from core.routing import application
+from tests.conftest import RestaurantFactory, UserFactory
 
 
 @pytest.mark.django_db
@@ -327,3 +329,150 @@ def test_hall_consumer_rejects_unauthenticated() -> None:
         assert close_code["code"] == 4001
 
     asyncio.run(_test())
+
+
+pytestmark_rt = pytest.mark.django_db(databases=["default"], transaction=True)
+
+
+@pytest.fixture(autouse=True)
+def _inmemory_channel_layer(settings: Any) -> None:
+    settings.CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+
+
+async def _connect_hall(user: Any, restaurant_id: int) -> WebsocketCommunicator:
+    access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant_id)
+    communicator = WebsocketCommunicator(
+        application,
+        "/ws/hall/",
+        subprotocols=["access_token", access],
+    )
+    connected, _ = await communicator.connect()
+    assert connected
+    return communicator
+
+
+@pytestmark_rt
+async def test_session_create_broadcasts_to_hall_subscriber(
+    restaurant: Any, table: Any
+) -> None:
+    admin = UserFactory.build(role=RoleCode.ADMIN)
+    admin.save()
+
+    communicator = await _connect_hall(admin, restaurant.id)
+
+    client = APIClient()
+    access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+    response = client.post(
+        "/api/orders/sessions/",
+        {
+            "table": table.public_id,
+            "guest_count": 2,
+            "currency": "UAH",
+            "opened_at": timezone.now().isoformat(),
+        },
+        format="json",
+    )
+    assert response.status_code == 201
+
+    event = await communicator.receive_json_from(timeout=5)
+    assert event["event_name"] == "HALL_TABLE_STATUS_CHANGED"
+    assert event["table_id"] == str(table.public_id)
+    assert event["previous_status"] == "free"
+    assert event["current_status"] == "occupied"
+
+    await communicator.disconnect()
+
+
+@pytestmark_rt
+async def test_session_close_broadcasts_to_hall_subscriber(
+    restaurant: Any, table: Any
+) -> None:
+    admin = UserFactory.build(role=RoleCode.ADMIN)
+    admin.save()
+
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        customer=None,
+        guest_count=2,
+        start_at=timezone.now(),
+        end_at=timezone.now() + timedelta(hours=2),
+        status=ReservationStatus.ACTIVE,
+    )
+    session = Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        reservation=reservation,
+        opened_by=admin,
+        guest_count=2,
+        status=SessionStatus.OPEN,
+        currency="UAH",
+        opened_at=timezone.now(),
+    )
+
+    communicator = await _connect_hall(admin, restaurant.id)
+
+    client = APIClient()
+    access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+    response = client.patch(
+        f"/api/orders/sessions/{session.public_id}/",
+        {"status": SessionStatus.CLOSED},
+        format="json",
+    )
+    assert response.status_code == 200
+
+    event = await communicator.receive_json_from(timeout=5)
+    assert event["event_name"] == "HALL_TABLE_STATUS_CHANGED"
+    assert event["table_id"] == str(table.public_id)
+    assert event["previous_status"] == "occupied"
+    assert event["current_status"] == "free"
+
+    await communicator.disconnect()
+
+
+@ pytestmark_rt
+async def test_hall_event_does_not_leak_across_restaurants(
+    restaurant: Any, table: Any
+) -> None:
+    other_restaurant = RestaurantFactory(name="Other Restaurant")
+    other_admin = UserFactory.build(role=RoleCode.ADMIN)
+    other_admin.save()
+
+    admin = UserFactory.build(role=RoleCode.ADMIN)
+    admin.save()
+
+    other_comm = await _connect_hall(other_admin, other_restaurant.id)
+    comm = await _connect_hall(admin, restaurant.id)
+
+    client = APIClient()
+    access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+    response = client.post(
+        "/api/orders/sessions/",
+        {
+            "table": table.public_id,
+            "guest_count": 2,
+            "currency": "UAH",
+            "opened_at": timezone.now().isoformat(),
+        },
+        format="json",
+    )
+    assert response.status_code == 201
+
+    event = await comm.receive_json_from(timeout=5)
+    assert event["event_name"] == "HALL_TABLE_STATUS_CHANGED"
+
+    with pytest.raises(asyncio.TimeoutError):
+        await other_comm.receive_json_from(timeout=0.5)
+
+    await comm.disconnect()
+    await other_comm.disconnect()
