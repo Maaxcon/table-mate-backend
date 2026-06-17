@@ -704,7 +704,8 @@ class TestGuestInit:
         from apps.reservations.models import ReservationStatus
 
         reservation.status = ReservationStatus.ACTIVE
-        reservation.save(update_fields=["status"])
+        reservation.start_at = datetime.now(UTC) - timedelta(minutes=30)
+        reservation.save(update_fields=["status", "start_at"])
         CartSession.objects.create(restaurant=restaurant, reservation=reservation)
 
         table = reservation.table
@@ -718,6 +719,58 @@ class TestGuestInit:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "access" in data
+
+    def test_guest_init_table_id_creates_session_when_missing(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+    ) -> None:
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        from apps.orders.models import CartSession, CartSessionStatus
+        from apps.reservations.models import ReservationStatus
+
+        reservation.status = ReservationStatus.ACTIVE
+        reservation.start_at = datetime.now(UTC) - timedelta(minutes=30)
+        reservation.save(update_fields=["status", "start_at"])
+
+        table = reservation.table
+        assert table is not None
+        assert not CartSession.objects.exists()
+
+        response = api_client.post(
+            self.url,
+            {"table_id": str(table.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        sessions = CartSession.objects.filter(status=CartSessionStatus.ACTIVE)
+        assert sessions.count() == 1
+        session = sessions.get()
+        assert session.reservation_id == reservation.id
+        token = AccessToken(response.json()["access"])
+        assert str(token["cart_session_id"]) == str(session.public_id)
+
+    def test_guest_init_table_id_no_active_reservation_returns_404(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+    ) -> None:
+        # Reservation stays PENDING / future -> not currently active.
+        from apps.orders.models import CartSession
+
+        table = reservation.table
+        assert table is not None
+
+        response = api_client.post(
+            self.url,
+            {"table_id": str(table.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["code"] == "NO_ACTIVE_RESERVATION"
+        assert not CartSession.objects.exists()
 
     def test_guest_init_table_id_skips_stale_reservation(
         self,
@@ -735,7 +788,8 @@ class TestGuestInit:
         assert table is not None
 
         reservation.status = ReservationStatus.ACTIVE
-        reservation.save(update_fields=["status"])
+        reservation.start_at = datetime.now(UTC) - timedelta(minutes=30)
+        reservation.save(update_fields=["status", "start_at"])
         active_session = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
 
         second_reservation.status = ReservationStatus.COMPLETED
@@ -750,6 +804,45 @@ class TestGuestInit:
         assert response.status_code == status.HTTP_200_OK
         token = AccessToken(response.json()["access"])
         assert str(token["cart_session_id"]) == str(active_session.public_id)
+
+    def test_guest_init_token_cannot_touch_other_session(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        second_reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        from rest_framework.test import APIClient
+
+        from apps.orders.models import CartSession
+        from apps.reservations.models import ReservationStatus
+
+        reservation.status = ReservationStatus.ACTIVE
+        reservation.start_at = datetime.now(UTC) - timedelta(minutes=30)
+        reservation.save(update_fields=["status", "start_at"])
+        table = reservation.table
+        assert table is not None
+
+        other_session = CartSession.objects.create(restaurant=restaurant, reservation=second_reservation)
+
+        init_response = api_client.post(
+            self.url,
+            {"table_id": str(table.public_id)},
+            content_type="application/json",
+        )
+        assert init_response.status_code == status.HTTP_200_OK
+        token = init_response.json()["access"]
+
+        guest_client = APIClient()
+        guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        other_url = reverse("cart-item-list", kwargs={"session_pk": other_session.public_id})
+        response = guest_client.post(
+            other_url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_guest_init_no_active_session_returns_404(
         self,

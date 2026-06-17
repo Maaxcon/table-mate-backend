@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from django.conf import settings
@@ -29,6 +29,9 @@ from .serializers import (
     UserSerializer,
 )
 from .services import google_authenticate, issue_tokens, issue_tokens_with_restaurant
+
+if TYPE_CHECKING:
+    from apps.orders.models import CartSession
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -243,29 +246,47 @@ class GuestInitView(APIView):
         reservation_id = serializer.validated_data.get("reservation_id")
         table_id = serializer.validated_data.get("table_id")
 
-        from apps.orders.models import CartSession, CartSessionStatus
-        from apps.reservations.models import ReservationStatus
-
-        filters: dict[str, Any] = {"status": CartSessionStatus.ACTIVE}
-        error_detail = "No active cart session found for this reservation."
-        if reservation_id:
-            filters["reservation__public_id"] = reservation_id
+        session: CartSession | None
+        if table_id:
+            # Scan flow: create the cart if the table has an active reservation.
+            # Raises NoActiveReservationError (-> 404 NO_ACTIVE_RESERVATION) otherwise.
+            session = _ensure_session_for_table(str(table_id))
         else:
-            filters["reservation__table__public_id"] = table_id
-            filters["reservation__status"] = ReservationStatus.ACTIVE
-            error_detail = "No active cart session found for this table."
+            session = _find_active_session_for_reservation(reservation_id)
+            if session is None:
+                return Response(
+                    {"detail": "No active cart session found for this reservation."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
-        session = CartSession.objects.filter(**filters).order_by("-created_at").first()
-        if session is None:
-            return Response(
-                {"detail": error_detail},
-                status=status.HTTP_404_NOT_FOUND,
-            )
         cart_session_id = str(session.public_id)
-
         guest_id = _carry_forward_guest_id(request)
         token = _issue_guest_token(cart_session_id=cart_session_id, guest_id=guest_id)
         return Response({"access": token})
+
+
+def _ensure_session_for_table(table_id: str) -> "CartSession":
+    from apps.orders.services import ensure_active_cart_for_table
+    from apps.restaurants.models import Table
+    from common.exceptions import NoActiveReservationError
+
+    table = Table.objects.filter(public_id=table_id, active=True).first()
+    if table is None:
+        raise NoActiveReservationError("This table has no active reservation.")
+    return ensure_active_cart_for_table(table=table)
+
+
+def _find_active_session_for_reservation(reservation_id: Any) -> "CartSession | None":
+    from apps.orders.models import CartSession, CartSessionStatus
+
+    return (
+        CartSession.objects.filter(
+            reservation__public_id=reservation_id,
+            status=CartSessionStatus.ACTIVE,
+        )
+        .order_by("-created_at")
+        .first()
+    )
 
 
 def _issue_guest_token(*, cart_session_id: str | None, guest_id: str | None = None) -> str:
