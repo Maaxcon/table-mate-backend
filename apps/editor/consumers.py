@@ -53,8 +53,7 @@ _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {
 
 def _filter_event_for_floor(event: dict[str, object]) -> dict[str, object]:
     event_name = event.get("event_name", "")
-    assert isinstance(event_name, str)
-    allowed = _FLOOR_EVENT_FIELDS.get(event_name, set())
+    allowed = _FLOOR_EVENT_FIELDS.get(str(event_name), set())
     return {k: v for k, v in event.items() if k in allowed}
 
 

@@ -46,8 +46,8 @@ class SessionViewSet(
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         restaurant_id = get_restaurant_id_from_auth(self.request)
-        assert restaurant_id is not None, "Restaurant ID required"
-        assert self.request.user.is_authenticated
+        if not self.request.user.is_authenticated or restaurant_id is None:
+            raise serializers.ValidationError("Authentication required")
         instance = open_session(
             restaurant_id=restaurant_id,
             table=serializer.validated_data["table"],
