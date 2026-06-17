@@ -173,21 +173,25 @@ def reschedule_reservation(
     return reservation
 
 
-def activate_reservation(*, reservation: Reservation) -> Reservation:
+def activate_reservation(*, reservation: Reservation, opened_by: Any = None) -> Reservation:
     """Flip a pending reservation to active (staff or the owning customer).
 
     Unlike the scan flow this needs no QR and no imminent-time window: the
     waiter (or the customer from their bookings) opens the table on arrival.
     Idempotent if already active; rejects completed/cancelled reservations.
+    Opens the visit Session (bill) so the floor plan shows the table occupied.
     """
+    from apps.orders.services import ensure_visit_session
+
+    opened_by_user = opened_by if (opened_by is not None and opened_by.is_authenticated) else None
     with transaction.atomic():
         locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
-        if locked.status == ReservationStatus.ACTIVE:
-            return locked
-        if locked.status != ReservationStatus.PENDING:
+        if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
             raise ReservationConflictError("Only pending reservations can be activated.")
-        locked.status = ReservationStatus.ACTIVE
-        locked.save(update_fields=["status"])
+        if locked.status == ReservationStatus.PENDING:
+            locked.status = ReservationStatus.ACTIVE
+            locked.save(update_fields=["status"])
+        ensure_visit_session(locked, opened_by=opened_by_user)
     return locked
 
 
@@ -223,4 +227,8 @@ def activate_reservation_by_scan(
 
     reservation.status = ReservationStatus.ACTIVE
     reservation.save(update_fields=["status"])
+
+    from apps.orders.services import ensure_visit_session
+
+    ensure_visit_session(reservation, opened_by=user)
     return True, "Table verified and activated."

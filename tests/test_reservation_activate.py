@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from apps.authentication.models import RoleCode
-from apps.orders.models import CartSessionStatus
+from apps.orders.models import CartSessionStatus, Session
 from apps.orders.services import ensure_active_cart_for_table
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.restaurants.models import Restaurant, Table
@@ -51,6 +51,23 @@ def test_staff_activates_pending_reservation(
     assert resp.status_code == status.HTTP_200_OK
     reservation.refresh_from_db()
     assert reservation.status == ReservationStatus.ACTIVE
+    # Variant 2: activation opens the visit Session (bill) right away.
+    assert Session.objects.filter(reservation=reservation).count() == 1
+
+
+@pytest.mark.django_db
+def test_activate_does_not_duplicate_session(
+    restaurant: Restaurant,
+    table: Table,
+    api: Callable[..., Any],
+) -> None:
+    reservation = _reservation(restaurant, table)
+    staff = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+
+    staff.client.post(_url(reservation))
+    staff.client.post(_url(reservation))
+
+    assert Session.objects.filter(reservation=reservation).count() == 1
 
 
 @pytest.mark.django_db

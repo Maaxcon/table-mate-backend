@@ -5,6 +5,7 @@ __all__ = [
     "create_cart_session",
     "create_walk_in_reservation",
     "ensure_active_cart_for_table",
+    "ensure_visit_session",
     "remove_item_from_cart",
     "update_cart_item_quantity",
 ]
@@ -168,10 +169,23 @@ def _restaurant_billing(restaurant_id: int) -> tuple[str, Decimal]:
     return settings.currency or "USD", settings.default_tax_rate
 
 
-def _get_or_create_visit_session(reservation: Reservation, *, currency: str, opened_by: User | None) -> Session:
+def ensure_visit_session(
+    reservation: Reservation,
+    *,
+    opened_by: User | None = None,
+    currency: str | None = None,
+) -> Session:
+    """Return (or create) the visit Session (bill) for a reservation.
+
+    One Session per reservation (OneToOne). Created eagerly when a table is
+    opened — walk-in or pre-booked activation — so the floor plan shows the
+    table as occupied consistently, and reused at checkout.
+    """
     table_id = reservation.table_id
     if table_id is None:
         raise DomainError("Reservation has no table; cannot open a bill.")
+    if currency is None:
+        currency, _ = _restaurant_billing(reservation.restaurant_id)
     session, _ = Session.objects.get_or_create(
         reservation=reservation,
         defaults={
@@ -255,7 +269,7 @@ def checkout_cart_session(
 
         reservation = cart_session.reservation
         currency, tax_rate = _restaurant_billing(reservation.restaurant_id)
-        session = _get_or_create_visit_session(reservation, currency=currency, opened_by=user)
+        session = ensure_visit_session(reservation, opened_by=user, currency=currency)
 
         order = Order.objects.create(
             restaurant_id=cart_session.restaurant_id,
