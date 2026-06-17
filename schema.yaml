@@ -1376,6 +1376,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/CartSession'
           description: ''
+  /api/orders/cart/sessions/{session_pk}/checkout/:
+    post:
+      operationId: orders_cart_sessions_checkout_create
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          description: Round checked out; order created (order_id, total, currency).
+        '400':
+          description: Cart is empty.
+        '409':
+          description: 'Cart changed: unavailable items were removed (code CART_CHANGED).'
   /api/orders/cart/sessions/{session_pk}/items/:
     get:
       operationId: orders_cart_sessions_items_list
@@ -2333,6 +2355,31 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedReservation'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/reservations/reservations/{public_id}/activate/:
+    post:
+      operationId: reservations_reservations_activate_create
+      description: Flips a pending reservation to active without a QR scan. Allowed
+        for restaurant staff or the owning customer. Idempotent if already active.
+      summary: Activate a reservation
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -4931,7 +4978,7 @@ components:
           $ref: '#/components/schemas/SessionStatusEnum'
         currency:
           type: string
-          maxLength: 3
+          readOnly: true
         subtotal:
           type: string
           format: decimal
@@ -4947,6 +4994,7 @@ components:
         opened_at:
           type: string
           format: date-time
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -5517,7 +5565,7 @@ components:
           $ref: '#/components/schemas/SessionStatusEnum'
         currency:
           type: string
-          maxLength: 3
+          readOnly: true
         subtotal:
           type: string
           format: decimal
@@ -5533,6 +5581,7 @@ components:
         opened_at:
           type: string
           format: date-time
+          readOnly: true
         created_at:
           type: string
           format: date-time

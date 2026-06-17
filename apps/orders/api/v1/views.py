@@ -1,7 +1,7 @@
 from typing import Any, cast
 
 from django.db.models import Q, QuerySet
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.request import Request
@@ -265,7 +265,16 @@ def _resolve_checkout_session(request: Request, session_pk: str) -> CartSession:
 @extend_schema(tags=["Cart"])
 class CartCheckoutView(GuestFallbackAuthMixin, APIView):
     permission_classes = [IsActiveTableGuest]
+    serializer_class = None
 
+    @extend_schema(
+        request=None,
+        responses={
+            201: OpenApiResponse(description="Round checked out; order created (order_id, total, currency)."),
+            400: OpenApiResponse(description="Cart is empty."),
+            409: OpenApiResponse(description="Cart changed: unavailable items were removed (code CART_CHANGED)."),
+        },
+    )
     def post(self, request: Request, session_pk: str) -> Response:
         session = _resolve_checkout_session(request, session_pk)
         try:
