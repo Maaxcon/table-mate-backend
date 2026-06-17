@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import TYPE_CHECKING
 
@@ -12,13 +13,20 @@ from .channels import hall_group_name
 if TYPE_CHECKING:
     from apps.authentication.models import User
 
+logger = logging.getLogger(__name__)
+
 
 def _broadcast_hall_event(restaurant_id: int, event: dict[str, object]) -> None:
     channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        hall_group_name(restaurant_id),
-        {"type": "hall.event", "event": event},
-    )
+    try:
+        async_to_sync(channel_layer.group_send)(
+            hall_group_name(restaurant_id),
+            {"type": "hall.event", "event": event},
+        )
+    except Exception:
+        logger.exception(
+            "Failed to broadcast hall event for restaurant %s", restaurant_id
+        )
 
 
 def emit_hall_table_status_changed(
