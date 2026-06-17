@@ -55,6 +55,12 @@ class CartSessionClosedError(DomainError):
     default_status_code = HTTPStatus.CONFLICT
 
 
+class EmptyCartError(DomainError):
+    default_detail = "Cart has no items to check out."
+    default_code = "empty_cart"
+    default_status_code = HTTPStatus.BAD_REQUEST
+
+
 class MenuItemUnavailableError(DomainError):
     default_detail = "Menu item is not available."
     default_code = "menu_item_unavailable"
