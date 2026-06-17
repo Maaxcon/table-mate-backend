@@ -1,6 +1,7 @@
 __all__ = [
     "add_item_to_cart",
     "checkout_cart_session",
+    "close_stale_cart_sessions",
     "create_cart_session",
     "create_walk_in_reservation",
     "ensure_active_cart_for_table",
@@ -15,7 +16,7 @@ from typing import Final, cast
 
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
-from django.db.models import F, Max, Sum
+from django.db.models import F, Max, Q, Sum
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -269,6 +270,20 @@ def checkout_cart_session(
         _broadcast_cart_updated(cart_session)
 
     return order
+
+
+def close_stale_cart_sessions() -> int:
+    """Close active carts whose reservation is finished or past its end time.
+
+    Keeps dead active CartSessions from piling up after a visit ends. Returns
+    the number of carts closed. Time-valid active reservations are left alone.
+    """
+    now = timezone.now()
+    stale = CartSession.objects.filter(status=CartSessionStatus.ACTIVE).filter(
+        Q(reservation__status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED])
+        | Q(reservation__end_at__lt=now)
+    )
+    return stale.update(status=CartSessionStatus.CLOSED)
 
 
 def add_item_to_cart(
