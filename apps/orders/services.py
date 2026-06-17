@@ -26,6 +26,7 @@ from apps.reservations.models import Reservation, ReservationStatus, Reservation
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import RestaurantSettings, Table
 from common.exceptions import (
+    CartChangedError,
     CartItemNotFoundError,
     CartSessionClosedError,
     DomainError,
@@ -198,6 +199,27 @@ def _recompute_session_totals(session: Session) -> None:
     session.save(update_fields=["subtotal", "tax", "total"])
 
 
+def _prune_unavailable_cart_items(cart_session: CartSession) -> list[dict[str, str]]:
+    """Drop cart items whose menu item became unavailable. Returns what was removed.
+
+    Committed on its own so the change survives the CART_CHANGED response and the
+    next checkout call sees a clean cart.
+    """
+    with transaction.atomic():
+        locked = CartSession.objects.select_for_update().get(pk=cart_session.pk)
+        if locked.status != CartSessionStatus.ACTIVE:
+            return []
+        unavailable = list(
+            CartItem.objects.filter(cart_session=locked, menu_item__is_available=False).select_related("menu_item")
+        )
+        if not unavailable:
+            return []
+        removed = [{"id": str(ci.menu_item.public_id), "name": ci.menu_item.name} for ci in unavailable]
+        CartItem.objects.filter(pk__in=[ci.pk for ci in unavailable]).delete()
+    _broadcast_cart_updated(cart_session)
+    return removed
+
+
 def checkout_cart_session(
     *,
     cart_session: CartSession,
@@ -209,7 +231,15 @@ def checkout_cart_session(
     with its items from the cart, closes the CartSession, then re-aggregates the
     Session totals across all its Orders. The Reservation stays active, so the
     next ensure_active_cart_for_table call opens a fresh cart for another round.
+
+    Items whose menu item went unavailable are dropped first; if any were, the
+    cart is left open and CartChangedError is raised so the guest can review the
+    change and confirm again.
     """
+    removed = _prune_unavailable_cart_items(cart_session)
+    if removed:
+        raise CartChangedError(removed=removed)
+
     with transaction.atomic():
         cart_session = (
             CartSession.objects.select_for_update()

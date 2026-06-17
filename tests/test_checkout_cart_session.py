@@ -7,7 +7,9 @@ from unittest import mock
 import pytest
 from django.utils import timezone
 
+from apps.menu.models import MenuItem
 from apps.orders.models import (
+    CartItem,
     CartSessionStatus,
     Order,
     OrderItem,
@@ -21,7 +23,7 @@ from apps.orders.services import (
 )
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
-from common.exceptions import CartSessionClosedError, EmptyCartError
+from common.exceptions import CartChangedError, CartSessionClosedError, EmptyCartError
 
 UNIT_PRICE = Decimal("29.99")
 
@@ -179,6 +181,63 @@ def test_checkout_is_atomic_on_failure(
     assert cart.status == CartSessionStatus.ACTIVE
     assert not Order.objects.exists()
     assert not Session.objects.exists()
+
+
+def _add_unavailable_item(cart: Any, item: Any) -> MenuItem:
+    bad = MenuItem.objects.create(
+        restaurant=item.restaurant,
+        menu=item.menu,
+        name="Soup",
+        price=Decimal("10.0000"),
+    )
+    add_item_to_cart(session=cart, menu_item_id=str(bad.public_id), quantity=1)
+    bad.is_available = False
+    bad.save(update_fields=["is_available"])
+    return bad
+
+
+@pytest.mark.django_db
+def test_checkout_prunes_unavailable_and_raises_changed(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = ensure_active_cart_for_table(table=table)
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1)
+    bad = _add_unavailable_item(cart, item)
+
+    with pytest.raises(CartChangedError) as exc:
+        checkout_cart_session(cart_session=cart)
+
+    assert [r["name"] for r in exc.value.removed] == ["Soup"]
+    cart.refresh_from_db()
+    assert cart.status == CartSessionStatus.ACTIVE
+    assert not CartItem.objects.filter(cart_session=cart, menu_item=bad).exists()
+    assert CartItem.objects.filter(cart_session=cart, menu_item=item).exists()
+    assert not Order.objects.exists()
+
+
+@pytest.mark.django_db
+def test_checkout_after_prune_succeeds(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = ensure_active_cart_for_table(table=table)
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1)
+    _add_unavailable_item(cart, item)
+
+    with pytest.raises(CartChangedError):
+        checkout_cart_session(cart_session=cart)
+    order = checkout_cart_session(cart_session=cart)
+
+    cart.refresh_from_db()
+    assert cart.status == CartSessionStatus.CLOSED
+    assert OrderItem.objects.filter(order=order).count() == 1
 
 
 @pytest.mark.django_db

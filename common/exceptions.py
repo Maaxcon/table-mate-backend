@@ -61,6 +61,16 @@ class EmptyCartError(DomainError):
     default_status_code = HTTPStatus.BAD_REQUEST
 
 
+class CartChangedError(DomainError):
+    default_detail = "Some items are no longer available and were removed from the cart."
+    default_code = "CART_CHANGED"
+    default_status_code = HTTPStatus.CONFLICT
+
+    def __init__(self, *args: object, removed: list[dict[str, str]] | None = None) -> None:
+        super().__init__(*args)
+        self.removed = removed or []
+
+
 class MenuItemUnavailableError(DomainError):
     default_detail = "Menu item is not available."
     default_code = "menu_item_unavailable"

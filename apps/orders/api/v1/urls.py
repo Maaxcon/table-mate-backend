@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import CartSessionItemViewSet, CartSessionViewSet
+from .views import CartCheckoutView, CartSessionItemViewSet, CartSessionViewSet
 
 urlpatterns = [
     path("sessions/", CartSessionViewSet.as_view({"get": "list", "post": "create"}), name="cart-session-list"),
@@ -8,6 +8,11 @@ urlpatterns = [
         "sessions/<uuid:pk>/",
         CartSessionViewSet.as_view({"get": "retrieve"}),
         name="cart-session-detail",
+    ),
+    path(
+        "sessions/<uuid:session_pk>/checkout/",
+        CartCheckoutView.as_view(),
+        name="cart-checkout",
     ),
     path(
         "sessions/<uuid:session_pk>/items/",

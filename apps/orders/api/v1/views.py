@@ -7,6 +7,7 @@ from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
+from rest_framework.views import APIView
 
 from apps.authentication.authentication import GuestJWTAuthentication
 from apps.authentication.models import User
@@ -15,12 +16,13 @@ from apps.orders.permissions import IsActiveTableGuest
 from apps.orders.selectors import get_cart_session
 from apps.orders.services import (
     add_item_to_cart,
+    checkout_cart_session,
     create_cart_session,
     remove_item_from_cart,
     update_cart_item_quantity,
 )
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
-from common.exceptions import CartSessionNotFoundError, DomainError
+from common.exceptions import CartChangedError, CartSessionNotFoundError, DomainError
 
 from .serializers import AddCartItemSerializer, CartItemSerializer, CartSessionSerializer, UpdateCartItemSerializer
 
@@ -235,3 +237,49 @@ class CartSessionItemViewSet(
 
         result = CartItemSerializer(item, context=self.get_serializer_context())
         return Response(result.data, status=status.HTTP_200_OK)
+
+
+def _request_user_or_none(request: Request) -> User | None:
+    user = request.user
+    if user is None or user.is_anonymous:
+        return None
+    return user
+
+
+def _resolve_checkout_session(request: Request, session_pk: str) -> CartSession:
+    if _is_guest_request(request):
+        # IsActiveTableGuest already verified the token is scoped to session_pk.
+        session = CartSession.objects.filter(public_id=session_pk).first()
+    else:
+        restaurant_id = get_restaurant_id_from_auth(request)
+        session = (
+            get_cart_session(restaurant_id=restaurant_id, session_pk=str(session_pk))
+            if restaurant_id is not None
+            else None
+        )
+    if session is None:
+        raise CartSessionNotFoundError(f"Cart session {session_pk} not found.")
+    return session
+
+
+@extend_schema(tags=["Cart"])
+class CartCheckoutView(GuestFallbackAuthMixin, APIView):
+    permission_classes = [IsActiveTableGuest]
+
+    def post(self, request: Request, session_pk: str) -> Response:
+        session = _resolve_checkout_session(request, session_pk)
+        try:
+            order = checkout_cart_session(cart_session=session, user=_request_user_or_none(request))
+        except CartChangedError as exc:
+            return Response(
+                {"detail": exc.default_detail, "code": exc.default_code, "removed": exc.removed},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(
+            {
+                "order_id": str(order.public_id),
+                "total": str(order.total_amount),
+                "currency": order.currency,
+            },
+            status=status.HTTP_201_CREATED,
+        )
