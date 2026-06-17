@@ -26,6 +26,7 @@ from apps.orders.broadcast import cart_group_send
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import RestaurantSettings, Table
+from apps.restaurants.selectors import is_restaurant_open
 from common.exceptions import (
     CartChangedError,
     CartItemNotFoundError,
@@ -37,6 +38,7 @@ from common.exceptions import (
     NoActiveReservationError,
     ReservationConflictError,
     ReservationNotFoundError,
+    RestaurantClosedError,
 )
 
 from .models import (
@@ -346,6 +348,9 @@ def add_item_to_cart(
 
         if session.status != CartSessionStatus.ACTIVE:
             raise CartSessionClosedError("Cart session is closed.")
+
+        if not is_restaurant_open(session.restaurant_id):
+            raise RestaurantClosedError()
 
         if _is_authenticated_user(user):
             user = cast(User, user)

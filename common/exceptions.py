@@ -75,3 +75,9 @@ class MenuItemUnavailableError(DomainError):
     default_detail = "Menu item is not available."
     default_code = "menu_item_unavailable"
     default_status_code = HTTPStatus.BAD_REQUEST
+
+
+class RestaurantClosedError(DomainError):
+    default_detail = "The restaurant is closed right now."
+    default_code = "restaurant_closed"
+    default_status_code = HTTPStatus.CONFLICT
