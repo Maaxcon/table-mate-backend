@@ -22,7 +22,7 @@ from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
 from .serializers import ReservationSerializer
-from .services import create_reservation, reschedule_reservation
+from .services import activate_reservation, create_reservation, reschedule_reservation
 
 
 def _parse_time(value: str) -> time_type:
@@ -115,6 +115,20 @@ class ReservationViewSet(
 
         result_serializer = self.get_serializer(reservation)
         return Response(result_serializer.data)
+
+    @extend_schema(
+        summary="Activate a reservation",
+        description="Flips a pending reservation to active without a QR scan. "
+        "Allowed for restaurant staff or the owning customer. Idempotent if already active.",
+        request=None,
+        responses={200: ReservationSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request: Request, *args: object, **kwargs: object) -> Response:
+        reservation = self.get_object()
+        result = activate_reservation(reservation=reservation)
+        serializer = self.get_serializer(result)
+        return Response(serializer.data)
 
     @extend_schema(
         summary="Available time slots for a table",

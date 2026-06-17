@@ -173,6 +173,24 @@ def reschedule_reservation(
     return reservation
 
 
+def activate_reservation(*, reservation: Reservation) -> Reservation:
+    """Flip a pending reservation to active (staff or the owning customer).
+
+    Unlike the scan flow this needs no QR and no imminent-time window: the
+    waiter (or the customer from their bookings) opens the table on arrival.
+    Idempotent if already active; rejects completed/cancelled reservations.
+    """
+    with transaction.atomic():
+        locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
+        if locked.status == ReservationStatus.ACTIVE:
+            return locked
+        if locked.status != ReservationStatus.PENDING:
+            raise ReservationConflictError("Only pending reservations can be activated.")
+        locked.status = ReservationStatus.ACTIVE
+        locked.save(update_fields=["status"])
+    return locked
+
+
 @transaction.atomic
 def activate_reservation_by_scan(
     *,
