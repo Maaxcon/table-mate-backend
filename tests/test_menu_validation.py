@@ -1,11 +1,17 @@
+from collections.abc import Callable
 from decimal import Decimal
+from typing import cast
 
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.menu.models import MenuItem
+from apps.menu.models import Menu, MenuCategory, MenuItem
 
-from .conftest import MenuCategoryFactory, MenuFactory
+from .conftest import MenuCategoryFactory as _MenuCategoryFactory
+from .conftest import MenuFactory as _MenuFactory
+
+MenuFactory = cast(Callable[..., Menu], _MenuFactory)
+MenuCategoryFactory = cast(Callable[..., MenuCategory], _MenuCategoryFactory)
 
 
 @pytest.mark.django_db

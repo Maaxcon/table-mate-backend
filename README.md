@@ -68,7 +68,7 @@ uv run python manage.py runserver
 **Run Tests**
 
 ```bash
-uv run python manage.py test
+uv run pytest
 docker compose run --rm test
 
 ```

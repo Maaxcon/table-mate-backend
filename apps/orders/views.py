@@ -1,3 +1,4 @@
+from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.request import Request
@@ -5,6 +6,7 @@ from rest_framework.response import Response
 
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
+from common.exceptions import TableOccupiedError
 from common.hall_events import emit_hall_table_status_changed
 
 from .models import Order, OrderItem, Session, SessionStatus, Ticket
@@ -31,16 +33,19 @@ class SessionViewSet(
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         table = serializer.validated_data["table"]
+        if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+            raise TableOccupiedError()
         guest_count = serializer.validated_data["guest_count"]
-        reservation = create_walk_in_reservation(
-            table=table,
-            guest_count=guest_count,
-        )
-        instance = serializer.save(
-            restaurant_id=get_restaurant_id_from_auth(self.request),
-            opened_by=self.request.user,
-            reservation=reservation,
-        )
+        with transaction.atomic():
+            reservation = create_walk_in_reservation(
+                table=table,
+                guest_count=guest_count,
+            )
+            instance = serializer.save(
+                restaurant_id=get_restaurant_id_from_auth(self.request),
+                opened_by=self.request.user,
+                reservation=reservation,
+            )
         table = instance.table
         if table:
             emit_hall_table_status_changed(

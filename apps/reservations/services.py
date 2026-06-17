@@ -174,7 +174,7 @@ def seat_walk_in_customer(
             table=table,
             restaurant_id=table.restaurant_id,
             status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-            start_at__gt=now,
+            end_at__gt=now,
         )
         .order_by("start_at")
         .first()

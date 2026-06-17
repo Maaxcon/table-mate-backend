@@ -1,11 +1,11 @@
 import json
 import urllib.error
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.tokens import AccessToken, Token
 
 from apps.authentication.models import RoleCode
 from apps.authentication.services import google_authenticate, issue_tokens, issue_tokens_with_restaurant
@@ -153,14 +153,14 @@ class TestIssueTokens:
     def test_access_token_contains_role(self) -> None:
         user = UserFactory.create(role=RoleCode.CUSTOMER)
         access, _ = issue_tokens(user)
-        assert AccessToken(access).payload["role"] == RoleCode.CUSTOMER
+        assert AccessToken(cast(Token, access)).payload["role"] == RoleCode.CUSTOMER
 
     def test_access_token_contains_token_version(self) -> None:
         user = UserFactory.create()
         user.__class__.objects.filter(pk=user.pk).update(token_version=5)
         user.refresh_from_db()
         access, _ = issue_tokens(user)
-        assert AccessToken(access).payload["token_version"] == 5
+        assert AccessToken(cast(Token, access)).payload["token_version"] == 5
 
 
 @pytest.mark.django_db
@@ -168,11 +168,11 @@ class TestIssueTokensWithRestaurant:
     def test_access_token_contains_restaurant_id(self) -> None:
         user = UserFactory.create(role=RoleCode.WAITER)
         access, _ = issue_tokens_with_restaurant(user, 42)
-        assert AccessToken(access).payload["restaurant_id"] == 42
+        assert AccessToken(cast(Token, access)).payload["restaurant_id"] == 42
 
     def test_access_token_contains_role_and_token_version(self) -> None:
         user = UserFactory.create(role=RoleCode.COOK)
         access, _ = issue_tokens_with_restaurant(user, 7)
-        payload = AccessToken(access).payload
+        payload = AccessToken(cast(Token, access)).payload
         assert payload["role"] == RoleCode.COOK
         assert "token_version" in payload
