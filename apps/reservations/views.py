@@ -94,8 +94,11 @@ class ReservationViewSet(
 
     def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()
-        if getattr(request.user, "role", None) == RoleCode.CUSTOMER and instance.customer_id != request.user.pk:
-            raise PermissionDenied("You can only modify your own reservations.")
+        if getattr(request.user, "role", None) == RoleCode.CUSTOMER:
+            if instance.customer_id != request.user.pk:
+                raise PermissionDenied("You can only modify your own reservations.")
+            if instance.status == ReservationStatus.ACTIVE:
+                raise PermissionDenied("This reservation is already active and can no longer be changed.")
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
