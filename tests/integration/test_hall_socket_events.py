@@ -341,30 +341,52 @@ async def _connect_hall(user: Any, restaurant_id: int) -> WebsocketCommunicator:
     return communicator
 
 
+async def _post_session(user: Any, restaurant_id: int, table_id: str) -> int:
+    def _do() -> int:
+        client = APIClient()
+        access, _ = issue_tokens_with_restaurant(user, restaurant_id)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        response = client.post(
+            "/api/orders/sessions/",
+            {
+                "table": table_id,
+                "guest_count": 2,
+                "currency": "UAH",
+                "opened_at": timezone.now().isoformat(),
+            },
+            format="json",
+        )
+        return response.status_code
+
+    return await sync_to_async(_do)()
+
+
+async def _patch_session(user: Any, restaurant_id: int, session_id: str, status: str) -> int:
+    def _do() -> int:
+        client = APIClient()
+        access, _ = issue_tokens_with_restaurant(user, restaurant_id)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        response = client.patch(
+            f"/api/orders/sessions/{session_id}/",
+            {"status": status},
+            format="json",
+        )
+        return response.status_code
+
+    return await sync_to_async(_do)()
+
+
 @pytestmark_rt
 async def test_session_create_broadcasts_to_hall_subscriber(
     restaurant: Any, table: Any
 ) -> None:
-    admin = UserFactory.build(role=RoleCode.ADMIN)
-    admin.save()
+    admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
+    await sync_to_async(admin.save)()
 
     communicator = await _connect_hall(admin, restaurant.id)
 
-    client = APIClient()
-    access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-
-    response = client.post(
-        "/api/orders/sessions/",
-        {
-            "table": table.public_id,
-            "guest_count": 2,
-            "currency": "UAH",
-            "opened_at": timezone.now().isoformat(),
-        },
-        format="json",
-    )
-    assert response.status_code == 201
+    status_code = await _post_session(admin, restaurant.id, str(table.public_id))
+    assert status_code == 201
 
     event = await communicator.receive_json_from(timeout=5)
     assert event["event_name"] == "HALL_TABLE_STATUS_CHANGED"
@@ -379,41 +401,38 @@ async def test_session_create_broadcasts_to_hall_subscriber(
 async def test_session_close_broadcasts_to_hall_subscriber(
     restaurant: Any, table: Any
 ) -> None:
-    admin = UserFactory.build(role=RoleCode.ADMIN)
-    admin.save()
+    admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
+    await sync_to_async(admin.save)()
 
-    reservation = Reservation.objects.create(
-        restaurant=restaurant,
-        table=table,
-        customer=None,
-        guest_count=2,
-        start_at=timezone.now(),
-        end_at=timezone.now() + timedelta(hours=2),
-        status=ReservationStatus.ACTIVE,
-    )
-    session = Session.objects.create(
-        restaurant=restaurant,
-        table=table,
-        reservation=reservation,
-        opened_by=admin,
-        guest_count=2,
-        status=SessionStatus.OPEN,
-        currency="UAH",
-        opened_at=timezone.now(),
-    )
+    def _create_session() -> Session:
+        reservation = Reservation.objects.create(
+            restaurant=restaurant,
+            table=table,
+            customer=None,
+            guest_count=2,
+            start_at=timezone.now(),
+            end_at=timezone.now() + timedelta(hours=2),
+            status=ReservationStatus.ACTIVE,
+        )
+        return Session.objects.create(
+            restaurant=restaurant,
+            table=table,
+            reservation=reservation,
+            opened_by=admin,
+            guest_count=2,
+            status=SessionStatus.OPEN,
+            currency="UAH",
+            opened_at=timezone.now(),
+        )
+
+    session = await sync_to_async(_create_session)()
 
     communicator = await _connect_hall(admin, restaurant.id)
 
-    client = APIClient()
-    access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-
-    response = client.patch(
-        f"/api/orders/sessions/{session.public_id}/",
-        {"status": SessionStatus.CLOSED},
-        format="json",
+    status_code = await _patch_session(
+        admin, restaurant.id, str(session.public_id), SessionStatus.CLOSED
     )
-    assert response.status_code == 200
+    assert status_code == 200
 
     event = await communicator.receive_json_from(timeout=5)
     assert event["event_name"] == "HALL_TABLE_STATUS_CHANGED"
@@ -424,35 +443,22 @@ async def test_session_close_broadcasts_to_hall_subscriber(
     await communicator.disconnect()
 
 
-@ pytestmark_rt
+@pytestmark_rt
 async def test_hall_event_does_not_leak_across_restaurants(
     restaurant: Any, table: Any
 ) -> None:
-    other_restaurant = RestaurantFactory(name="Other Restaurant")
-    other_admin = UserFactory.build(role=RoleCode.ADMIN)
-    other_admin.save()
+    other_restaurant = await sync_to_async(RestaurantFactory)(name="Other Restaurant")
+    other_admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
+    await sync_to_async(other_admin.save)()
 
-    admin = UserFactory.build(role=RoleCode.ADMIN)
-    admin.save()
+    admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
+    await sync_to_async(admin.save)()
 
     other_comm = await _connect_hall(other_admin, other_restaurant.id)
     comm = await _connect_hall(admin, restaurant.id)
 
-    client = APIClient()
-    access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-
-    response = client.post(
-        "/api/orders/sessions/",
-        {
-            "table": table.public_id,
-            "guest_count": 2,
-            "currency": "UAH",
-            "opened_at": timezone.now().isoformat(),
-        },
-        format="json",
-    )
-    assert response.status_code == 201
+    status_code = await _post_session(admin, restaurant.id, str(table.public_id))
+    assert status_code == 201
 
     event = await comm.receive_json_from(timeout=5)
     assert event["event_name"] == "HALL_TABLE_STATUS_CHANGED"
