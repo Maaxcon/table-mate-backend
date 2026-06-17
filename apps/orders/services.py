@@ -11,9 +11,9 @@ __all__ = [
 ]
 
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Final, cast
+from typing import Any, Final, cast
 
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
@@ -372,7 +372,7 @@ def open_session(
     guest_count: int,
     opened_by: User,
     currency: str,
-    opened_at: object,
+    opened_at: str | datetime,
     actor: User,
 ) -> Session:
     from common.exceptions import TableOccupiedError
@@ -414,7 +414,7 @@ def open_session(
 def create_order_with_items(
     *,
     session: Session,
-    items: list[dict],
+    items: list[dict[str, Any]],
     actor: User,
 ) -> Order:
     order = Order.objects.create(

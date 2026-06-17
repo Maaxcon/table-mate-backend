@@ -45,14 +45,17 @@ class SessionViewSet(
     ordering_fields = ["created_at", "updated_at", "opened_at"]
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        assert restaurant_id is not None, "Restaurant ID required"
+        assert self.request.user.is_authenticated
         instance = open_session(
-            restaurant_id=get_restaurant_id_from_auth(self.request),
+            restaurant_id=restaurant_id,
             table=serializer.validated_data["table"],
             guest_count=serializer.validated_data["guest_count"],
             opened_by=self.request.user,
             currency=serializer.validated_data["currency"],
             opened_at=serializer.validated_data["opened_at"],
-            actor=self.request.user,  # type: ignore[arg-type]
+            actor=self.request.user,
         )
         serializer.instance = instance
 
@@ -101,6 +104,11 @@ class OrderViewSet(
             from apps.menu.models import MenuItem
 
             restaurant_id = get_restaurant_id_from_auth(request)
+            if restaurant_id is None:
+                return Response(
+                    {"detail": "Restaurant ID not found in authentication."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             session_id = request.data.get("session")
 
             if not session_id:
