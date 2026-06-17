@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Subquery
+from django.db.models import OuterRef, Subquery
 from django.db.models.functions import Greatest
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
