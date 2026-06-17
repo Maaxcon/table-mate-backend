@@ -296,7 +296,12 @@ def update_reservation_status(
     new_status: str,
     actor: User,
 ) -> Reservation:
-    if actor.role not in _ALLOWED_ROLES:
+    is_self_cancel = (
+        new_status == ReservationStatus.CANCELLED
+        and actor.role == RoleCode.CUSTOMER
+        and reservation.customer_id == actor.pk
+    )
+    if not is_self_cancel and actor.role not in _ALLOWED_ROLES:
         raise PermissionDenied("Only admin and waiter roles may update reservation status.")
 
     allowed = _STATUS_TRANSITIONS.get(reservation.status, set())
