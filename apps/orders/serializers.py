@@ -9,7 +9,7 @@ from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
-from .models import Order, OrderItem, Session, Ticket
+from .models import Order, OrderItem, Session, Ticket, VoidReason
 
 
 def _scope_to_request_restaurant(field: Any, context: Mapping[str, object]) -> None:
@@ -19,6 +19,13 @@ def _scope_to_request_restaurant(field: Any, context: Mapping[str, object]) -> N
     restaurant_id = get_restaurant_id_from_auth(request)  # type: ignore[arg-type]
     if restaurant_id is not None and field.queryset is not None:
         field.queryset = field.queryset.filter(restaurant_id=restaurant_id)
+
+
+class VoidReasonSerializer(serializers.ModelSerializer[VoidReason]):
+    class Meta:
+        model = VoidReason
+        fields = ["code", "label"]
+        read_only_fields = ["code", "label"]
 
 
 class SessionSerializer(serializers.ModelSerializer[Session]):
@@ -134,6 +141,11 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         queryset=MenuItem.objects.all(),
     )
     voided_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
+    void_reason = serializers.SlugRelatedField(
+        slug_field="code",
+        read_only=True,
+        allow_null=True,
+    )
     menu_item_name = serializers.CharField(source="menu_item.name", read_only=True)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
