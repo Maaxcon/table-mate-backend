@@ -71,6 +71,7 @@ prod = [
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "core.settings.local"
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.setuptools]
 packages = ["core", "apps", "common"]
