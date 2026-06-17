@@ -141,7 +141,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         queryset=MenuItem.objects.all(),
     )
     voided_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
-    void_reason = serializers.SlugRelatedField(
+    void_reason: serializers.SlugRelatedField[VoidReason] = serializers.SlugRelatedField(
         slug_field="code",
         read_only=True,
         allow_null=True,
