@@ -1,10 +1,30 @@
 from datetime import datetime
 
 from django.db.models import QuerySet
+from django.utils import timezone
 
 from apps.restaurants.models import Table
 
 from .models import Reservation, ReservationParticipant, ReservationStatus
+
+
+def get_active_reservation_for_table(table: Table) -> Reservation | None:
+    """Return the reservation currently in progress on the table, or None.
+
+    Active means status ACTIVE and now inside the [start_at, end_at) window.
+    Walk-in and pre-booked are treated the same.
+    """
+    now = timezone.now()
+    return (
+        Reservation.objects.filter(
+            table=table,
+            status=ReservationStatus.ACTIVE,
+            start_at__lte=now,
+            end_at__gt=now,
+        )
+        .order_by("-created_at")
+        .first()
+    )
 
 
 def get_reservations_for_table(

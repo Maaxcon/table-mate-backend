@@ -43,6 +43,12 @@ class ReservationNotFoundError(DomainError):
     default_status_code = HTTPStatus.NOT_FOUND
 
 
+class NoActiveReservationError(DomainError):
+    default_detail = "Table has no active reservation."
+    default_code = "NO_ACTIVE_RESERVATION"
+    default_status_code = HTTPStatus.NOT_FOUND
+
+
 class CartSessionClosedError(DomainError):
     default_detail = "Cart session is closed."
     default_code = "cart_session_closed"

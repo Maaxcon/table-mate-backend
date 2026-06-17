@@ -2,6 +2,7 @@ __all__ = [
     "add_item_to_cart",
     "create_cart_session",
     "create_walk_in_reservation",
+    "ensure_active_cart_for_table",
     "remove_item_from_cart",
     "update_cart_item_quantity",
 ]
@@ -19,12 +20,14 @@ from rest_framework.exceptions import PermissionDenied
 from apps.authentication.models import User
 from apps.orders.broadcast import cart_group_send
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
+from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import Table
 from common.exceptions import (
     CartItemNotFoundError,
     CartSessionClosedError,
     MenuItemNotFoundError,
     MenuItemUnavailableError,
+    NoActiveReservationError,
     ReservationConflictError,
     ReservationNotFoundError,
 )
@@ -98,6 +101,46 @@ def create_cart_session(
         except IntegrityError:
             session = CartSession.objects.get(reservation=reservation, status=CartSessionStatus.ACTIVE)
         session.participants.add(*allowed_participants)
+    return session
+
+
+def ensure_active_cart_for_table(
+    *,
+    table: Table,
+    user: User | None = None,
+) -> CartSession:
+    """Return (or create) the active cart session for the table's active reservation.
+
+    Finds the reservation in progress on the table. Raises NoActiveReservationError
+    if there is none. Safe under concurrent scans: relies on the
+    one_active_per_reservation unique constraint so two callers can never create
+    two active sessions for the same reservation.
+    """
+    reservation = get_active_reservation_for_table(table)
+    if reservation is None:
+        raise NoActiveReservationError(f"Table {table.public_id} has no active reservation.")
+
+    with transaction.atomic():
+        existing = (
+            CartSession.objects.select_for_update()
+            .filter(reservation=reservation, status=CartSessionStatus.ACTIVE)
+            .first()
+        )
+        if existing is not None:
+            if user is not None:
+                existing.participants.add(user)
+            return existing
+        try:
+            with transaction.atomic():
+                session = CartSession.objects.create(
+                    restaurant_id=reservation.restaurant_id,
+                    reservation=reservation,
+                    created_by=user,
+                )
+        except IntegrityError:
+            session = CartSession.objects.get(reservation=reservation, status=CartSessionStatus.ACTIVE)
+        if user is not None:
+            session.participants.add(user)
     return session
 
 
