@@ -467,4 +467,7 @@ async def test_hall_event_does_not_leak_across_restaurants(
         await other_comm.receive_json_from(timeout=0.5)
 
     await comm.disconnect()
-    await other_comm.disconnect()
+    try:
+        await other_comm.disconnect()
+    except asyncio.CancelledError:
+        pass
