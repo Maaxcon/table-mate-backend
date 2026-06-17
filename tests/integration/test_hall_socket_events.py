@@ -84,7 +84,7 @@ def test_emit_hall_new_reservation_sends_to_group(restaurant: Any, table: Any) -
         assert event["actor_id"] == user.pk
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(databases=["default"], transaction=True)
 def test_create_reservation_emits_hall_event(restaurant: Any, table: Any) -> None:
     user = UserFactory.build(role=RoleCode.CUSTOMER)
     user.save()
@@ -233,19 +233,6 @@ def test_session_create_emits_table_status_changed(restaurant: Any, table: Any) 
     admin = UserFactory.build(role=RoleCode.ADMIN)
     admin.save()
 
-    customer = UserFactory.build(role=RoleCode.CUSTOMER)
-    customer.save()
-
-    reservation = Reservation.objects.create(
-        restaurant=restaurant,
-        table=table,
-        customer=customer,
-        guest_count=2,
-        start_at=timezone.now(),
-        end_at=timezone.now() + timedelta(hours=2),
-        status=ReservationStatus.ACTIVE,
-    )
-
     with patch("apps.orders.views.emit_hall_table_status_changed") as mock_emit:
         client = APIClient()
         access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
@@ -255,7 +242,6 @@ def test_session_create_emits_table_status_changed(restaurant: Any, table: Any) 
             "/api/orders/sessions/",
             {
                 "table": table.public_id,
-                "reservation": reservation.public_id,
                 "guest_count": 2,
                 "currency": "UAH",
                 "opened_at": timezone.now().isoformat(),
