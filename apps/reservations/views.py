@@ -25,6 +25,7 @@ from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
 from .serializers import ReservationSerializer
 from .services import (
+    activate_pending_reservation,
     close_session,
     create_reservation,
     create_staff_reservation,
@@ -321,3 +322,21 @@ class ReservationViewSet(
         close_session(session, actor=user)
 
         return Response({"detail": "Check closed successfully."})
+
+    @extend_schema(
+        summary="Activate pending reservation",
+        description="Activates a pending reservation and creates a session. "
+        "Only staff can activate. Table must be free with no earlier pending reservations.",
+    )
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request: Request, public_id: str | None = None) -> Response:
+        reservation = self.get_object()
+        user = cast(User, request.user)
+
+        if getattr(user, "role", None) not in (RoleCode.ADMIN, RoleCode.WAITER):
+            raise PermissionDenied("Only staff can activate reservations.")
+
+        updated = activate_pending_reservation(reservation, actor=user)
+
+        result_serializer = self.get_serializer(updated)
+        return Response(result_serializer.data)
