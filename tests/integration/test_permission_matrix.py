@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
+from apps.restaurants.models import Table
 from tests.conftest import UserFactory
 
 ENDPOINTS: list[str] = [
@@ -98,3 +99,27 @@ def test_role_change_invalidates_existing_token(restaurant: Any) -> None:
 
     response = client.get(reverse("layout-list"))
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+EDITOR_PATCH_ALLOWED = {RoleCode.ADMIN, RoleCode.WAITER}
+EDITOR_PATCH_DENIED = {RoleCode.COOK, RoleCode.CUSTOMER}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("role", ROLES)
+def test_editor_table_patch_role_enforcement(
+    role: str, api: Callable[..., Any], restaurant: Any
+) -> None:
+    table = Table.objects.create(
+        restaurant=restaurant,
+        table_number="T-EDIT",
+        capacity=4,
+        active=True,
+    )
+    ctx = api(role=role, restaurant_id=restaurant.id)
+    url = reverse("editor-table-detail", args=[table.public_id])
+    response = ctx.client.patch(url, {"position_x": 10}, format="json")
+    if role in EDITOR_PATCH_ALLOWED:
+        assert response.status_code == status.HTTP_200_OK, f"{role} should be allowed to PATCH editor tables"
+    else:
+        assert response.status_code == status.HTTP_403_FORBIDDEN, f"{role} should be denied on PATCH editor tables"
