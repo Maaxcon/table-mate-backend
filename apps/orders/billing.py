@@ -34,7 +34,7 @@ from .models import (
     OrderStatus,
     Session,
 )
-from .services import _broadcast_cart_updated
+from .services.cart import _broadcast_cart_updated
 
 
 def _restaurant_billing(restaurant_id: int) -> tuple[str, Decimal]:
