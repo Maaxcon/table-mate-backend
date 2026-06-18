@@ -9,7 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode
-from apps.authentication.permissions import IsFloor
+from apps.authentication.permissions import IsAdmin, IsFloor
 from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 from common.api import (
@@ -17,13 +17,19 @@ from common.api import (
     PublicRestaurantQueryMixin,
     RestaurantScopedViewSetMixin,
     get_restaurant_id_from_auth,
+    require_restaurant_id_from_auth,
 )
 from common.permissions import HasAnyRole
 
 from .models import Layout
 from .selectors import get_available_tables
-from .serializers import EditorTableSerializer, LayoutSerializer
-from .services import update_table_position
+from .serializers import (
+    EditorTableSerializer,
+    LayoutSerializer,
+    LayoutVersionSerializer,
+    PublishLayoutSerializer,
+)
+from .services import publish_layout, update_table_position
 
 
 @extend_schema(tags=["Editor"])
@@ -33,6 +39,23 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
     serializer_class = LayoutSerializer
     filterset_fields = ["version", "published_at", "published_by"]
     ordering_fields = ["created_at", "updated_at", "version", "published_at"]
+
+    @extend_schema(
+        request=PublishLayoutSerializer,
+        responses={201: LayoutVersionSerializer},
+    )
+    @action(detail=False, methods=["post"], permission_classes=[IsAdmin])
+    def publish(self, request: Request) -> Response:
+        restaurant_id = require_restaurant_id_from_auth(request)
+        serializer = PublishLayoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        version = publish_layout(
+            restaurant_id=restaurant_id,
+            layout_json=serializer.validated_data["layout_json"],
+            published_by=request.user,  # type: ignore[arg-type]  # IsAdmin guarantees authenticated user
+        )
+        output = LayoutVersionSerializer(version)
+        return Response(output.data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Editor"])

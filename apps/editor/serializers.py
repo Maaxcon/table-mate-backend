@@ -1,10 +1,12 @@
+from typing import Any
+
 from rest_framework import serializers
 
 from apps.authentication.models import User
 from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField
 
-from .models import Layout
+from .models import Layout, LayoutVersion
 
 
 class LayoutSerializer(serializers.ModelSerializer[Layout]):
@@ -51,3 +53,25 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
             "created_at",
             "updated_at",
         ]
+
+
+class PublishLayoutSerializer(serializers.Serializer[Any]):
+    layout_json = serializers.JSONField()
+
+
+class LayoutVersionSerializer(serializers.ModelSerializer[LayoutVersion]):
+    restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
+    published_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
+
+    class Meta:
+        model = LayoutVersion
+        fields = [
+            "public_id",
+            "restaurant",
+            "parent_version",
+            "layout_json",
+            "published_at",
+            "published_by",
+            "created_at",
+        ]
+        read_only_fields = fields
