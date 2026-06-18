@@ -1,10 +1,8 @@
 from django.db import transaction
-from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 
 from apps.authentication.permissions import IsFloor, IsStaff
-from apps.restaurants.models import RestaurantSettings
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.exceptions import TableOccupiedError
 
@@ -15,7 +13,7 @@ from .serializers import (
     SessionSerializer,
     TicketSerializer,
 )
-from .services import create_walk_in_reservation
+from .services import create_walk_in_reservation, ensure_visit_session
 
 
 @extend_schema(tags=["Orders"])
@@ -35,25 +33,11 @@ class SessionViewSet(
         if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
             raise TableOccupiedError()
         guest_count = serializer.validated_data["guest_count"]
-        restaurant_id = get_restaurant_id_from_auth(self.request)
-        settings = (
-            RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
-            if restaurant_id is not None
-            else None
-        )
-        currency = settings.currency if settings and settings.currency else "USD"
         with transaction.atomic():
-            reservation = create_walk_in_reservation(
-                table=table,
-                guest_count=guest_count,
-            )
-            serializer.save(
-                restaurant_id=restaurant_id,
-                opened_by=self.request.user,
-                reservation=reservation,
-                currency=currency,
-                opened_at=timezone.now(),
-            )
+            reservation = create_walk_in_reservation(table=table, guest_count=guest_count)
+            # ensure_visit_session owns currency/opened_at resolution for every
+            # open-table path (walk-in, scan, activate), so it stays in one place.
+            serializer.instance = ensure_visit_session(reservation, opened_by=self.request.user)
 
 
 @extend_schema(tags=["Orders"])
