@@ -4043,6 +4043,9 @@ components:
           type: string
           readOnly: true
           nullable: true
+        void_reason_note:
+          type: string
+          nullable: true
         is_wasted:
           type: boolean
         created_at:
@@ -4918,6 +4921,9 @@ components:
         void_reason:
           type: string
           readOnly: true
+          nullable: true
+        void_reason_note:
+          type: string
           nullable: true
         is_wasted:
           type: boolean
