@@ -874,6 +874,41 @@ class TestGuestInit:
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.json()
 
+    def test_guest_init_reservation_id_reopens_cart_after_checkout(
+        self,
+        api_client: Client,
+        reservation: Reservation,
+        restaurant: Restaurant,
+    ) -> None:
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        from apps.orders.models import CartSession, CartSessionStatus
+        from apps.reservations.models import ReservationStatus
+
+        reservation.status = ReservationStatus.ACTIVE
+        reservation.start_at = datetime.now(UTC) - timedelta(minutes=30)
+        reservation.save(update_fields=["status", "start_at"])
+        # The previous round's cart was checked out and closed.
+        closed = CartSession.objects.create(
+            restaurant=restaurant,
+            reservation=reservation,
+            status=CartSessionStatus.CLOSED,
+        )
+
+        response = api_client.post(
+            self.url,
+            {"reservation_id": str(reservation.public_id)},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        active = CartSession.objects.filter(reservation=reservation, status=CartSessionStatus.ACTIVE)
+        assert active.count() == 1
+        new_session = active.get()
+        assert new_session.public_id != closed.public_id
+        token = AccessToken(response.json()["access"])
+        assert str(token["cart_session_id"]) == str(new_session.public_id)
+
     def test_guest_init_missing_target_returns_400(self, api_client: Client) -> None:
         response = api_client.post(
             self.url,

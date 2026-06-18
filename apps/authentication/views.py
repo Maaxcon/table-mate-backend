@@ -277,9 +277,14 @@ def _ensure_session_for_table(table_id: str) -> "CartSession":
 
 
 def _find_active_session_for_reservation(reservation_id: Any) -> "CartSession | None":
+    # Reuse the open cart if one exists; otherwise open a fresh one for the
+    # reservation's table (e.g. the round after a checkout closed the last cart).
     from apps.orders.models import CartSession, CartSessionStatus
+    from apps.orders.services import ensure_active_cart_for_table
+    from apps.reservations.models import Reservation
+    from common.exceptions import NoActiveReservationError
 
-    return (
+    session = (
         CartSession.objects.filter(
             reservation__public_id=reservation_id,
             status=CartSessionStatus.ACTIVE,
@@ -287,6 +292,16 @@ def _find_active_session_for_reservation(reservation_id: Any) -> "CartSession | 
         .order_by("-created_at")
         .first()
     )
+    if session is not None:
+        return session
+
+    reservation = Reservation.objects.filter(public_id=reservation_id).select_related("table").first()
+    if reservation is None or reservation.table is None:
+        return None
+    try:
+        return ensure_active_cart_for_table(table=reservation.table)
+    except NoActiveReservationError:
+        return None
 
 
 def _issue_guest_token(*, cart_session_id: str | None, guest_id: str | None = None) -> str:
