@@ -108,7 +108,8 @@ class TestPublishEndpoint:
 
         assert response.status_code == 201
         data = response.json()
-        assert data["layout_json"] == TABLE_LAYOUT_A
+        assert data["layout_json"]["diff"] is None
+        assert data["layout_json"]["entities"] == TABLE_LAYOUT_A["tables"]
         assert data["restaurant"] == str(restaurant.public_id)
         assert data["published_by"] is not None
         assert data["public_id"] is not None
@@ -187,7 +188,8 @@ class TestPublishEndpoint:
             )
 
         version_1 = LayoutVersion.objects.get(public_id=resp1.json()["public_id"])
-        assert version_1.layout_json == TABLE_LAYOUT_A
+        assert version_1.layout_json["diff"] is None
+        assert version_1.layout_json["entities"] == TABLE_LAYOUT_A["tables"]
 
     def test_active_sessions_unaffected(self, restaurant: Any, table: Any) -> None:
         from django.utils import timezone

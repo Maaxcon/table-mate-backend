@@ -49,13 +49,21 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
         restaurant_id = require_restaurant_id_from_auth(request)
         serializer = PublishLayoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        version = publish_layout(
+        result = publish_layout(
             restaurant_id=restaurant_id,
             layout_json=serializer.validated_data["layout_json"],
             published_by=request.user,  # type: ignore[arg-type]  # IsAdmin guarantees authenticated user
         )
+        version = result["version"]
         output = LayoutVersionSerializer(version)
-        return Response(output.data, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                **output.data,
+                "table_id_map": result["table_id_map"],
+                "warnings": result["warnings"],
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @extend_schema(tags=["Editor"])

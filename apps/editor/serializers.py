@@ -3,7 +3,7 @@ from typing import Any
 from rest_framework import serializers
 
 from apps.authentication.models import User
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, Table, Zone
 from common.api import PublicIdRelatedField
 
 from .models import Layout, LayoutVersion
@@ -30,12 +30,14 @@ class LayoutSerializer(serializers.ModelSerializer[Layout]):
 
 class EditorTableSerializer(serializers.ModelSerializer[Table]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
+    zone: PublicIdRelatedField[Zone] = PublicIdRelatedField(read_only=True, allow_null=True)
 
     class Meta:
         model = Table
         fields = [
             "public_id",
             "restaurant",
+            "zone",
             "table_number",
             "capacity",
             "shape",
@@ -48,6 +50,7 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
         read_only_fields = [
             "public_id",
             "restaurant",
+            "zone",
             "table_number",
             "capacity",
             "created_at",
