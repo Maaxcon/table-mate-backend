@@ -189,6 +189,7 @@ def checkout_cart_session(
         cart_session.save(update_fields=["status"])
 
         _recompute_session_totals(session)
-        _broadcast_cart_updated(cart_session)
 
+    # Broadcast after commit so websocket consumers don't read a pre-commit cart.
+    _broadcast_cart_updated(cart_session)
     return order
