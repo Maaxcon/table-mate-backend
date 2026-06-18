@@ -7,11 +7,9 @@ from apps.restaurants.models import Restaurant, RestaurantSettings, Table, Table
 
 
 class _TableData(TypedDict):
-    table_number: str
+    public_number: str
     capacity: int
     shape: str
-    position_x: int
-    position_y: int
     zone_name: str
 
 
@@ -38,86 +36,16 @@ _RESTAURANTS_DATA: list[_RestaurantData] = [
             {"name": "Winter Garden", "sort_order": 2},
         ],
         "tables": [
-            {
-                "table_number": "1",
-                "capacity": 2,
-                "shape": TableShape.ROUND,
-                "position_x": 100,
-                "position_y": 100,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "2",
-                "capacity": 2,
-                "shape": TableShape.ROUND,
-                "position_x": 100,
-                "position_y": 200,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "3",
-                "capacity": 4,
-                "shape": TableShape.SQUARE,
-                "position_x": 200,
-                "position_y": 100,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "4",
-                "capacity": 4,
-                "shape": TableShape.SQUARE,
-                "position_x": 200,
-                "position_y": 200,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "5",
-                "capacity": 4,
-                "shape": TableShape.SQUARE,
-                "position_x": 200,
-                "position_y": 300,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "6",
-                "capacity": 6,
-                "shape": TableShape.SQUARE,
-                "position_x": 300,
-                "position_y": 200,
-                "zone_name": "VIP Room",
-            },
-            {
-                "table_number": "7",
-                "capacity": 6,
-                "shape": TableShape.SQUARE,
-                "position_x": 300,
-                "position_y": 300,
-                "zone_name": "VIP Room",
-            },
-            {
-                "table_number": "8",
-                "capacity": 8,
-                "shape": TableShape.SQUARE,
-                "position_x": 500,
-                "position_y": 100,
-                "zone_name": "Winter Garden",
-            },
-            {
-                "table_number": "9",
-                "capacity": 4,
-                "shape": TableShape.SQUARE,
-                "position_x": 500,
-                "position_y": 300,
-                "zone_name": "Winter Garden",
-            },
-            {
-                "table_number": "10",
-                "capacity": 4,
-                "shape": TableShape.SQUARE,
-                "position_x": 500,
-                "position_y": 400,
-                "zone_name": "Winter Garden",
-            },
+            {"public_number": "T1", "capacity": 2, "shape": TableShape.ROUND, "zone_name": "Main Hall"},
+            {"public_number": "T2", "capacity": 2, "shape": TableShape.ROUND, "zone_name": "Main Hall"},
+            {"public_number": "T3", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Main Hall"},
+            {"public_number": "T4", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Main Hall"},
+            {"public_number": "T5", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Main Hall"},
+            {"public_number": "T6", "capacity": 6, "shape": TableShape.SQUARE, "zone_name": "VIP Room"},
+            {"public_number": "T7", "capacity": 6, "shape": TableShape.SQUARE, "zone_name": "VIP Room"},
+            {"public_number": "T8", "capacity": 8, "shape": TableShape.SQUARE, "zone_name": "Winter Garden"},
+            {"public_number": "T9", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Winter Garden"},
+            {"public_number": "T10", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Winter Garden"},
         ],
     },
     {
@@ -131,46 +59,11 @@ _RESTAURANTS_DATA: list[_RestaurantData] = [
             {"name": "Terrace", "sort_order": 1},
         ],
         "tables": [
-            {
-                "table_number": "T1",
-                "capacity": 2,
-                "shape": TableShape.ROUND,
-                "position_x": 100,
-                "position_y": 100,
-                "zone_name": "Indoor",
-            },
-            {
-                "table_number": "T2",
-                "capacity": 2,
-                "shape": TableShape.ROUND,
-                "position_x": 100,
-                "position_y": 200,
-                "zone_name": "Indoor",
-            },
-            {
-                "table_number": "T3",
-                "capacity": 4,
-                "shape": TableShape.SQUARE,
-                "position_x": 200,
-                "position_y": 100,
-                "zone_name": "Indoor",
-            },
-            {
-                "table_number": "T4",
-                "capacity": 4,
-                "shape": TableShape.SQUARE,
-                "position_x": 200,
-                "position_y": 200,
-                "zone_name": "Terrace",
-            },
-            {
-                "table_number": "T5",
-                "capacity": 6,
-                "shape": TableShape.SQUARE,
-                "position_x": 300,
-                "position_y": 200,
-                "zone_name": "Terrace",
-            },
+            {"public_number": "T1", "capacity": 2, "shape": TableShape.ROUND, "zone_name": "Indoor"},
+            {"public_number": "T2", "capacity": 2, "shape": TableShape.ROUND, "zone_name": "Indoor"},
+            {"public_number": "T3", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Indoor"},
+            {"public_number": "T4", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Terrace"},
+            {"public_number": "T5", "capacity": 6, "shape": TableShape.SQUARE, "zone_name": "Terrace"},
         ],
     },
 ]
@@ -246,12 +139,10 @@ class Command(BaseCommand):
             for table_data in data["tables"]:
                 _, was_created_table = Table.objects.update_or_create(
                     restaurant=restaurant,
-                    table_number=table_data["table_number"],
+                    public_number=table_data["public_number"],
                     defaults={
                         "capacity": table_data["capacity"],
                         "shape": table_data["shape"],
-                        "position_x": table_data["position_x"],
-                        "position_y": table_data["position_y"],
                         "active": True,
                         "zone": zone_map.get(str(table_data["zone_name"])),
                     },
