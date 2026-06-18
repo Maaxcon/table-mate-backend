@@ -290,6 +290,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/Layout'
           description: ''
+  /api/editor/layouts/publish/:
+    post:
+      operationId: editor_layouts_publish_create
+      tags:
+      - Editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishLayout'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublishLayout'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublishLayout'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LayoutVersion'
+          description: ''
   /api/editor/tables/:
     get:
       operationId: editor_tables_list
@@ -3730,6 +3757,43 @@ components:
       required:
       - tables
       - upcoming_reservations
+    LayoutVersion:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        parent_version:
+          type: integer
+          readOnly: true
+          nullable: true
+        layout_json:
+          readOnly: true
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+        published_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - layout_json
+      - parent_version
+      - public_id
+      - published_at
+      - published_by
+      - restaurant
     MeUpdate:
       type: object
       description: |-
@@ -5337,6 +5401,12 @@ components:
       - rating
       - timezone
       - working_hours
+    PublishLayout:
+      type: object
+      properties:
+        layout_json: {}
+      required:
+      - layout_json
     Receipt:
       type: object
       properties:

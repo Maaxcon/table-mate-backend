@@ -48,6 +48,7 @@ class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {
     "HALL_TABLE_STATUS_CHANGED": {"event_name", "table_id", "current_status", "occurred_at"},
     "HALL_NEW_RESERVATION": {"event_name", "table_id", "occurred_at"},
+    "LAYOUT_PUBLISHED": {"event_name", "layout_version_id", "restaurant_id", "occurred_at"},
 }
 
 
