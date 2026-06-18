@@ -29,7 +29,7 @@ from .serializers import (
     LayoutVersionSerializer,
     PublishLayoutSerializer,
 )
-from .services import publish_layout, update_table_position
+from .services import TableInUseError, publish_layout
 
 
 @extend_schema(tags=["Editor"])
@@ -49,11 +49,16 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
         restaurant_id = require_restaurant_id_from_auth(request)
         serializer = PublishLayoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        result = publish_layout(
-            restaurant_id=restaurant_id,
-            layout_json=serializer.validated_data["layout_json"],
-            published_by=request.user,  # type: ignore[arg-type]  # IsAdmin guarantees authenticated user
-        )
+
+        try:
+            result = publish_layout(
+                restaurant_id=restaurant_id,
+                layout_data=serializer.validated_data,
+                published_by=request.user,  # type: ignore[arg-type]
+            )
+        except TableInUseError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
         version = result["version"]
         output = LayoutVersionSerializer(version)
         return Response(
@@ -79,13 +84,15 @@ class EditorTableViewSet(
     ordering_fields = [
         "created_at",
         "updated_at",
-        "table_number",
+        "public_number",
         "capacity",
     ]
 
     def get_queryset(self) -> QuerySet[Table]:
         qs = super().get_queryset()
         restaurant_id = get_restaurant_id_from_auth(self.request)
+        if restaurant_id is None:
+            restaurant_id = self.get_restaurant_id()
         if restaurant_id is not None:
             qs = qs.filter(restaurant_id=restaurant_id)
         return qs.filter(active=True)
@@ -197,12 +204,6 @@ class EditorTableViewSet(
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-
-        update_table_position(
-            instance,
-            position_x=serializer.validated_data.get("position_x"),
-            position_y=serializer.validated_data.get("position_y"),
-        )
-
+        serializer.save()
         result_serializer = self.get_serializer(instance)
         return Response(result_serializer.data)
