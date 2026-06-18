@@ -28,6 +28,7 @@ from apps.restaurants.models import Table
 from common.exceptions import (
     CartItemNotFoundError,
     CartSessionClosedError,
+    DomainError,
     MenuItemNotFoundError,
     MenuItemUnavailableError,
     ReservationConflictError,
@@ -337,6 +338,11 @@ def create_walk_in_reservation(
     )
 
 
+_SESSION_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    SessionStatus.OPEN: {SessionStatus.CLOSED, SessionStatus.VOIDED},
+}
+
+
 @transaction.atomic
 def update_session_status(
     session: Session,
@@ -344,6 +350,19 @@ def update_session_status(
     new_status: str,
     actor: User,
 ) -> Session:
+    if new_status not in SessionStatus.values:
+        raise DomainError(f"Invalid session status: {new_status}.")
+
+    if session.status in _SESSION_STATUS_TRANSITIONS:
+        if new_status not in _SESSION_STATUS_TRANSITIONS[session.status]:
+            raise ReservationConflictError(
+                f"Cannot transition session from {session.status} to {new_status}."
+            )
+    elif new_status != session.status:
+        raise ReservationConflictError(
+            f"Cannot transition session from terminal state {session.status}."
+        )
+
     previous_status = session.status
     session.status = new_status
     session.save(update_fields=["status", "updated_at"])
