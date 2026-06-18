@@ -399,7 +399,11 @@ def move_session_to_table(
         raise ReservationConflictError("Can only move an open session.")
 
     try:
-        new_table = Table.objects.get(public_id=new_table_id, active=True)
+        new_table = Table.objects.get(
+            public_id=new_table_id,
+            restaurant_id=session.restaurant_id,
+            active=True,
+        )
     except Table.DoesNotExist:
         raise NotFound("Target table not found or inactive.") from None
 
