@@ -364,7 +364,7 @@ def activate_pending_reservation(
     reservation.save(update_fields=["status", "updated_at"])
 
     restaurant = table.restaurant
-    Session.objects.create(
+    session = Session.objects.create(
         restaurant_id=reservation.restaurant_id,
         table=table,
         reservation=reservation,
@@ -380,7 +380,7 @@ def activate_pending_reservation(
             table_id=str(table.public_id),
             previous_status="free",
             current_status="occupied",
-            session_id=str(reservation.public_id),
+            session_id=str(session.public_id),
             actor=actor,
         )
     )
