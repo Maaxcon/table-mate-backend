@@ -9,7 +9,7 @@ from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
-from .models import Order, OrderItem, Session, Ticket, VoidReason
+from .models import Order, OrderItem, Session, SessionStatus, Ticket, VoidReason
 
 
 def _scope_to_request_restaurant(field: Any, context: Mapping[str, object]) -> None:
@@ -180,3 +180,34 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "updated_at",
         ]
         read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]
+
+
+class CreateOrderItemSerializer(serializers.Serializer[None]):
+    menu_item = PublicIdRelatedField[MenuItem](
+        queryset=MenuItem.objects.all(),
+        required=True,
+    )
+    guest_slot = serializers.IntegerField(required=False, default=1, min_value=1)
+    quantity = serializers.IntegerField(required=False, default=1, min_value=1)
+    comment = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _scope_to_request_restaurant(self.fields["menu_item"], self.context)
+
+
+class CreateOrderSerializer(serializers.Serializer[None]):
+    session = PublicIdRelatedField[Session](
+        queryset=Session.objects.all(),
+        required=True,
+    )
+    items = CreateOrderItemSerializer(many=True, required=True)
+
+    def validate_session(self, value: Session) -> Session:
+        if value.status != SessionStatus.OPEN:
+            raise serializers.ValidationError("Session is not open.")
+        return value
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _scope_to_request_restaurant(self.fields["session"], self.context)
