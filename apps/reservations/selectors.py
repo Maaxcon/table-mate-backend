@@ -28,6 +28,25 @@ def get_active_reservation_for_table(table: Table) -> Reservation | None:
     )
 
 
+def get_upcoming_pending_reservation_for_table(table: Table) -> Reservation | None:
+    """Return the soonest pending (not yet activated) booking on the table, or None.
+
+    Used when a guest opens the table link before the table is active: tells them
+    a booking exists and when it starts, instead of a blunt "no booking" message.
+    Only bookings whose window has not already passed are considered.
+    """
+    now = timezone.now()
+    return (
+        Reservation.objects.filter(
+            table=table,
+            status=ReservationStatus.PENDING,
+            end_at__gt=now,
+        )
+        .order_by("start_at")
+        .first()
+    )
+
+
 def get_reservations_for_table(
     table: Table,
     start_at: datetime,

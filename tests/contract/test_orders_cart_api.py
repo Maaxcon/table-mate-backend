@@ -752,12 +752,13 @@ class TestGuestInit:
         token = AccessToken(response.json()["access"])
         assert str(token["cart_session_id"]) == str(session.public_id)
 
-    def test_guest_init_table_id_no_active_reservation_returns_404(
+    def test_guest_init_table_id_pending_booking_returns_not_yet_active(
         self,
         api_client: Client,
         reservation: Reservation,
     ) -> None:
-        # Reservation stays PENDING / future -> not currently active.
+        # A pending future booking exists but is not active yet: the guest is told
+        # when it starts, not that there is no booking.
         from apps.orders.models import CartSession
 
         table = reservation.table
@@ -766,6 +767,29 @@ class TestGuestInit:
         response = api_client.post(
             self.url,
             {"table_id": str(table.public_id)},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        body = response.json()
+        assert body["code"] == "RESERVATION_NOT_YET_ACTIVE"
+        assert body["start_at"] == reservation.start_at.isoformat()
+        assert not CartSession.objects.exists()
+
+    def test_guest_init_table_id_no_booking_returns_404(
+        self,
+        api_client: Client,
+        restaurant: Restaurant,
+    ) -> None:
+        # A table with no booking at all -> NO_ACTIVE_RESERVATION (unchanged).
+        from apps.orders.models import CartSession
+
+        bare_table = Table.objects.create(
+            restaurant=restaurant, table_number="NB", capacity=2, active=True
+        )
+
+        response = api_client.post(
+            self.url,
+            {"table_id": str(bare_table.public_id)},
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND

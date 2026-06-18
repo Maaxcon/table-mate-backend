@@ -18,7 +18,7 @@ from apps.orders.models import CartSession, CartSessionStatus
 from apps.orders.services import ensure_active_cart_for_table
 from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
-from common.exceptions import NoActiveReservationError
+from common.exceptions import NoActiveReservationError, ReservationNotYetActiveError
 
 from .models import RoleCode, User
 from .serializers import (
@@ -188,11 +188,38 @@ class CustomerContextView(APIView):
         return response
 
 
+def _reject_if_token_version_stale(refresh_token: str) -> None:
+    """Reject a refresh token issued before a role change (token_version bump).
+
+    Without this the refresh would mint a new access token that still carries the
+    old token_version, so every request keeps 401-ing. Rejecting here sends the
+    client straight to a fresh login instead.
+    """
+    from rest_framework_simplejwt.settings import api_settings
+    from rest_framework_simplejwt.tokens import RefreshToken as _RefreshToken
+
+    try:
+        # The stub types the arg as Token|None, but the constructor decodes the
+        # encoded token string at runtime.
+        parsed = _RefreshToken(refresh_token)  # type: ignore[arg-type]
+    except TokenError as exc:
+        raise InvalidToken(exc.args[0]) from exc
+    user_id = parsed.payload.get(api_settings.USER_ID_CLAIM)
+    token_version = parsed.payload.get("token_version")
+    if user_id is None or token_version is None:
+        raise InvalidToken("Token invalidated due to role change.")
+    user = User.objects.filter(pk=user_id).first()
+    if user is None or user.token_version != token_version:
+        raise InvalidToken("Token invalidated due to role change.")
+
+
 class CookieTokenRefreshView(TokenRefreshView):
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         refresh_token = request.COOKIES.get("refresh_token")
         if not refresh_token:
             return Response({"detail": "No refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        _reject_if_token_version_stale(refresh_token)
 
         serializer = self.get_serializer(data={"refresh": refresh_token})
         try:
@@ -251,7 +278,13 @@ class GuestInitView(APIView):
         if table_id:
             # Scan flow: create the cart if the table has an active reservation.
             # Raises NoActiveReservationError (-> 404 NO_ACTIVE_RESERVATION) otherwise.
-            session = _ensure_session_for_table(str(table_id))
+            try:
+                session = _ensure_session_for_table(str(table_id))
+            except ReservationNotYetActiveError as exc:
+                return Response(
+                    {"detail": exc.default_detail, "code": exc.default_code, "start_at": exc.start_at},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
         else:
             session = _find_active_session_for_reservation(reservation_id)
             if session is None:
@@ -267,10 +300,20 @@ class GuestInitView(APIView):
 
 
 def _ensure_session_for_table(table_id: str) -> CartSession:
+    from apps.reservations.selectors import get_upcoming_pending_reservation_for_table
+
     table = Table.objects.filter(public_id=table_id, active=True).first()
     if table is None:
         raise NoActiveReservationError("This table has no active reservation.")
-    return ensure_active_cart_for_table(table=table)
+    try:
+        return ensure_active_cart_for_table(table=table)
+    except NoActiveReservationError:
+        # A pending booking exists but is not active yet: tell the guest when it
+        # starts instead of "no booking".
+        upcoming = get_upcoming_pending_reservation_for_table(table)
+        if upcoming is not None:
+            raise ReservationNotYetActiveError(start_at=upcoming.start_at.isoformat()) from None
+        raise
 
 
 def _find_active_session_for_reservation(reservation_id: Any) -> CartSession | None:

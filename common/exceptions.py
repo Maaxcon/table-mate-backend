@@ -49,6 +49,22 @@ class NoActiveReservationError(DomainError):
     default_status_code = HTTPStatus.NOT_FOUND
 
 
+class ReservationNotYetActiveError(DomainError):
+    """The table has a pending booking that has not been activated yet.
+
+    Distinct from NO_ACTIVE_RESERVATION so the guest can be told their booking
+    exists and when it starts, instead of "no booking". Carries the start time.
+    """
+
+    default_detail = "This table's booking has not started yet."
+    default_code = "RESERVATION_NOT_YET_ACTIVE"
+    default_status_code = HTTPStatus.NOT_FOUND
+
+    def __init__(self, *args: object, start_at: str | None = None) -> None:
+        super().__init__(*args)
+        self.start_at = start_at
+
+
 class CartSessionClosedError(DomainError):
     default_detail = "Cart session is closed."
     default_code = "cart_session_closed"
