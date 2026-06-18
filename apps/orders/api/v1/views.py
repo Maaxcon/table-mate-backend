@@ -11,12 +11,12 @@ from rest_framework.views import APIView
 
 from apps.authentication.authentication import GuestJWTAuthentication
 from apps.authentication.models import User
+from apps.orders.billing import checkout_cart_session
 from apps.orders.models import CartItem, CartSession
 from apps.orders.permissions import IsActiveTableGuest
 from apps.orders.selectors import get_cart_session
 from apps.orders.services import (
     add_item_to_cart,
-    checkout_cart_session,
     create_cart_session,
     remove_item_from_cart,
     update_cart_item_quantity,

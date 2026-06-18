@@ -6,6 +6,7 @@ from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.exceptions import TableOccupiedError
 
+from .billing import ensure_visit_session
 from .models import Order, OrderItem, Session, SessionStatus, Ticket
 from .serializers import (
     OrderItemSerializer,
@@ -13,7 +14,7 @@ from .serializers import (
     SessionSerializer,
     TicketSerializer,
 )
-from .services import create_walk_in_reservation, ensure_visit_session
+from .services import create_walk_in_reservation
 
 
 @extend_schema(tags=["Orders"])

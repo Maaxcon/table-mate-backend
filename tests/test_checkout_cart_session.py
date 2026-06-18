@@ -8,6 +8,7 @@ import pytest
 from django.utils import timezone
 
 from apps.menu.models import MenuItem
+from apps.orders.billing import checkout_cart_session
 from apps.orders.models import (
     CartItem,
     CartSessionStatus,
@@ -18,7 +19,6 @@ from apps.orders.models import (
 )
 from apps.orders.services import (
     add_item_to_cart,
-    checkout_cart_session,
     ensure_active_cart_for_table,
 )
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
@@ -178,7 +178,7 @@ def test_checkout_is_atomic_on_failure(
     _active_reservation(restaurant, table)
     cart = _open_cart_with_item(table, item)
 
-    with mock.patch("apps.orders.services.OrderItem.objects.create", side_effect=RuntimeError("boom")):
+    with mock.patch("apps.orders.billing.OrderItem.objects.create", side_effect=RuntimeError("boom")):
         with pytest.raises(RuntimeError):
             checkout_cart_session(cart_session=cart)
 
@@ -273,7 +273,7 @@ def test_checkout_blocked_when_restaurant_closed(
     _active_reservation(restaurant, table)
     cart = _open_cart_with_item(table, item)
 
-    with mock.patch("apps.orders.services.is_restaurant_open", return_value=False):
+    with mock.patch("apps.orders.billing.is_restaurant_open", return_value=False):
         with pytest.raises(RestaurantClosedError):
             checkout_cart_session(cart_session=cart)
 
