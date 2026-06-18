@@ -205,13 +205,11 @@ class TableSerializer(serializers.ModelSerializer[Table]):
         fields = [
             "public_id",
             "restaurant",
-            "table_number",
+            "public_number",
             "capacity",
             "is_occupied",
             "shape",
             "active",
-            "position_x",
-            "position_y",
             "zone",
             "created_at",
             "updated_at",
@@ -232,4 +230,5 @@ class UpcomingReservationSerializer(serializers.Serializer[None]):
 
 class LayoutResponseSerializer(serializers.Serializer[None]):
     tables = TableSerializer(many=True)
+    layout = serializers.JSONField(required=False, allow_null=True)
     upcoming_reservations = UpcomingReservationSerializer(many=True)

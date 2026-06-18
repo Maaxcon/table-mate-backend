@@ -432,7 +432,7 @@ def move_session_to_table(
         type=reservation.type,
         status=ReservationStatus.ACTIVE,
         created_by_staff=True,
-        notes=f"Moved from table {session.table.table_number}",
+        notes=f"Moved from table {session.table.public_number}",
     )
 
     session.table = new_table

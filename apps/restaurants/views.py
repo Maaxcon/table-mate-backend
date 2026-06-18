@@ -331,23 +331,36 @@ class TableViewSet(
 
     @extend_schema(
         summary="Tables layout with upcoming reservations",
-        description="Returns all active tables and today's PENDING reservations for the floor plan.",
+        description=(
+            "Returns all active tables, the latest layout JSON, "
+            "and today's PENDING reservations for the floor plan."
+        ),
         responses=LayoutResponseSerializer,
     )
     @action(detail=False, methods=["get"])
     def layout(self, request: Request) -> Response:
         restaurant_id = self.get_restaurant_id()
         if restaurant_id is None:
-            return Response({"tables": [], "upcoming_reservations": []})
+            return Response({"tables": [], "layout": None, "upcoming_reservations": []})
 
         tables_qs = self.get_queryset().filter(active=True)
         tables_serializer = self.get_serializer(tables_qs, many=True)
+
+        from apps.editor.models import LayoutVersion
+
+        latest_layout = (
+            LayoutVersion.objects.filter(restaurant_id=restaurant_id)
+            .order_by("-published_at", "-id")
+            .first()
+        )
+        layout_payload = latest_layout.layout_json if latest_layout else None
 
         layout_data = selectors.get_layout_data(restaurant_id)
 
         return Response(
             {
                 "tables": tables_serializer.data,
+                "layout": layout_payload,
                 "upcoming_reservations": layout_data["upcoming_reservations"],
             }
         )

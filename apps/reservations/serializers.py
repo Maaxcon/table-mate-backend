@@ -14,7 +14,7 @@ class TableInfoSerializer(serializers.ModelSerializer[Table]):
         model = Table
         fields = [
             "public_id",
-            "table_number",
+            "public_number",
             "capacity",
             "shape",
         ]
