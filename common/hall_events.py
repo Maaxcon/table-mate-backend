@@ -55,6 +55,24 @@ def emit_hall_table_status_changed(
     )
 
 
+def emit_hall_layout_published(
+    restaurant_id: int,
+    *,
+    layout_version_id: int,
+) -> None:
+    _broadcast_hall_event(
+        restaurant_id,
+        {
+            "event_name": "LAYOUT_PUBLISHED",
+            "schema_version": "1",
+            "event_id": str(uuid.uuid4()),
+            "layout_version_id": layout_version_id,
+            "restaurant_id": restaurant_id,
+            "occurred_at": timezone.now().isoformat(),
+        },
+    )
+
+
 def emit_hall_new_reservation(
     restaurant_id: int,
     *,
