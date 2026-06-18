@@ -2000,6 +2000,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/Session'
           description: ''
+  /api/orders/sessions/{public_id}/close/:
+    post:
+      operationId: orders_sessions_close_create
+      description: 'End the visit: close the session, complete the reservation, and
+        close any active cart so the table is freed. No payment step yet. Idempotent.'
+      summary: Close the check
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
   /api/orders/tickets/:
     get:
       operationId: orders_tickets_list

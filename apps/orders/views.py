@@ -1,15 +1,18 @@
-from typing import cast
+from typing import Any, cast
 
 from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.request import Request
+from rest_framework.response import Response
 
 from apps.authentication.models import User
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.exceptions import TableOccupiedError
 
-from .billing import ensure_visit_session
+from .billing import close_visit_session, ensure_visit_session
 from .models import Order, OrderItem, Session, SessionStatus, Ticket
 from .serializers import (
     OrderItemSerializer,
@@ -45,6 +48,19 @@ class SessionViewSet(
             serializer.instance = ensure_visit_session(
                 reservation, opened_by=cast(User, self.request.user)
             )
+
+    @extend_schema(
+        summary="Close the check",
+        description="End the visit: close the session, complete the reservation, and close any "
+        "active cart so the table is freed. No payment step yet. Idempotent.",
+        request=None,
+        responses=SessionSerializer,
+    )
+    @action(detail=True, methods=["post"], url_path="close")
+    def close(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        session = close_visit_session(session=self.get_object())
+        serializer = self.get_serializer(session)
+        return Response(serializer.data)
 
 
 @extend_schema(tags=["Orders"])

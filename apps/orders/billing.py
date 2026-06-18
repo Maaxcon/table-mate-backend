@@ -1,5 +1,6 @@
 __all__ = [
     "checkout_cart_session",
+    "close_visit_session",
     "ensure_visit_session",
 ]
 
@@ -11,7 +12,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from apps.authentication.models import User
-from apps.reservations.models import Reservation
+from apps.reservations.models import Reservation, ReservationStatus
 from apps.restaurants.models import RestaurantSettings
 from apps.restaurants.selectors import is_restaurant_open
 from common.exceptions import (
@@ -33,6 +34,7 @@ from .models import (
     OrderSource,
     OrderStatus,
     Session,
+    SessionStatus,
 )
 from .services.cart import _broadcast_cart_updated
 
@@ -72,6 +74,44 @@ def ensure_visit_session(
             "opened_at": timezone.now(),
         },
     )
+    return session
+
+
+def close_visit_session(*, session: Session) -> Session:
+    """End a visit and free the table.
+
+    There is no payment step yet, so a waiter closing the check just ends the
+    visit: closes the Session (bill), marks the Reservation completed, and closes
+    any still-active CartSession. Without completing the reservation the table
+    would stay "occupied" and re-opening it would fail. Idempotent.
+    """
+    closed_carts: list[CartSession] = []
+    with transaction.atomic():
+        session = (
+            Session.objects.select_for_update().select_related("reservation").get(pk=session.pk)
+        )
+        if session.status != SessionStatus.CLOSED:
+            session.status = SessionStatus.CLOSED
+            session.save(update_fields=["status"])
+
+        reservation = session.reservation
+        if reservation is not None:
+            if reservation.status == ReservationStatus.ACTIVE:
+                reservation.status = ReservationStatus.COMPLETED
+                reservation.save(update_fields=["status"])
+            closed_carts = list(
+                CartSession.objects.select_for_update().filter(
+                    reservation=reservation, status=CartSessionStatus.ACTIVE
+                )
+            )
+            for cart in closed_carts:
+                cart.status = CartSessionStatus.CLOSED
+            if closed_carts:
+                CartSession.objects.bulk_update(closed_carts, ["status"])
+
+    # Tell any open guest cart it has ended.
+    for cart in closed_carts:
+        _broadcast_cart_updated(cart)
     return session
 
 
