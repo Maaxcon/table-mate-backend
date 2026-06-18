@@ -427,6 +427,14 @@ def create_order_with_items(
         currency=session.currency,
     )
 
+    ticket = Ticket.objects.create(
+        restaurant=session.restaurant,
+        session=session,
+        order=order,
+        status=TicketStatus.INCOMING,
+        injected_at=timezone.now(),
+    )
+
     total = 0
     for item_data in items:
         menu_item = item_data["menu_item"]
@@ -440,6 +448,7 @@ def create_order_with_items(
         OrderItem.objects.create(
             restaurant=session.restaurant,
             order=order,
+            ticket=ticket,
             menu_item=menu_item,
             guest_slot=guest_slot,
             quantity=quantity,
@@ -451,13 +460,19 @@ def create_order_with_items(
     order.total_amount = total
     order.save(update_fields=["total_amount"])
 
-    Ticket.objects.create(
-        restaurant=session.restaurant,
-        session=session,
-        order=order,
-        status=TicketStatus.INCOMING,
-        injected_at=timezone.now(),
+    agg = OrderItem.objects.filter(
+        order__session=session,
+    ).exclude(
+        status=OrderItemStatus.VOIDED,
+    ).aggregate(
+        subtotal=Sum("total_price"),
+        tax=Sum("tax_amount"),
     )
+
+    session.subtotal = agg["subtotal"] or 0
+    session.tax = agg["tax"] or 0
+    session.total = session.subtotal + session.tax
+    session.save(update_fields=["subtotal", "tax", "total"])
 
     return order
 
