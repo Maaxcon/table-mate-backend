@@ -115,7 +115,7 @@ class Zone(BaseModel):
 
 
 class Table(RestaurantScopedModel):
-    table_number = models.CharField(max_length=64)
+    public_number = models.CharField(max_length=64, db_index=True)
     capacity = models.PositiveIntegerField()
     shape = models.CharField(
         max_length=20,
@@ -123,8 +123,6 @@ class Table(RestaurantScopedModel):
         default=TableShape.RECTANGLE,
     )
     active = models.BooleanField(default=True)
-    position_x = models.IntegerField(null=True, blank=True)
-    position_y = models.IntegerField(null=True, blank=True)
     zone = models.ForeignKey(
         Zone,
         on_delete=models.SET_NULL,
@@ -134,13 +132,7 @@ class Table(RestaurantScopedModel):
     )
 
     class Meta:
-        ordering = ["restaurant_id", "table_number", "id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["restaurant", "table_number"],
-                name="restaurants_table_restaurant_number_unique",
-            ),
-        ]
+        ordering = ["restaurant_id", "public_number", "id"]
 
     def __str__(self) -> str:
-        return f"{self.restaurant.name} / {self.table_number}"
+        return f"{self.restaurant.name} / {self.public_number}"
