@@ -36,18 +36,28 @@ def _t(
     }
 
 
-def _obs(gx: int, gy: int, gw: int, gh: int) -> dict[str, Any]:
-    return {"x": gx * 100, "y": gy * 100, "width": gw * 100, "height": gh * 100, "rotation": 0}
-
-
-def _portal(gx: int, gy: int, gw: int, gh: int, zone: str, label: str) -> dict[str, Any]:
+def _obs(gx: int, gy: int, gw: int, gh: int, zone: str = "") -> dict[str, Any]:
     return {
         "x": gx * 100,
         "y": gy * 100,
         "width": gw * 100,
         "height": gh * 100,
-        "target_zone_name": zone,
+        "rotation": 0,
+        "zone_name": zone,
+    }
+
+
+def _portal(
+    gx: int, gy: int, gw: int, gh: int, target_zone: str, label: str, zone: str = ""
+) -> dict[str, Any]:
+    return {
+        "x": gx * 100,
+        "y": gy * 100,
+        "width": gw * 100,
+        "height": gh * 100,
+        "target_zone_name": target_zone,
         "label": label,
+        "zone_name": zone,
     }
 
 
@@ -69,14 +79,14 @@ _LAYOUTS: dict[str, dict[str, Any]] = {
             _t("T10", 17, 9, 3, 3, "square", 4, "Winter Garden"),
         ],
         "obstacles": [
-            _obs(0, 0, 22, 1),
-            _obs(0, 14, 22, 1),
+            _obs(0, 0, 22, 1, "Main Hall"),
+            _obs(0, 14, 22, 1, "Main Hall"),
         ],
         "thresholds": [
-            {"x": 1400, "y": 900, "width": 300, "height": 100},
+            {"x": 1400, "y": 900, "width": 300, "height": 100, "zone_name": "Main Hall"},
         ],
         "portals": [
-            _portal(14, 9, 2, 2, "VIP Room", "VIP Room"),
+            _portal(14, 9, 2, 2, "VIP Room", "VIP Room", "Main Hall"),
         ],
     },
     "Table Mate Terrace": {
@@ -88,11 +98,11 @@ _LAYOUTS: dict[str, dict[str, Any]] = {
             _t("T5", 9, 5, 3, 3, "square", 6, "Terrace"),
         ],
         "obstacles": [
-            _obs(0, 0, 14, 1),
+            _obs(0, 0, 14, 1, "Indoor"),
         ],
         "thresholds": [],
         "portals": [
-            _portal(7, 3, 2, 2, "Terrace", "Terrace"),
+            _portal(7, 3, 2, 2, "Terrace", "Terrace", "Indoor"),
         ],
     },
 }
@@ -151,6 +161,7 @@ class Command(BaseCommand):
             portals_payload: list[dict[str, Any]] = []
             for pd in cfg.get("portals", []):
                 tz = zones.get(pd["target_zone_name"])
+                pz = zones.get(pd.get("zone_name", ""))
                 portals_payload.append({
                     "x": pd["x"],
                     "y": pd["y"],
@@ -158,12 +169,36 @@ class Command(BaseCommand):
                     "height": pd["height"],
                     "target_zone_id": str(tz.public_id) if tz else None,
                     "label": pd.get("label", ""),
+                    "zone_id": str(pz.public_id) if pz else None,
+                })
+
+            obstacles_payload: list[dict[str, Any]] = []
+            for od in cfg.get("obstacles", []):
+                oz = zones.get(od.get("zone_name", ""))
+                obstacles_payload.append({
+                    "x": od["x"],
+                    "y": od["y"],
+                    "width": od["width"],
+                    "height": od["height"],
+                    "rotation": od.get("rotation", 0),
+                    "zone_id": str(oz.public_id) if oz else None,
+                })
+
+            thresholds_payload: list[dict[str, Any]] = []
+            for thd in cfg.get("thresholds", []):
+                thz = zones.get(thd.get("zone_name", ""))
+                thresholds_payload.append({
+                    "x": thd["x"],
+                    "y": thd["y"],
+                    "width": thd["width"],
+                    "height": thd["height"],
+                    "zone_id": str(thz.public_id) if thz else None,
                 })
 
             layout_json = {
                 "tables": tables_payload,
-                "obstacles": cfg.get("obstacles", []),
-                "thresholds": cfg.get("thresholds", []),
+                "obstacles": obstacles_payload,
+                "thresholds": thresholds_payload,
                 "portals": portals_payload,
             }
 
