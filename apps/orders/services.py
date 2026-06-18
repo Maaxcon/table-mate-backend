@@ -265,6 +265,9 @@ def checkout_cart_session(
         if cart_session.status != CartSessionStatus.ACTIVE:
             raise CartSessionClosedError("Cart session is closed.")
 
+        if not is_restaurant_open(cart_session.restaurant_id):
+            raise RestaurantClosedError()
+
         cart_items = list(CartItem.objects.filter(cart_session=cart_session).select_related("menu_item"))
         if not cart_items:
             raise EmptyCartError("Cart has no items to check out.")

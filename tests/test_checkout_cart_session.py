@@ -23,7 +23,12 @@ from apps.orders.services import (
 )
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
-from common.exceptions import CartChangedError, CartSessionClosedError, EmptyCartError
+from common.exceptions import (
+    CartChangedError,
+    CartSessionClosedError,
+    EmptyCartError,
+    RestaurantClosedError,
+)
 
 UNIT_PRICE = Decimal("29.99")
 
@@ -256,3 +261,22 @@ def test_checkout_sets_created_by_for_user(
     order = checkout_cart_session(cart_session=cart, user=user)
 
     assert order.created_by_id == user.id
+
+
+@pytest.mark.django_db
+def test_checkout_blocked_when_restaurant_closed(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = _open_cart_with_item(table, item)
+
+    with mock.patch("apps.orders.services.is_restaurant_open", return_value=False):
+        with pytest.raises(RestaurantClosedError):
+            checkout_cart_session(cart_session=cart)
+
+    cart.refresh_from_db()
+    assert cart.status == CartSessionStatus.ACTIVE
+    assert not Order.objects.exists()
