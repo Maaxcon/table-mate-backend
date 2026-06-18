@@ -35,8 +35,10 @@ def _hhmm_to_minutes(value: object) -> int | None:
 def is_restaurant_open(restaurant_id: int, when: datetime_cls | None = None) -> bool:
     """Whether the restaurant is open at `when` (default now) per its working hours.
 
-    No settings or no configured hours → treated as open (don't block). A day with
-    no entry → closed that day. Supports overnight windows (close < open).
+    No settings or no configured hours → treated as open (don't block). Once hours
+    are configured they are authoritative: a day with no usable open/close window —
+    whether its entry is missing or unparseable — is closed. Supports overnight
+    windows (close < open).
     """
     settings = get_restaurant_settings(restaurant_id)
     if settings is None:
@@ -54,7 +56,7 @@ def is_restaurant_open(restaurant_id: int, when: datetime_cls | None = None) -> 
     open_min = _hhmm_to_minutes(hours.get("open"))
     close_min = _hhmm_to_minutes(hours.get("close"))
     if open_min is None or close_min is None:
-        return True  # malformed config — don't block
+        return False  # configured day with unreadable hours — treat as closed
 
     now_min = local.hour * 60 + local.minute
     if close_min > open_min:

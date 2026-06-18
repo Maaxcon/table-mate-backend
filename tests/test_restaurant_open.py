@@ -46,6 +46,15 @@ def test_closed_when_day_has_no_hours(restaurant: Restaurant) -> None:
 
 
 @pytest.mark.django_db
+def test_closed_when_day_hours_are_malformed(restaurant: Restaurant) -> None:
+    # Day is configured but its times can't be parsed → treated as closed,
+    # same as a day with no entry (config is authoritative once set).
+    today = _DAY_KEYS[WED_1300_UTC.weekday()]
+    _settings(restaurant, {today: {"open": "9am", "close": "22:00"}})
+    assert is_restaurant_open(restaurant.id, when=WED_1300_UTC) is False
+
+
+@pytest.mark.django_db
 def test_no_settings_or_no_hours_treated_as_open(restaurant: Restaurant, empty_restaurant: Restaurant) -> None:
     # restaurant with no settings row at all
     assert is_restaurant_open(empty_restaurant.id, when=WED_1300_UTC) is True
