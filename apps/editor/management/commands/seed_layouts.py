@@ -4,16 +4,19 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.editor.models import LayoutVersion
+from apps.editor.models import Layout, LayoutVersion
 from apps.restaurants.models import Restaurant, Table, Zone
+
+# All coordinates are in pixels, aligned to a 100px grid.
+# Grid-unit positions: x/100, y/100. Dimensions: w/100, h/100 grid cells.
 
 
 def _t(
     num: str,
-    x: int,
-    y: int,
-    w: int,
-    h: int,
+    gx: int,
+    gy: int,
+    gw: int,
+    gh: int,
     shape: str,
     cap: int,
     zone: str,
@@ -21,10 +24,10 @@ def _t(
 ) -> dict[str, Any]:
     return {
         "public_number": num,
-        "x": x,
-        "y": y,
-        "width": w,
-        "height": h,
+        "x": gx * 100,
+        "y": gy * 100,
+        "width": gw * 100,
+        "height": gh * 100,
         "rotation": 0,
         "shape": shape,
         "capacity": cap,
@@ -33,16 +36,16 @@ def _t(
     }
 
 
-def _obs(x: int, y: int, w: int, h: int) -> dict[str, Any]:
-    return {"x": x, "y": y, "width": w, "height": h, "rotation": 0}
+def _obs(gx: int, gy: int, gw: int, gh: int) -> dict[str, Any]:
+    return {"x": gx * 100, "y": gy * 100, "width": gw * 100, "height": gh * 100, "rotation": 0}
 
 
-def _portal(x: int, y: int, w: int, h: int, zone: str, label: str) -> dict[str, Any]:
+def _portal(gx: int, gy: int, gw: int, gh: int, zone: str, label: str) -> dict[str, Any]:
     return {
-        "x": x,
-        "y": y,
-        "width": w,
-        "height": h,
+        "x": gx * 100,
+        "y": gy * 100,
+        "width": gw * 100,
+        "height": gh * 100,
         "target_zone_name": zone,
         "label": label,
     }
@@ -51,42 +54,45 @@ def _portal(x: int, y: int, w: int, h: int, zone: str, label: str) -> dict[str, 
 _LAYOUTS: dict[str, dict[str, Any]] = {
     "Table Mate": {
         "tables": [
-            _t("T1", 120, 120, 74, 74, "round", 2, "Main Hall", ["window"]),
-            _t("T2", 120, 260, 74, 74, "round", 2, "Main Hall"),
-            _t("T3", 260, 120, 120, 120, "square", 4, "Main Hall"),
-            _t("T4", 260, 260, 120, 120, "square", 4, "Main Hall", ["quiet"]),
-            _t("T5", 260, 400, 120, 120, "square", 4, "Main Hall"),
-            _t("T6", 500, 120, 120, 120, "square", 6, "VIP Room"),
-            _t("T7", 500, 260, 120, 120, "square", 6, "VIP Room"),
-            _t("T8", 740, 120, 180, 120, "rectangle", 8, "Winter Garden", ["window"]),
-            _t("T9", 740, 300, 120, 120, "square", 4, "Winter Garden"),
-            _t("T10", 740, 440, 120, 120, "square", 4, "Winter Garden"),
+            # Main Hall (T1-T5)
+            _t("T1", 1, 1, 3, 3, "round", 2, "Main Hall", ["window"]),
+            _t("T2", 1, 5, 3, 3, "round", 2, "Main Hall"),
+            _t("T3", 5, 1, 3, 3, "square", 4, "Main Hall"),
+            _t("T4", 5, 5, 3, 3, "square", 4, "Main Hall", ["quiet"]),
+            _t("T5", 5, 9, 3, 3, "square", 4, "Main Hall"),
+            # VIP Room (T6-T7)
+            _t("T6", 11, 1, 3, 3, "square", 6, "VIP Room"),
+            _t("T7", 11, 5, 3, 3, "square", 6, "VIP Room"),
+            # Winter Garden (T8-T10)
+            _t("T8", 17, 1, 4, 3, "rectangle", 8, "Winter Garden", ["window"]),
+            _t("T9", 17, 5, 3, 3, "square", 4, "Winter Garden"),
+            _t("T10", 17, 9, 3, 3, "square", 4, "Winter Garden"),
         ],
         "obstacles": [
-            _obs(0, 0, 1200, 10),
-            _obs(0, 600, 1200, 10),
+            _obs(0, 0, 22, 1),
+            _obs(0, 14, 22, 1),
         ],
         "thresholds": [
-            {"x": 420, "y": 400, "width": 200, "height": 10},
+            {"x": 1400, "y": 900, "width": 300, "height": 100},
         ],
         "portals": [
-            _portal(900, 400, 120, 120, "VIP Room", "VIP Room"),
+            _portal(14, 9, 2, 2, "VIP Room", "VIP Room"),
         ],
     },
     "Table Mate Terrace": {
         "tables": [
-            _t("T1", 120, 120, 74, 74, "round", 2, "Indoor"),
-            _t("T2", 120, 260, 74, 74, "round", 2, "Indoor"),
-            _t("T3", 260, 120, 120, 120, "square", 4, "Indoor"),
-            _t("T4", 500, 120, 120, 120, "square", 4, "Terrace", ["window"]),
-            _t("T5", 500, 260, 120, 120, "square", 6, "Terrace"),
+            _t("T1", 1, 1, 3, 3, "round", 2, "Indoor"),
+            _t("T2", 1, 5, 3, 3, "round", 2, "Indoor"),
+            _t("T3", 5, 1, 3, 3, "square", 4, "Indoor"),
+            _t("T4", 9, 1, 3, 3, "square", 4, "Terrace", ["window"]),
+            _t("T5", 9, 5, 3, 3, "square", 6, "Terrace"),
         ],
         "obstacles": [
-            _obs(0, 0, 800, 10),
+            _obs(0, 0, 14, 1),
         ],
         "thresholds": [],
         "portals": [
-            _portal(400, 200, 80, 80, "Terrace", "Terrace"),
+            _portal(7, 3, 2, 2, "Terrace", "Terrace"),
         ],
     },
 }
@@ -173,6 +179,20 @@ class Command(BaseCommand):
                 layout_json=layout_json,
                 published_at=timezone.now(),
             )
+
+            last_layout = (
+                Layout.objects.filter(restaurant=restaurant)
+                .order_by("-version")
+                .first()
+            )
+            next_version = (last_layout.version + 1) if last_layout else 1
+            Layout.objects.create(
+                restaurant=restaurant,
+                version=next_version,
+                payload=layout_json,
+                published_at=timezone.now(),
+            )
+
             created_count += 1
             self.stdout.write(f"  Created layout for '{restaurant.name}'.")
 

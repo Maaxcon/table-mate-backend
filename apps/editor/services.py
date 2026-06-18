@@ -51,7 +51,7 @@ def publish_layout(
     from apps.orders.models import Session, SessionStatus
     from apps.reservations.models import Reservation, ReservationStatus
 
-    from .models import LayoutVersion
+    from .models import Layout, LayoutVersion
 
     existing_tables = {
         str(t.public_id): t
@@ -131,6 +131,20 @@ def publish_layout(
         restaurant_id=restaurant_id,
         parent_version=parent_version,
         layout_json=layout_data,
+        published_at=timezone.now(),
+        published_by=published_by,
+    )
+
+    last_layout = (
+        Layout.objects.filter(restaurant_id=restaurant_id)
+        .order_by("-version")
+        .first()
+    )
+    next_version = (last_layout.version + 1) if last_layout else 1
+    Layout.objects.create(
+        restaurant_id=restaurant_id,
+        version=next_version,
+        payload=layout_data,
         published_at=timezone.now(),
         published_by=published_by,
     )

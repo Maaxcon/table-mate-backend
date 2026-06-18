@@ -60,9 +60,6 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
 # Layout JSON entity validators (Phase 2)
 # ---------------------------------------------------------------------------
 
-_VALID_TABLE_WIDTHS = {74, 120, 180, 240}
-_VALID_TABLE_HEIGHTS = {74, 120, 180, 240}
-
 
 class TableEntitySerializer(serializers.Serializer[Any]):
     id = serializers.UUIDField(required=False, allow_null=True, default=None)
@@ -82,22 +79,10 @@ class TableEntitySerializer(serializers.Serializer[Any]):
         w = data.get("width")
         h = data.get("height")
 
-        if shape == "round":
-            if w != h:
-                raise serializers.ValidationError({"width": "Round tables must have equal width and height."})
-            if w not in _VALID_TABLE_WIDTHS:
-                raise serializers.ValidationError(
-                    {"width": f"Round table width must be one of {_VALID_TABLE_WIDTHS}."}
-                )
-        else:
-            if w not in _VALID_TABLE_WIDTHS:
-                raise serializers.ValidationError(
-                    {"width": f"Table width must be one of {_VALID_TABLE_WIDTHS}."}
-                )
-            if h not in _VALID_TABLE_HEIGHTS:
-                raise serializers.ValidationError(
-                    {"height": f"Table height must be one of {_VALID_TABLE_HEIGHTS}."}
-                )
+        if shape == "round" and w != h:
+            raise serializers.ValidationError(
+                {"width": "Round tables must have equal width and height."}
+            )
         return data
 
 
