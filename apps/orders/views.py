@@ -10,6 +10,7 @@ from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 
 from .models import Order, OrderItem, Session, Ticket, VoidReason
 from .serializers import (
+    CreateOrderSerializer,
     OrderItemSerializer,
     OrderSerializer,
     SessionSerializer,
@@ -101,68 +102,30 @@ class OrderViewSet(
     def create(self, request: Request, *args: object, **kwargs: object) -> Response:
         items_data = request.data.get("items")
         if items_data is not None:
-            from apps.menu.models import MenuItem
-
-            restaurant_id = get_restaurant_id_from_auth(request)
-            if restaurant_id is None:
-                return Response(
-                    {"detail": "Restaurant ID not found in authentication."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            session_id = request.data.get("session")
-
-            if not session_id:
-                return Response(
-                    {"detail": "session is required when items are provided."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            from .models import Session as SessionModel
-
-            try:
-                session = SessionModel.objects.get(
-                    public_id=session_id,
-                    restaurant_id=restaurant_id,
-                )
-            except SessionModel.DoesNotExist:
-                return Response(
-                    {"detail": "Session not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-            items = []
-            for item_data in items_data:
-                menu_item_id = item_data.get("menu_item")
-                if not menu_item_id:
-                    return Response(
-                        {"detail": "Each item must have a menu_item."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                try:
-                    menu_item = MenuItem.objects.get(
-                        public_id=menu_item_id,
-                        restaurant_id=restaurant_id,
-                    )
-                except MenuItem.DoesNotExist:
-                    return Response(
-                        {"detail": f"Menu item {menu_item_id} not found."},
-                        status=status.HTTP_404_NOT_FOUND,
-                    )
-                items.append({
-                    "menu_item": menu_item,
-                    "guest_slot": item_data.get("guest_slot", 1),
-                    "quantity": item_data.get("quantity", 1),
-                    "comment": item_data.get("comment"),
-                })
+            serializer = CreateOrderSerializer(
+                data=request.data,
+                context={"request": request},
+            )
+            serializer.is_valid(raise_exception=True)
 
             order = create_order_with_items(
-                session=session,
-                items=items,
+                session=serializer.validated_data["session"],
+                items=[
+                    {
+                        "menu_item": item["menu_item"],
+                        "guest_slot": item["guest_slot"],
+                        "quantity": item["quantity"],
+                        "comment": item["comment"],
+                    }
+                    for item in serializer.validated_data["items"]
+                ],
                 actor=request.user,  # type: ignore[arg-type]
             )
 
-            serializer = self.get_serializer(order)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(
+                self.get_serializer(order).data,
+                status=status.HTTP_201_CREATED,
+            )
 
         return super().create(request, *args, **kwargs)
 
