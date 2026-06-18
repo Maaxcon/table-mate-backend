@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -99,6 +101,11 @@ class OrderViewSet(
     ]
     ordering_fields = ["created_at", "updated_at", "status", "payment_status"]
 
+    def get_permissions(self) -> Sequence[object]:  # type: ignore[override]
+        if self.action == "create":
+            return [IsFloor()]
+        return super().get_permissions()
+
     def create(self, request: Request, *args: object, **kwargs: object) -> Response:
         items_data = request.data.get("items")
         if items_data is not None:
@@ -189,7 +196,7 @@ class OrderItemViewSet(
         }),
         responses=OrderItemSerializer,
     )
-    @action(detail=True, methods=["post"], url_path="void")
+    @action(detail=True, methods=["post"], url_path="void", permission_classes=[IsFloor])
     def void(self, request: Request, *args: object, **kwargs: object) -> Response:
         item = self.get_object()
         void_reason = request.data.get("void_reason")
