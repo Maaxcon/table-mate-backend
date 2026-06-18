@@ -18,7 +18,11 @@ from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.services import create_reservation, update_reservation_status
 from common.channels import hall_group_name
-from common.hall_events import emit_hall_new_reservation, emit_hall_table_status_changed
+from common.hall_events import (
+    emit_hall_new_reservation,
+    emit_hall_reservation_cancelled,
+    emit_hall_table_status_changed,
+)
 from core.routing import application
 from tests.conftest import RestaurantFactory, UserFactory
 
@@ -472,3 +476,55 @@ async def test_hall_event_does_not_leak_across_restaurants(
         await other_comm.disconnect()
     except asyncio.CancelledError:
         pass
+
+
+@pytest.mark.django_db
+def test_emit_hall_reservation_cancelled_sends_to_group(restaurant: Any, table: Any) -> None:
+    user = UserFactory.build(role=RoleCode.ADMIN)
+    user.save()
+
+    with patch("common.hall_events.get_channel_layer") as mock_get_layer:
+        mock_layer = AsyncMock()
+        mock_get_layer.return_value = mock_layer
+
+        emit_hall_reservation_cancelled(
+            restaurant.id,
+            reservation_id="test-reservation-id",
+            table_id=str(table.public_id),
+            actor=user,
+        )
+
+        mock_layer.group_send.assert_called_once()
+        call_args = mock_layer.group_send.call_args
+        assert call_args[0][0] == hall_group_name(restaurant.id)
+        event = call_args[0][1]["event"]
+        assert event["event_name"] == "HALL_RESERVATION_CANCELLED"
+        assert event["schema_version"] == "1"
+        assert event["reservation_id"] == "test-reservation-id"
+        assert event["table_id"] == str(table.public_id)
+        assert event["actor_id"] == user.pk
+        assert event["actor_role"] == RoleCode.ADMIN
+
+
+@pytest.mark.django_db(databases=["default"], transaction=True)
+def test_update_reservation_status_cancel_emits_event(restaurant: Any, table: Any) -> None:
+    admin = UserFactory.build(role=RoleCode.ADMIN)
+    admin.save()
+
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=timezone.now() + timedelta(hours=1),
+        end_at=timezone.now() + timedelta(hours=3),
+        status=ReservationStatus.PENDING,
+    )
+
+    with patch("apps.reservations.services.emit_hall_reservation_cancelled") as mock_emit:
+        update_reservation_status(reservation, new_status=ReservationStatus.CANCELLED, actor=admin)
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args[1]
+        assert call_kwargs["reservation_id"] == str(reservation.public_id)
+        assert call_kwargs["table_id"] == str(table.public_id)
+        assert call_kwargs["actor"] == admin
