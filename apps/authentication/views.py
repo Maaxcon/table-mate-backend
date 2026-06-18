@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 from uuid import uuid4
 
 from django.conf import settings
@@ -14,7 +14,11 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from apps.restaurants.models import Restaurant
+from apps.orders.models import CartSession, CartSessionStatus
+from apps.orders.services import ensure_active_cart_for_table
+from apps.reservations.models import Reservation
+from apps.restaurants.models import Restaurant, Table
+from common.exceptions import NoActiveReservationError
 
 from .models import RoleCode, User
 from .serializers import (
@@ -29,9 +33,6 @@ from .serializers import (
     UserSerializer,
 )
 from .services import google_authenticate, issue_tokens, issue_tokens_with_restaurant
-
-if TYPE_CHECKING:
-    from apps.orders.models import CartSession
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -265,25 +266,16 @@ class GuestInitView(APIView):
         return Response({"access": token})
 
 
-def _ensure_session_for_table(table_id: str) -> "CartSession":
-    from apps.orders.services import ensure_active_cart_for_table
-    from apps.restaurants.models import Table
-    from common.exceptions import NoActiveReservationError
-
+def _ensure_session_for_table(table_id: str) -> CartSession:
     table = Table.objects.filter(public_id=table_id, active=True).first()
     if table is None:
         raise NoActiveReservationError("This table has no active reservation.")
     return ensure_active_cart_for_table(table=table)
 
 
-def _find_active_session_for_reservation(reservation_id: Any) -> "CartSession | None":
+def _find_active_session_for_reservation(reservation_id: Any) -> CartSession | None:
     # Reuse the open cart if one exists; otherwise open a fresh one for the
     # reservation's table (e.g. the round after a checkout closed the last cart).
-    from apps.orders.models import CartSession, CartSessionStatus
-    from apps.orders.services import ensure_active_cart_for_table
-    from apps.reservations.models import Reservation
-    from common.exceptions import NoActiveReservationError
-
     session = (
         CartSession.objects.filter(
             reservation__public_id=reservation_id,

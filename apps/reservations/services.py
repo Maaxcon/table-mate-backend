@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
 from apps.authentication.models import User
+from apps.orders.billing import ensure_visit_session
 from apps.orders.models import Session
 from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
@@ -181,8 +182,6 @@ def activate_reservation(*, reservation: Reservation, opened_by: Any = None) -> 
     Idempotent if already active; rejects completed/cancelled reservations.
     Opens the visit Session (bill) so the floor plan shows the table occupied.
     """
-    from apps.orders.billing import ensure_visit_session
-
     opened_by_user = opened_by if (opened_by is not None and opened_by.is_authenticated) else None
     with transaction.atomic():
         locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
@@ -227,8 +226,6 @@ def activate_reservation_by_scan(
 
     reservation.status = ReservationStatus.ACTIVE
     reservation.save(update_fields=["status"])
-
-    from apps.orders.billing import ensure_visit_session
 
     ensure_visit_session(reservation, opened_by=user)
     return True, "Table verified and activated."
