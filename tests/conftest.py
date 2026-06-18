@@ -178,7 +178,7 @@ def empty_restaurant() -> Restaurant:
 def table(restaurant: Restaurant) -> Table:
     return Table.objects.create(
         restaurant=restaurant,
-        table_number="T1",
+        public_number="T1",
         capacity=4,
         active=True,
     )

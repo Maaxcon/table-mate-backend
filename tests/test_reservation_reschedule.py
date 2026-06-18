@@ -157,4 +157,4 @@ def test_my_reservations_filters_active_records_and_supports_limit_offset(
         ReservationStatus.PENDING,
     ]
     assert data[0]["restaurant_info"]["name"] == restaurant.name
-    assert data[0]["table_info"]["table_number"] == table.table_number
+    assert data[0]["table_info"]["public_number"] == table.public_number

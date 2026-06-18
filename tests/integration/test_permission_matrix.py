@@ -112,13 +112,13 @@ def test_editor_table_patch_role_enforcement(
 ) -> None:
     table = Table.objects.create(
         restaurant=restaurant,
-        table_number="T-EDIT",
+        public_number="T-EDIT",
         capacity=4,
         active=True,
     )
     ctx = api(role=role, restaurant_id=restaurant.id)
     url = reverse("editor-table-detail", args=[table.public_id])
-    response = ctx.client.patch(url, {"position_x": 10}, format="json")
+    response = ctx.client.patch(url, {"capacity": 6}, format="json")
     if role in EDITOR_PATCH_ALLOWED:
         assert response.status_code == status.HTTP_200_OK, f"{role} should be allowed to PATCH editor tables"
     else:
