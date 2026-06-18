@@ -174,11 +174,22 @@ def reschedule_reservation(
     return reservation
 
 
-def activate_reservation(*, reservation: Reservation, opened_by: Any = None) -> Reservation:
+ACTIVATION_EARLY_WINDOW = timedelta(minutes=15)  # how early a guest may self-activate
+
+
+def activate_reservation(
+    *,
+    reservation: Reservation,
+    opened_by: Any = None,
+    enforce_window: bool = False,
+) -> Reservation:
     """Flip a pending reservation to active (staff or the owning customer).
 
-    Unlike the scan flow this needs no QR and no imminent-time window: the
-    waiter (or the customer from their bookings) opens the table on arrival.
+    No QR is needed; the waiter or the owning customer opens the table on
+    arrival. Staff have no time limit. When enforce_window is set (customer
+    self-activation) the booking can only be activated near its start — not more
+    than ACTIVATION_EARLY_WINDOW early — so a guest cannot open a far-future
+    booking. Arriving late is always allowed.
     Idempotent if already active; rejects completed/cancelled reservations.
     Opens the visit Session (bill) so the floor plan shows the table occupied.
     """
@@ -188,6 +199,8 @@ def activate_reservation(*, reservation: Reservation, opened_by: Any = None) -> 
         if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
             raise ReservationConflictError("Only pending reservations can be activated.")
         if locked.status == ReservationStatus.PENDING:
+            if enforce_window and locked.start_at - timezone.now() > ACTIVATION_EARLY_WINDOW:
+                raise ReservationConflictError("This reservation cannot be activated yet.")
             locked.status = ReservationStatus.ACTIVE
             locked.save(update_fields=["status"])
         ensure_visit_session(locked, opened_by=opened_by_user)

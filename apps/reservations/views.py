@@ -129,7 +129,12 @@ class ReservationViewSet(
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request: Request, *args: object, **kwargs: object) -> Response:
         reservation = self.get_object()
-        result = activate_reservation(reservation=reservation, opened_by=request.user)
+        is_staff = getattr(request.user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER)
+        result = activate_reservation(
+            reservation=reservation,
+            opened_by=request.user,
+            enforce_window=not is_staff,
+        )
         serializer = self.get_serializer(result)
         return Response(serializer.data)
 

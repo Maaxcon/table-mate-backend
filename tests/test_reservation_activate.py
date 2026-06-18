@@ -77,9 +77,49 @@ def test_owner_customer_activates_own_reservation(
     api: Callable[..., Any],
 ) -> None:
     customer_ctx = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
-    reservation = _reservation(restaurant, table, customer=customer_ctx.user)
+    # Within the early window: booking starts in 10 minutes.
+    reservation = _reservation(
+        restaurant, table, customer=customer_ctx.user, start_offset=timedelta(minutes=10)
+    )
 
     resp = customer_ctx.client.post(_url(reservation))
+
+    assert resp.status_code == status.HTTP_200_OK
+    reservation.refresh_from_db()
+    assert reservation.status == ReservationStatus.ACTIVE
+
+
+@pytest.mark.django_db
+def test_customer_cannot_activate_far_future_reservation(
+    restaurant: Restaurant,
+    table: Table,
+    api: Callable[..., Any],
+) -> None:
+    # Booking is hours away: a guest must not open it early. Staff still can.
+    customer_ctx = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+    reservation = _reservation(
+        restaurant, table, customer=customer_ctx.user, start_offset=timedelta(hours=2)
+    )
+
+    resp = customer_ctx.client.post(_url(reservation))
+
+    assert resp.status_code == status.HTTP_409_CONFLICT
+    reservation.refresh_from_db()
+    assert reservation.status == ReservationStatus.PENDING
+    assert not Session.objects.filter(reservation=reservation).exists()
+
+
+@pytest.mark.django_db
+def test_staff_can_activate_far_future_reservation(
+    restaurant: Restaurant,
+    table: Table,
+    api: Callable[..., Any],
+) -> None:
+    # Same far-future booking, but staff have no time limit.
+    reservation = _reservation(restaurant, table, start_offset=timedelta(hours=2))
+    staff = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+
+    resp = staff.client.post(_url(reservation))
 
     assert resp.status_code == status.HTTP_200_OK
     reservation.refresh_from_db()
