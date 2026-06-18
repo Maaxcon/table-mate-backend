@@ -193,6 +193,7 @@ class _PublicRestaurantScopedViewSetMixin(PublicRestaurantQueryMixin):
 class ZoneViewSet(
     PublicLookupMixin,
     _PublicRestaurantScopedViewSetMixin,
+    mixins.CreateModelMixin,
     viewsets.ReadOnlyModelViewSet[Zone],
 ):
     permission_classes = [AllowAny]
@@ -205,6 +206,13 @@ class ZoneViewSet(
         if restaurant_id is not None:
             return qs.filter(restaurant_id=restaurant_id)
         return qs.none()
+
+    def perform_create(self, serializer: ZoneSerializer) -> None:
+        restaurant_id = self.get_restaurant_id()
+        if restaurant_id is None:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Restaurant is required to create a zone")
+        serializer.save(restaurant_id=restaurant_id)
 
 
 @extend_schema(tags=["Restaurants"])

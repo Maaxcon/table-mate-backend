@@ -192,7 +192,7 @@ class ZoneSerializer(serializers.ModelSerializer[Zone]):
             "name",
             "sort_order",
         ]
-        read_only_fields = fields
+        read_only_fields = ["public_id"]
 
 
 class TableSerializer(serializers.ModelSerializer[Table]):
