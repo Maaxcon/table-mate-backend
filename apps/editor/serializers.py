@@ -92,6 +92,7 @@ class ObstacleEntitySerializer(serializers.Serializer[Any]):
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
     rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
+    zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
 class ThresholdEntitySerializer(serializers.Serializer[Any]):
@@ -99,6 +100,7 @@ class ThresholdEntitySerializer(serializers.Serializer[Any]):
     y = serializers.IntegerField(min_value=0)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
+    zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
 class PortalEntitySerializer(serializers.Serializer[Any]):
@@ -106,8 +108,9 @@ class PortalEntitySerializer(serializers.Serializer[Any]):
     y = serializers.IntegerField(min_value=0)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
-    target_zone_id = serializers.UUIDField()
+    target_zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     label = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
+    zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
 class PublishLayoutSerializer(serializers.Serializer[Any]):
