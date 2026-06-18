@@ -436,6 +436,11 @@ def create_order_with_items(
     items: list[dict[str, Any]],
     actor: User,
 ) -> Order:
+    if session.status != SessionStatus.OPEN:
+        raise ReservationConflictError(
+            "Cannot add items to a session that is not open."
+        )
+
     order = Order.objects.create(
         restaurant=session.restaurant,
         session=session,
