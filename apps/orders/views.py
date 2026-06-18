@@ -1,7 +1,10 @@
+from typing import cast
+
 from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 
+from apps.authentication.models import User
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.exceptions import TableOccupiedError
@@ -38,7 +41,10 @@ class SessionViewSet(
             reservation = create_walk_in_reservation(table=table, guest_count=guest_count)
             # ensure_visit_session owns currency/opened_at resolution for every
             # open-table path (walk-in, scan, activate), so it stays in one place.
-            serializer.instance = ensure_visit_session(reservation, opened_by=self.request.user)
+            # IsFloor guarantees an authenticated staff user here.
+            serializer.instance = ensure_visit_session(
+                reservation, opened_by=cast(User, self.request.user)
+            )
 
 
 @extend_schema(tags=["Orders"])

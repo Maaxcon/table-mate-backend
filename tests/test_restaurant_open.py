@@ -96,7 +96,7 @@ def test_add_item_blocked_when_restaurant_closed(restaurant: Restaurant, table: 
     _active_reservation(restaurant, table)
     cart = ensure_active_cart_for_table(table=table)
 
-    with mock.patch("apps.orders.services.is_restaurant_open", return_value=False):
+    with mock.patch("apps.orders.services.cart.is_restaurant_open", return_value=False):
         with pytest.raises(RestaurantClosedError):
             add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1)
 
@@ -108,7 +108,7 @@ def test_add_item_allowed_when_restaurant_open(restaurant: Restaurant, table: Ta
     _active_reservation(restaurant, table)
     cart = ensure_active_cart_for_table(table=table)
 
-    with mock.patch("apps.orders.services.is_restaurant_open", return_value=True):
+    with mock.patch("apps.orders.services.cart.is_restaurant_open", return_value=True):
         cart_item = add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1)
 
     assert cart_item.quantity == 1
