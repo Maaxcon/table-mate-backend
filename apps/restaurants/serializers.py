@@ -208,7 +208,6 @@ class TableSerializer(serializers.ModelSerializer[Table]):
             "public_number",
             "capacity",
             "is_occupied",
-            "shape",
             "active",
             "zone",
             "created_at",

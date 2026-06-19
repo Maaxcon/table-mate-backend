@@ -85,13 +85,6 @@ class RestaurantSettings(BaseModel):
         return f"Settings for {self.restaurant.name}"
 
 
-class TableShape(models.TextChoices):
-    RECTANGLE = "rectangle", "Rectangle"
-    ROUND = "round", "Round"
-    SQUARE = "square", "Square"
-    BOOTH = "booth", "Booth"
-
-
 class Zone(BaseModel):
     restaurant = models.ForeignKey(
         "restaurants.Restaurant",
@@ -117,11 +110,6 @@ class Zone(BaseModel):
 class Table(RestaurantScopedModel):
     public_number = models.CharField(max_length=64, db_index=True)
     capacity = models.PositiveIntegerField()
-    shape = models.CharField(
-        max_length=20,
-        choices=TableShape.choices,
-        default=TableShape.RECTANGLE,
-    )
     active = models.BooleanField(default=True)
     zone = models.ForeignKey(
         Zone,

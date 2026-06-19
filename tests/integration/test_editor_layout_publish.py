@@ -36,23 +36,49 @@ def _non_admin_api(role: str, restaurant_id: int) -> APIClient:
     return client
 
 
+def _table(
+    x: int = 0,
+    y: int = 0,
+    width: int = 400,
+    height: int = 200,
+    shape: str = "square",
+    capacity: int = 4,
+    rotation: int = 0,
+    public_number: str = "",
+) -> dict[str, Any]:
+    return {
+        "id": None,
+        "x": x,
+        "y": y,
+        "width": width,
+        "height": height,
+        "rotation": rotation,
+        "shape": shape,
+        "capacity": capacity,
+        "zone_id": None,
+        "public_number": public_number,
+        "tags": [],
+    }
+
+
 TABLE_LAYOUT_A = {
-    "tables": [
-        {"id": "t1", "x": 10, "y": 20, "w": 4, "h": 2, "rotation": 0, "capacity": 4, "sector": "main"},
-    ]
+    "tables": [_table(x=10, y=20)],
 }
 
 TABLE_LAYOUT_B = {
     "tables": [
-        {"id": "t1", "x": 10, "y": 20, "w": 4, "h": 2, "rotation": 0, "capacity": 4, "sector": "main"},
-        {"id": "t2", "x": 50, "y": 60, "w": 6, "h": 3, "rotation": 90, "capacity": 6, "sector": "patio"},
+        _table(x=10, y=20),
+        _table(x=50, y=60, width=600, height=600, shape="round", capacity=6, rotation=90),
     ]
 }
 
 TABLE_LAYOUT_C = {
     "tables": [
-        {"id": "t1", "x": 15, "y": 25, "w": 4, "h": 2, "rotation": 0, "capacity": 4, "sector": "main"},
-        {"id": "t3", "x": 100, "y": 200, "w": 8, "h": 4, "rotation": 180, "capacity": 8, "sector": "vip"},
+        _table(x=15, y=25),
+        _table(
+            x=100, y=200, width=800, height=400,
+            shape="rectangle", capacity=8, rotation=180,
+        ),
     ]
 }
 
@@ -102,19 +128,19 @@ class TestPublishEndpoint:
         with patch("apps.editor.services.emit_hall_layout_published") as mock_emit:
             response = client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_A},
+                TABLE_LAYOUT_A,
                 format="json",
             )
 
         assert response.status_code == 201
         data = response.json()
-        assert data["layout_json"]["diff"] is None
-        assert data["layout_json"]["entities"] == TABLE_LAYOUT_A["tables"]
         assert data["restaurant"] == str(restaurant.public_id)
         assert data["published_by"] is not None
         assert data["public_id"] is not None
         assert data["published_at"] is not None
         assert data["parent_version"] is None
+        assert "table_id_map" in data
+        assert "warnings" in data
 
         mock_emit.assert_called_once()
 
@@ -124,7 +150,7 @@ class TestPublishEndpoint:
 
         response = client.post(
             "/api/editor/layouts/publish/",
-            {"layout_json": TABLE_LAYOUT_A},
+            TABLE_LAYOUT_A,
             format="json",
         )
 
@@ -135,7 +161,7 @@ class TestPublishEndpoint:
 
         response = client.post(
             "/api/editor/layouts/publish/",
-            {"layout_json": TABLE_LAYOUT_A},
+            TABLE_LAYOUT_A,
             format="json",
         )
 
@@ -147,17 +173,17 @@ class TestPublishEndpoint:
         with patch("apps.editor.services.emit_hall_layout_published"):
             resp1 = client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_A},
+                TABLE_LAYOUT_A,
                 format="json",
             )
             resp2 = client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_B},
+                TABLE_LAYOUT_B,
                 format="json",
             )
             resp3 = client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_C},
+                TABLE_LAYOUT_C,
                 format="json",
             )
 
@@ -173,23 +199,23 @@ class TestPublishEndpoint:
         with patch("apps.editor.services.emit_hall_layout_published"):
             resp1 = client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_A},
+                TABLE_LAYOUT_A,
                 format="json",
             )
             client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_B},
+                TABLE_LAYOUT_B,
                 format="json",
             )
             client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_C},
+                TABLE_LAYOUT_C,
                 format="json",
             )
 
         version_1 = LayoutVersion.objects.get(public_id=resp1.json()["public_id"])
-        assert version_1.layout_json["diff"] is None
-        assert version_1.layout_json["entities"] == TABLE_LAYOUT_A["tables"]
+        assert "tables" in version_1.layout_json
+        assert len(version_1.layout_json["tables"]) == len(TABLE_LAYOUT_A["tables"])
 
     def test_active_sessions_unaffected(self, restaurant: Any, table: Any) -> None:
         from django.utils import timezone
@@ -216,12 +242,25 @@ class TestPublishEndpoint:
             opened_at=timezone.now(),
         )
 
+        # Include the existing table in the layout so it doesn't get soft-deleted
+        existing_table_entry = _table(
+            x=200, y=300, width=400, height=400,
+            public_number=table.public_number,
+        )
+        existing_table_entry["id"] = str(table.public_id)
+        layout_with_existing = {
+            "tables": [
+                {**TABLE_LAYOUT_A["tables"][0]},
+                existing_table_entry,
+            ]
+        }
+
         client = _admin_api(restaurant.id)
 
         with patch("apps.editor.services.emit_hall_layout_published"):
             response = client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_A},
+                layout_with_existing,
                 format="json",
             )
 
@@ -255,17 +294,17 @@ class TestPublishEndpoint:
         with patch("apps.editor.services.emit_hall_layout_published") as mock_emit:
             client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_A},
+                TABLE_LAYOUT_A,
                 format="json",
             )
             client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_B},
+                TABLE_LAYOUT_B,
                 format="json",
             )
             client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_C},
+                TABLE_LAYOUT_C,
                 format="json",
             )
 

@@ -3,13 +3,12 @@ from typing import Any, TypedDict
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.restaurants.models import Restaurant, RestaurantSettings, Table, TableShape, Zone
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table, Zone
 
 
 class _TableData(TypedDict):
     public_number: str
     capacity: int
-    shape: str
     zone_name: str
 
 
@@ -36,16 +35,16 @@ _RESTAURANTS_DATA: list[_RestaurantData] = [
             {"name": "Winter Garden", "sort_order": 2},
         ],
         "tables": [
-            {"public_number": "T1", "capacity": 2, "shape": TableShape.ROUND, "zone_name": "Main Hall"},
-            {"public_number": "T2", "capacity": 2, "shape": TableShape.ROUND, "zone_name": "Main Hall"},
-            {"public_number": "T3", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Main Hall"},
-            {"public_number": "T4", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Main Hall"},
-            {"public_number": "T5", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Main Hall"},
-            {"public_number": "T6", "capacity": 6, "shape": TableShape.SQUARE, "zone_name": "VIP Room"},
-            {"public_number": "T7", "capacity": 6, "shape": TableShape.SQUARE, "zone_name": "VIP Room"},
-            {"public_number": "T8", "capacity": 8, "shape": TableShape.SQUARE, "zone_name": "Winter Garden"},
-            {"public_number": "T9", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Winter Garden"},
-            {"public_number": "T10", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Winter Garden"},
+            {"public_number": "T1", "capacity": 2, "zone_name": "Main Hall"},
+            {"public_number": "T2", "capacity": 2, "zone_name": "Main Hall"},
+            {"public_number": "T3", "capacity": 4, "zone_name": "Main Hall"},
+            {"public_number": "T4", "capacity": 4, "zone_name": "Main Hall"},
+            {"public_number": "T5", "capacity": 4, "zone_name": "Main Hall"},
+            {"public_number": "T6", "capacity": 6, "zone_name": "VIP Room"},
+            {"public_number": "T7", "capacity": 6, "zone_name": "VIP Room"},
+            {"public_number": "T8", "capacity": 8, "zone_name": "Winter Garden"},
+            {"public_number": "T9", "capacity": 4, "zone_name": "Winter Garden"},
+            {"public_number": "T10", "capacity": 4, "zone_name": "Winter Garden"},
         ],
     },
     {
@@ -59,11 +58,11 @@ _RESTAURANTS_DATA: list[_RestaurantData] = [
             {"name": "Terrace", "sort_order": 1},
         ],
         "tables": [
-            {"public_number": "T1", "capacity": 2, "shape": TableShape.ROUND, "zone_name": "Indoor"},
-            {"public_number": "T2", "capacity": 2, "shape": TableShape.ROUND, "zone_name": "Indoor"},
-            {"public_number": "T3", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Indoor"},
-            {"public_number": "T4", "capacity": 4, "shape": TableShape.SQUARE, "zone_name": "Terrace"},
-            {"public_number": "T5", "capacity": 6, "shape": TableShape.SQUARE, "zone_name": "Terrace"},
+            {"public_number": "T1", "capacity": 2, "zone_name": "Indoor"},
+            {"public_number": "T2", "capacity": 2, "zone_name": "Indoor"},
+            {"public_number": "T3", "capacity": 4, "zone_name": "Indoor"},
+            {"public_number": "T4", "capacity": 4, "zone_name": "Terrace"},
+            {"public_number": "T5", "capacity": 6, "zone_name": "Terrace"},
         ],
     },
 ]
@@ -142,7 +141,6 @@ class Command(BaseCommand):
                     public_number=table_data["public_number"],
                     defaults={
                         "capacity": table_data["capacity"],
-                        "shape": table_data["shape"],
                         "active": True,
                         "zone": zone_map.get(str(table_data["zone_name"])),
                     },

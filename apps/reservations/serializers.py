@@ -16,7 +16,6 @@ class TableInfoSerializer(serializers.ModelSerializer[Table]):
             "public_id",
             "public_number",
             "capacity",
-            "shape",
         ]
 
 

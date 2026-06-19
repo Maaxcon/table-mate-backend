@@ -40,7 +40,6 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
             "zone",
             "public_number",
             "capacity",
-            "shape",
             "active",
             "created_at",
             "updated_at",
@@ -118,6 +117,9 @@ class PublishLayoutSerializer(serializers.Serializer[Any]):
     obstacles = ObstacleEntitySerializer(many=True, required=False, default=list)
     thresholds = ThresholdEntitySerializer(many=True, required=False, default=list)
     portals = PortalEntitySerializer(many=True, required=False, default=list)
+    deleted_table_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list
+    )
 
 
 class LayoutVersionSerializer(serializers.ModelSerializer[LayoutVersion]):
