@@ -19,15 +19,26 @@ class TableInUseError(Exception):
 
 
 def _generate_public_number(restaurant_id: int) -> str:
-    existing = (
+    active_nums: set[int] = set()
+    inactive_nums: set[int] = set()
+
+    for pn, active in (
         Table.objects.filter(restaurant_id=restaurant_id)
-        .values_list("public_number", flat=True)
-    )
-    max_num = 0
-    for pn in existing:
+        .values_list("public_number", "active")
+    ):
         m = re.fullmatch(r"T(\d+)", str(pn))
         if m:
-            max_num = max(max_num, int(m.group(1)))
+            num = int(m.group(1))
+            if active:
+                active_nums.add(num)
+            else:
+                inactive_nums.add(num)
+
+    reusable = sorted(inactive_nums - active_nums)
+    if reusable:
+        return f"T{reusable[0]}"
+
+    max_num = max(active_nums | inactive_nums, default=0)
     return f"T{max_num + 1}"
 
 
