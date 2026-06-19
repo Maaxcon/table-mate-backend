@@ -22,6 +22,7 @@ from common.exceptions import (
     EmptyCartError,
     RestaurantClosedError,
 )
+from common.money import quantize_money
 
 from .models import (
     CartItem,
@@ -204,8 +205,8 @@ def checkout_cart_session(
         order_tax = Decimal("0")
         for cart_item in cart_items:
             unit_price = cart_item.menu_item.price
-            line_total = unit_price * cart_item.quantity
-            line_tax = line_total * tax_rate
+            line_total = quantize_money(unit_price * cart_item.quantity)
+            line_tax = quantize_money(line_total * tax_rate)
             OrderItem.objects.create(
                 restaurant_id=cart_session.restaurant_id,
                 order=order,

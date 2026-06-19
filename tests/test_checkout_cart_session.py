@@ -71,10 +71,13 @@ def test_checkout_creates_order_and_closes_cart(
 
     session = Session.objects.get(reservation__table=table)
     assert order.session_id == session.id
-    # 29.99 * 2 = 59.98 subtotal, +10% tax = 65.978 total
+    # 29.99 * 2 = 59.98 subtotal, 10% tax = 5.998 -> 6.00 (cents), total 65.98
     assert session.subtotal == Decimal("59.98")
-    assert session.tax == Decimal("5.998")
-    assert session.total == Decimal("65.978")
+    assert session.tax == Decimal("6.00")
+    assert session.total == Decimal("65.98")
+    # Money is stored at the currency minor unit (no sub-cent residue).
+    assert session.tax == session.tax.quantize(Decimal("0.01"))
+    assert session.total == session.total.quantize(Decimal("0.01"))
 
 
 @pytest.mark.django_db
@@ -97,8 +100,8 @@ def test_two_rounds_accumulate_on_one_session(
     assert sessions.count() == 1
     session = sessions.get()
     assert Order.objects.filter(session=session).count() == 2
-    # two rounds of 29.99 + 10% tax = 2 * 32.989 = 65.978
-    assert session.total == Decimal("65.978")
+    # two rounds of 29.99 + 10% tax (2.999 -> 3.00) = 2 * 32.99 = 65.98
+    assert session.total == Decimal("65.98")
 
 
 @pytest.mark.django_db
