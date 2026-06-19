@@ -5,14 +5,12 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
-from apps.authentication.models import User
 from apps.orders.billing import ensure_visit_session
-from apps.orders.models import Session
 from apps.restaurants.models import Table
-from common.exceptions import ReservationConflictError
+from common.exceptions import ReservationCancelError, ReservationConflictError
 
 from ..editor.selectors import get_available_tables
-from .models import Reservation, ReservationStatus, ReservationType
+from .models import Reservation, ReservationStatus
 
 
 def check_availability(
@@ -92,56 +90,17 @@ def create_reservation(
 
 
 @transaction.atomic
-def seat_walk_in_customer(
-    table: Table,
-    guest_count: int,
-    opened_by: User | None = None,
-) -> Reservation:
-    now = timezone.now()
-    default_end = now + timedelta(hours=2)
+def cancel_reservation(reservation: Reservation) -> Reservation:
+    """Cancel a pending or active reservation. Rejects any other state.
 
-    next_reservation = (
-        Reservation.objects.filter(
-            table=table,
-            restaurant_id=table.restaurant_id,
-            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-            end_at__gt=now,
-        )
-        .order_by("start_at")
-        .first()
-    )
-
-    if next_reservation is not None:
-        end_at = min(default_end, next_reservation.start_at)
-    else:
-        end_at = default_end
-
-    if end_at <= now:
-        raise ReservationConflictError("Table has no available time for a walk-in reservation.")
-
-    reservation = Reservation.objects.create(
-        table=table,
-        restaurant_id=table.restaurant_id,
-        guest_count=guest_count,
-        start_at=now,
-        end_at=end_at,
-        type=ReservationType.WALK_IN,
-        status=ReservationStatus.ACTIVE,
-        customer=None,
-    )
-
-    restaurant = table.restaurant
-    Session.objects.create(
-        restaurant_id=table.restaurant_id,
-        table=table,
-        reservation=reservation,
-        opened_by=opened_by,
-        guest_count=guest_count,
-        currency=restaurant.settings.currency,
-        opened_at=now,
-    )
-
-    return reservation
+    Mirrors reschedule/activate: the state-machine lives here, not in the view.
+    """
+    locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
+    if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
+        raise ReservationCancelError("Only pending or active reservations can be cancelled.")
+    locked.status = ReservationStatus.CANCELLED
+    locked.save(update_fields=["status"])
+    return locked
 
 
 @transaction.atomic
