@@ -56,7 +56,7 @@ def _portal(
         "width": gw * 100,
         "height": gh * 100,
         "target_zone_name": target_zone,
-        "label": label,
+        "portal_label": label,
         "zone_name": zone,
     }
 
@@ -168,7 +168,7 @@ class Command(BaseCommand):
                     "width": pd["width"],
                     "height": pd["height"],
                     "target_zone_id": str(tz.public_id) if tz else None,
-                    "label": pd.get("label", ""),
+                    "portal_label": pd.get("portal_label", ""),
                     "zone_id": str(pz.public_id) if pz else None,
                 })
 

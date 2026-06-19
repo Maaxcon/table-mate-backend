@@ -207,7 +207,7 @@ class ZoneViewSet(
             return qs.filter(restaurant_id=restaurant_id)
         return qs.none()
 
-    def perform_create(self, serializer: ZoneSerializer) -> None:
+    def perform_create(self, serializer: BaseSerializer[Zone]) -> None:
         restaurant_id = self.get_restaurant_id()
         if restaurant_id is None:
             from rest_framework.exceptions import ValidationError
