@@ -13,6 +13,12 @@ class ReservationConflictError(DomainError):
     default_status_code = HTTPStatus.CONFLICT
 
 
+class ReservationCancelError(DomainError):
+    default_detail = "Only pending or active reservations can be cancelled."
+    default_code = "reservation_cannot_cancel"
+    default_status_code = HTTPStatus.BAD_REQUEST
+
+
 class TableOccupiedError(DomainError):
     default_detail = "Table already has an active session."
     default_code = "table_occupied"

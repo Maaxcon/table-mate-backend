@@ -178,6 +178,27 @@ def test_cannot_activate_cancelled_reservation(
 
 
 @pytest.mark.django_db
+def test_staff_cannot_activate_reservation_in_other_restaurant(
+    restaurant: Restaurant,
+    table: Table,
+    api: Callable[..., Any],
+) -> None:
+    # Reservation lives in restaurant A.
+    reservation = _reservation(restaurant, table)
+
+    # A waiter scoped to a different restaurant must not reach it. The only tenant
+    # guard is get_queryset(), so a regression there would silently allow this.
+    other = Restaurant.objects.create(name="Other", address="9 Other St")
+    staff_b = api(role=RoleCode.WAITER, restaurant_id=other.id)
+
+    resp = staff_b.client.post(_url(reservation))
+
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    reservation.refresh_from_db()
+    assert reservation.status == ReservationStatus.PENDING
+
+
+@pytest.mark.django_db
 def test_activated_reservation_yields_cart(
     restaurant: Restaurant,
     table: Table,

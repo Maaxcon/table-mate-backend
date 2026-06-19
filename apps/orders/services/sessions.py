@@ -63,6 +63,12 @@ def ensure_active_cart_for_table(
     if there is none. Safe under concurrent scans: relies on the
     one_active_per_reservation unique constraint so two callers can never create
     two active sessions for the same reservation.
+
+    NOTE: unlike create_cart_session, this intentionally does NOT gate on
+    reservation participants. It backs the public QR/GuestInit (AllowAny) flow,
+    where the issued guest token is already scoped to one cart_session_id. Any
+    future *authenticated* caller would bypass participant gating here — add an
+    explicit participant check before reusing this from an authenticated path.
     """
     reservation = get_active_reservation_for_table(table)
     if reservation is None:
@@ -92,29 +98,44 @@ def ensure_active_cart_for_table(
     return session
 
 
-def close_stale_cart_sessions() -> int:
+_STALE_CART_BATCH_SIZE = 500
+
+
+def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: int = _STALE_CART_BATCH_SIZE) -> int:
     """Close active carts whose reservation is finished or past its end time.
 
     Keeps dead active CartSessions from piling up after a visit ends. Returns
     the number of carts closed. Time-valid active reservations are left alone.
+
+    Closes in bounded batches instead of one global UPDATE, so a large backlog
+    doesn't take a wide lock in a single statement. ``skip_locked`` lets it step
+    over rows another transaction is already touching. Pass ``restaurant_id`` to
+    scope a run to one tenant.
     """
     now = timezone.now()
-    with transaction.atomic():
-        stale = list(
-            CartSession.objects.select_for_update()
-            .filter(status=CartSessionStatus.ACTIVE)
-            .filter(
-                Q(reservation__status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED])
-                | Q(reservation__end_at__lt=now)
-            )
-        )
-        if not stale:
-            return 0
-        for cart in stale:
-            cart.status = CartSessionStatus.CLOSED
-        CartSession.objects.bulk_update(stale, ["status"])
+    base = CartSession.objects.filter(status=CartSessionStatus.ACTIVE).filter(
+        Q(reservation__status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED])
+        | Q(reservation__end_at__lt=now)
+    )
+    if restaurant_id is not None:
+        base = base.filter(restaurant_id=restaurant_id)
 
-    # Tell any open guest drawer its cart has closed, so it stops accepting taps.
-    for cart in stale:
-        _broadcast_cart_updated(cart)
-    return len(stale)
+    total_closed = 0
+    while True:
+        with transaction.atomic():
+            batch = list(
+                base.select_for_update(skip_locked=True).order_by("pk")[:batch_size]
+            )
+            if not batch:
+                break
+            for cart in batch:
+                cart.status = CartSessionStatus.CLOSED
+            CartSession.objects.bulk_update(batch, ["status"])
+
+        # Tell any open guest drawer its cart has closed, so it stops accepting taps.
+        for cart in batch:
+            _broadcast_cart_updated(cart)
+        total_closed += len(batch)
+        if len(batch) < batch_size:
+            break
+    return total_closed
