@@ -47,6 +47,23 @@ def test_closed_before_open_and_after_close(restaurant: Restaurant) -> None:
 
 
 @pytest.mark.django_db
+def test_open_minute_is_inclusive(restaurant: Restaurant) -> None:
+    # ALL_DAYS opens at 09:00; the open minute itself counts as open.
+    _settings(restaurant, ALL_DAYS)
+    assert is_restaurant_open(restaurant.id, when=WED_1300_UTC.replace(hour=9, minute=0)) is True
+
+
+@pytest.mark.django_db
+def test_close_minute_is_exclusive(restaurant: Restaurant) -> None:
+    # ALL_DAYS closes at 22:00; now_min == close_min must read as closed
+    # (the window is [open, close), excluded by '< close_min').
+    _settings(restaurant, ALL_DAYS)
+    assert is_restaurant_open(restaurant.id, when=WED_1300_UTC.replace(hour=22, minute=0)) is False
+    # One minute before close is still open.
+    assert is_restaurant_open(restaurant.id, when=WED_1300_UTC.replace(hour=21, minute=59)) is True
+
+
+@pytest.mark.django_db
 def test_closed_when_day_has_no_hours(restaurant: Restaurant) -> None:
     other_day = next(d for d in _DAY_KEYS if d != _DAY_KEYS[WED_1300_UTC.weekday()])
     _settings(restaurant, {other_day: {"open": "09:00", "close": "22:00"}})
