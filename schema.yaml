@@ -1393,7 +1393,11 @@ paths:
       - jwt_Auth: []
       responses:
         '201':
-          description: Round checked out; order created (order_id, total, currency).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+          description: ''
         '400':
           description: Cart is empty.
         '409':
@@ -3377,6 +3381,19 @@ components:
       description: |-
         * `active` - Active
         * `closed` - Closed
+    CheckoutResponse:
+      type: object
+      properties:
+        order_id:
+          type: string
+        total:
+          type: string
+        currency:
+          type: string
+      required:
+      - currency
+      - order_id
+      - total
     CreatedBySourceEnum:
       enum:
       - staff
@@ -5012,6 +5029,10 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        service_charge:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
         total:
           type: string
           format: decimal
@@ -5596,6 +5617,10 @@ components:
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
         tax:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        service_charge:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
