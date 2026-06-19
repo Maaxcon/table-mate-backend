@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping, Sequence
 from typing import cast
+
+from django.db.models import Avg, CharField, Count, F, OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce, Concat, Extract, Trim
 
 from apps.authentication.models import User
 from apps.menu.models import MenuItem
 from apps.reservations.models import Reservation
 from apps.reservations.selectors import get_reservation_participant_ids
 
-from .models import CartItem, CartSession, Session
+from .models import CartItem, CartSession, OrderItem, OrderItemStatus, Session, Ticket, TicketStatus
 
 
 def get_session(session_id: uuid.UUID, restaurant_id: int) -> Session | None:
@@ -17,9 +20,106 @@ def get_session(session_id: uuid.UUID, restaurant_id: int) -> Session | None:
     return Session.objects.filter(public_id=session_id, restaurant_id=restaurant_id).first()
 
 
+def get_kitchen_tickets(
+    restaurant_id: int,
+    *,
+    status: str | None = None,
+) -> Sequence[Ticket]:
+    """Return tickets annotated with table_number, server_name, guest_count, items_count.
+
+    Results are ordered by injected_at (FIFO) per the constitution's injection-time
+    ordering rule.
+    """
+    items_count_subq = (
+        OrderItem.objects.filter(ticket=OuterRef("pk"))
+        .exclude(status=OrderItemStatus.VOIDED)
+        .values("ticket")
+        .annotate(count=Count("id"))
+        .values("count")
+    )
+
+    qs = (
+        Ticket.objects.select_related(
+            "session__table",
+            "order__created_by",
+            "session",
+        )
+        .annotate(
+            table_number=F("session__table__table_number"),
+            server_name=Trim(
+                Concat(
+                    F("order__created_by__first_name"),
+                    Value(" "),
+                    F("order__created_by__last_name"),
+                    output_field=CharField(),
+                )
+            ),
+            guest_count=F("session__guest_count"),
+            items_count=Coalesce(Subquery(items_count_subq), 0),
+        )
+        .filter(restaurant_id=restaurant_id)
+        .order_by("injected_at", "id")
+    )
+
+    if status is not None:
+        qs = qs.filter(status=status)
+
+    return list(qs)
+
+
+def get_kitchen_order_items(
+    restaurant_id: int,
+    *,
+    ticket_id: str | None = None,
+    status: str | None = None,
+) -> Sequence[OrderItem]:
+    """Return order items for kitchen kanban view, filtered by ticket or status."""
+    qs = (
+        OrderItem.objects.select_related("menu_item", "ticket")
+        .filter(restaurant_id=restaurant_id)
+        .order_by("created_at")
+    )
+
+    if ticket_id is not None:
+        qs = qs.filter(ticket__public_id=ticket_id)
+
+    if status is not None:
+        qs = qs.filter(status=status)
+
+    return list(qs)
+
+
+def compute_avg_prep_time(restaurant_id: int) -> float | None:
+    """Compute average cycle time (completed_at - injected_at) in seconds.
+
+    Constitution Principle C9: cycle time must be derived from raw ticket records
+    at query time, not stored as a precomputed column.
+    """
+    result = (
+        Ticket.objects.filter(
+            restaurant_id=restaurant_id,
+            status=TicketStatus.COMPLETED,
+            completed_at__isnull=False,
+            injected_at__isnull=False,
+        )
+        .annotate(
+            cycle_seconds=Extract(
+                F("completed_at") - F("injected_at"),
+                "epoch",
+            ),
+        )
+        .aggregate(avg_cycle_seconds=Avg("cycle_seconds"))
+    )
+
+    return result.get("avg_cycle_seconds")
+
+
 __all__ = [
+    "compute_avg_prep_time",
     "get_cart_item",
     "get_cart_session",
+    "get_kitchen_order_items",
+    "get_kitchen_tickets",
     "get_menu_item",
     "get_reservation",
     "get_session",

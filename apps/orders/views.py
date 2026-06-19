@@ -150,7 +150,11 @@ class TicketViewSet(
     viewsets.ModelViewSet[Ticket],
 ):
     permission_classes = [IsStaff]
-    queryset = Ticket.objects.all()
+    queryset = Ticket.objects.select_related(
+        "session__table",
+        "order__created_by",
+        "session",
+    ).prefetch_related("items")
     serializer_class = TicketSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
     filterset_fields = ["session", "order", "status"]

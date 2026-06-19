@@ -2,10 +2,9 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
-from django.db import connection
 from django.urls import reverse
 from rest_framework import status
 
@@ -19,9 +18,7 @@ from apps.orders.models import (
     SessionStatus,
     Ticket,
     TicketStatus,
-    VoidReason,
 )
-from apps.orders.services import create_order_with_items, void_order_item
 from apps.restaurants.models import Table
 
 from .conftest import AuthContext
@@ -31,9 +28,7 @@ SESSION_LIST_URL = reverse("session-list")
 ORDER_ITEM_VOID_URL = "order-item-void"
 
 
-def _create_session(
-    client: Any, table: Table, restaurant_id: int
-) -> dict[str, Any]:
+def _create_session(client: Any, table: Table, restaurant_id: int) -> dict[str, Any]:
     response = client.post(
         SESSION_LIST_URL,
         {
@@ -45,7 +40,8 @@ def _create_session(
         content_type="application/json",
     )
     assert response.status_code == status.HTTP_201_CREATED
-    return response.json()
+    data = cast(dict[str, Any], response.json())
+    return data
 
 
 def _build_session(
@@ -306,9 +302,7 @@ class TestVoidOrderItem:
         )
         assert order_resp.status_code == status.HTTP_201_CREATED
 
-        order_item = OrderItem.objects.filter(
-            order__public_id=order_resp.json()["public_id"]
-        ).first()
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
         assert order_item is not None
 
         url = reverse(ORDER_ITEM_VOID_URL, kwargs={"public_id": order_item.public_id})
@@ -343,9 +337,8 @@ class TestVoidOrderItem:
         )
         assert order_resp.status_code == status.HTTP_201_CREATED
 
-        order_item = OrderItem.objects.filter(
-            order__public_id=order_resp.json()["public_id"]
-        ).first()
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
+        assert order_item is not None
 
         url = reverse(ORDER_ITEM_VOID_URL, kwargs={"public_id": order_item.public_id})
         first = auth.client.post(url, {"void_reason": "mispick"}, content_type="application/json")
@@ -373,14 +366,11 @@ class TestVoidOrderItem:
         )
         assert order_resp.status_code == status.HTTP_201_CREATED
 
-        order_item = OrderItem.objects.filter(
-            order__public_id=order_resp.json()["public_id"]
-        ).first()
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
+        assert order_item is not None
 
         url = reverse(ORDER_ITEM_VOID_URL, kwargs={"public_id": order_item.public_id})
-        response = auth.client.post(
-            url, {"void_reason": "bogus_reason"}, content_type="application/json"
-        )
+        response = auth.client.post(url, {"void_reason": "bogus_reason"}, content_type="application/json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_with_note(
@@ -402,9 +392,8 @@ class TestVoidOrderItem:
         )
         assert order_resp.status_code == status.HTTP_201_CREATED
 
-        order_item = OrderItem.objects.filter(
-            order__public_id=order_resp.json()["public_id"]
-        ).first()
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
+        assert order_item is not None
 
         url = reverse(ORDER_ITEM_VOID_URL, kwargs={"public_id": order_item.public_id})
         response = auth.client.post(

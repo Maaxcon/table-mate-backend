@@ -104,6 +104,29 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
     order: PublicIdRelatedField[Order] = PublicIdRelatedField(
         queryset=Order.objects.all(),
     )
+    table_number = serializers.CharField(
+        source="session.table.table_number",
+        read_only=True,
+    )
+    server_name = serializers.SerializerMethodField()
+    guest_count = serializers.IntegerField(
+        source="session.guest_count",
+        read_only=True,
+    )
+    items_count = serializers.SerializerMethodField()
+
+    def get_server_name(self, obj: Ticket) -> str:
+        created_by = getattr(obj.order, "created_by", None)
+        if not isinstance(created_by, User):
+            return ""
+        full_name = created_by.get_full_name().strip()
+        if full_name:
+            return full_name
+        email = getattr(created_by, "email", "")
+        return email or ""
+
+    def get_items_count(self, obj: Ticket) -> int:
+        return obj.items.count()
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -121,10 +144,23 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
             "injected_at",
             "started_at",
             "completed_at",
+            "table_number",
+            "server_name",
+            "guest_count",
+            "items_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]
+        read_only_fields = [
+            "public_id",
+            "restaurant",
+            "table_number",
+            "server_name",
+            "guest_count",
+            "items_count",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
