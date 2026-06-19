@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.authentication.permissions import IsFloor, IsStaff
+from apps.authentication.permissions import IsFloor, IsKitchen, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
@@ -149,7 +149,7 @@ class TicketViewSet(
     RestaurantScopedViewSetMixin[Ticket],
     viewsets.ModelViewSet[Ticket],
 ):
-    permission_classes = [IsStaff]
+    permission_classes = [IsKitchen]
     queryset = Ticket.objects.select_related(
         "session__table",
         "order__created_by",
@@ -188,7 +188,7 @@ class OrderItemViewSet(
     RestaurantScopedViewSetMixin[OrderItem],
     viewsets.ModelViewSet[OrderItem],
 ):
-    permission_classes = [IsStaff]
+    permission_classes = [IsKitchen]
     queryset = OrderItem.objects.all()
     serializer_class = OrderItemSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]

@@ -224,7 +224,7 @@ class TestTicketKanbanAPI:
         table: Table,
         item: MenuItem,
     ) -> None:
-        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        auth = api(role=RoleCode.COOK, restaurant_id=restaurant.id)
         actor = auth.user
         client = auth.client
         restaurant_id = restaurant.id
@@ -311,6 +311,56 @@ class TestTicketKanbanAPI:
         results = resp.json()["results"] if "results" in resp.json() else resp.json()
         assert len(results) == 1
         assert results[0]["status"] == TicketStatus.INCOMING
+
+    def test_waiter_cannot_access_ticket_api(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = auth.client
+
+        resp = client.get(TICKET_LIST_URL)
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_waiter_cannot_update_ticket_or_items(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = auth.client
+        actor = auth.user
+        restaurant_id = restaurant.id
+
+        session = _build_session(table, restaurant_id, actor)
+        order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        )
+        ticket = order.tickets.first()
+        assert ticket is not None
+        ticket_url = reverse("ticket-detail", kwargs={"public_id": str(ticket.public_id)})
+
+        resp = client.patch(
+            ticket_url,
+            {"status": "active"},
+            content_type="application/json",
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+        order_item = ticket.items.first()
+        assert order_item is not None
+        item_url = reverse("order-item-detail", kwargs={"public_id": str(order_item.public_id)})
+        resp = client.patch(
+            item_url,
+            {"status": "ready"},
+            content_type="application/json",
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
 
     def test_cook_can_patch_ticket_status(
         self,
