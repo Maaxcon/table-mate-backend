@@ -40,11 +40,11 @@ from .models import (
 from .services.cart import _broadcast_cart_updated
 
 
-def _restaurant_billing(restaurant_id: int) -> tuple[str, Decimal]:
+def _restaurant_billing(restaurant_id: int) -> tuple[str, Decimal, Decimal]:
     settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
     if settings is None:
-        return "USD", Decimal("0")
-    return settings.currency or "USD", settings.default_tax_rate
+        return "USD", Decimal("0"), Decimal("0")
+    return settings.currency or "USD", settings.default_tax_rate, settings.default_service_charge
 
 
 def ensure_visit_session(
@@ -63,7 +63,7 @@ def ensure_visit_session(
     if table_id is None:
         raise DomainError("Reservation has no table; cannot open a bill.")
     if currency is None:
-        currency, _ = _restaurant_billing(reservation.restaurant_id)
+        currency, _, _ = _restaurant_billing(reservation.restaurant_id)
     session, _ = Session.objects.get_or_create(
         reservation=reservation,
         defaults={
@@ -120,13 +120,16 @@ def _recompute_session_totals(session: Session) -> None:
     agg = Order.objects.filter(session=session).aggregate(
         total=Sum("total_amount"),
         tax=Sum("tax_total"),
+        service_charge=Sum("service_charge"),
     )
     total = agg["total"] or Decimal("0")
     tax = agg["tax"] or Decimal("0")
+    service_charge = agg["service_charge"] or Decimal("0")
     session.total = total
     session.tax = tax
-    session.subtotal = total - tax
-    session.save(update_fields=["subtotal", "tax", "total"])
+    session.service_charge = service_charge
+    session.subtotal = total - tax - service_charge
+    session.save(update_fields=["subtotal", "tax", "service_charge", "total"])
 
 
 def _prune_unavailable_cart_items(cart_session: CartSession) -> list[dict[str, str]]:
@@ -187,7 +190,7 @@ def checkout_cart_session(
             raise EmptyCartError("Cart has no items to check out.")
 
         reservation = cart_session.reservation
-        currency, tax_rate = _restaurant_billing(reservation.restaurant_id)
+        currency, tax_rate, service_charge_rate = _restaurant_billing(reservation.restaurant_id)
         session = ensure_visit_session(reservation, opened_by=user, currency=currency)
 
         order = Order.objects.create(
@@ -222,9 +225,12 @@ def checkout_cart_session(
             order_subtotal += line_total
             order_tax += line_tax
 
+        # Service charge applies to the goods subtotal and is not itself taxed.
+        order_service_charge = quantize_money(order_subtotal * service_charge_rate)
         order.tax_total = order_tax
-        order.total_amount = order_subtotal + order_tax
-        order.save(update_fields=["tax_total", "total_amount"])
+        order.service_charge = order_service_charge
+        order.total_amount = order_subtotal + order_tax + order_service_charge
+        order.save(update_fields=["tax_total", "service_charge", "total_amount"])
 
         cart_session.status = CartSessionStatus.CLOSED
         cart_session.save(update_fields=["status"])
