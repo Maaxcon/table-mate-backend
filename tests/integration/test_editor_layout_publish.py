@@ -269,18 +269,120 @@ class TestPublishEndpoint:
         session.refresh_from_db()
         assert session.status == SessionStatus.OPEN
 
+    def _make_reservation(self, restaurant: Any, table: Any) -> Any:
+        from django.utils import timezone
+
+        from apps.reservations.models import Reservation, ReservationStatus
+
+        return Reservation.objects.create(
+            restaurant=restaurant,
+            table=table,
+            guest_count=2,
+            start_at=timezone.now() + timedelta(hours=1),
+            end_at=timezone.now() + timedelta(hours=3),
+            status=ReservationStatus.PENDING,
+        )
+
+    def test_moved_table_with_reservation_does_not_conflict(
+        self, restaurant: Any, table: Any
+    ) -> None:
+        """Moving a table (same id, new position) must never trigger the in-use 400."""
+        reservation = self._make_reservation(restaurant, table)
+
+        moved = _table(x=900, y=900, public_number=table.public_number)
+        moved["id"] = str(table.public_id)
+
+        client = _admin_api(restaurant.id)
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                {"tables": [moved], "deleted_table_ids": []},
+                format="json",
+            )
+
+        assert response.status_code == 201
+        table.refresh_from_db()
+        assert table.active is True
+        reservation.refresh_from_db()
+        assert reservation.table_id == table.pk
+
+    def test_table_omitted_without_delete_flag_stays_active(
+        self, restaurant: Any, table: Any
+    ) -> None:
+        """A table absent from the layout but not explicitly deleted is left untouched."""
+        self._make_reservation(restaurant, table)
+
+        client = _admin_api(restaurant.id)
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                {"tables": [_table(x=10, y=20)], "deleted_table_ids": []},
+                format="json",
+            )
+
+        assert response.status_code == 201
+        table.refresh_from_db()
+        assert table.active is True
+
+    def test_explicit_delete_with_reservation_conflicts(
+        self, restaurant: Any, table: Any
+    ) -> None:
+        self._make_reservation(restaurant, table)
+
+        client = _admin_api(restaurant.id)
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                {"tables": [], "deleted_table_ids": [str(table.public_id)]},
+                format="json",
+            )
+
+        assert response.status_code == 400
+        assert "active reservations or sessions" in response.json()["detail"]
+        table.refresh_from_db()
+        assert table.active is True
+
+    def test_explicit_delete_without_reservation_deactivates(
+        self, restaurant: Any, table: Any
+    ) -> None:
+        client = _admin_api(restaurant.id)
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                {"tables": [], "deleted_table_ids": [str(table.public_id)]},
+                format="json",
+            )
+
+        assert response.status_code == 201
+        table.refresh_from_db()
+        assert table.active is False
+
+    def test_deleted_table_ids_not_persisted_in_payload(
+        self, restaurant: Any, table: Any
+    ) -> None:
+        client = _admin_api(restaurant.id)
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                {"tables": [], "deleted_table_ids": [str(table.public_id)]},
+                format="json",
+            )
+
+        version = LayoutVersion.objects.get(public_id=response.json()["public_id"])
+        assert "deleted_table_ids" not in version.layout_json
+
     def test_parent_version_linked_on_second_publish(self, restaurant: Any) -> None:
         client = _admin_api(restaurant.id)
 
         with patch("apps.editor.services.emit_hall_layout_published"):
             resp1 = client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_A},
+                TABLE_LAYOUT_A,
                 format="json",
             )
             resp2 = client.post(
                 "/api/editor/layouts/publish/",
-                {"layout_json": TABLE_LAYOUT_B},
+                TABLE_LAYOUT_B,
                 format="json",
             )
 
