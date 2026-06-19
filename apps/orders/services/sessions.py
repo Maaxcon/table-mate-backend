@@ -13,6 +13,7 @@ from common.exceptions import NoActiveReservationError, ReservationNotFoundError
 
 from ..models import CartSession, CartSessionStatus
 from ..selectors import _resolve_allowed_reservation_participant_ids, get_reservation
+from .cart import _broadcast_cart_updated
 
 
 def create_cart_session(
@@ -98,8 +99,22 @@ def close_stale_cart_sessions() -> int:
     the number of carts closed. Time-valid active reservations are left alone.
     """
     now = timezone.now()
-    stale = CartSession.objects.filter(status=CartSessionStatus.ACTIVE).filter(
-        Q(reservation__status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED])
-        | Q(reservation__end_at__lt=now)
-    )
-    return stale.update(status=CartSessionStatus.CLOSED)
+    with transaction.atomic():
+        stale = list(
+            CartSession.objects.select_for_update()
+            .filter(status=CartSessionStatus.ACTIVE)
+            .filter(
+                Q(reservation__status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED])
+                | Q(reservation__end_at__lt=now)
+            )
+        )
+        if not stale:
+            return 0
+        for cart in stale:
+            cart.status = CartSessionStatus.CLOSED
+        CartSession.objects.bulk_update(stale, ["status"])
+
+    # Tell any open guest drawer its cart has closed, so it stops accepting taps.
+    for cart in stale:
+        _broadcast_cart_updated(cart)
+    return len(stale)

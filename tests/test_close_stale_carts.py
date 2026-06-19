@@ -1,5 +1,6 @@
 from datetime import timedelta
 from io import StringIO
+from unittest import mock
 
 import pytest
 from django.core.management import call_command
@@ -114,6 +115,37 @@ def test_count_reflects_only_newly_closed(restaurant: Restaurant) -> None:
 
     assert closed == 1
     assert CartSession.objects.filter(status=CartSessionStatus.ACTIVE).count() == 1
+
+
+@pytest.mark.django_db
+def test_broadcasts_only_for_closed_carts(restaurant: Restaurant) -> None:
+    stale_res = _reservation(
+        restaurant, _table(restaurant, "C9"), status=ReservationStatus.COMPLETED, end_offset=timedelta(hours=1)
+    )
+    stale_cart = _active_cart(restaurant, stale_res)
+    live_res = _reservation(
+        restaurant, _table(restaurant, "C10"), status=ReservationStatus.ACTIVE, end_offset=timedelta(hours=1)
+    )
+    _active_cart(restaurant, live_res)
+
+    with mock.patch("apps.orders.services.sessions._broadcast_cart_updated") as broadcast:
+        close_stale_cart_sessions()
+
+    broadcast.assert_called_once()
+    assert broadcast.call_args.args[0].public_id == stale_cart.public_id
+
+
+@pytest.mark.django_db
+def test_no_broadcast_when_nothing_stale(restaurant: Restaurant) -> None:
+    live_res = _reservation(
+        restaurant, _table(restaurant, "C11"), status=ReservationStatus.ACTIVE, end_offset=timedelta(hours=1)
+    )
+    _active_cart(restaurant, live_res)
+
+    with mock.patch("apps.orders.services.sessions._broadcast_cart_updated") as broadcast:
+        assert close_stale_cart_sessions() == 0
+
+    broadcast.assert_not_called()
 
 
 @pytest.mark.django_db
