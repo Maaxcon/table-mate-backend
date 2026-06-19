@@ -102,6 +102,12 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
         ]
 
 
+class CheckoutResponseSerializer(serializers.Serializer[None]):
+    order_id = serializers.CharField()
+    total = serializers.CharField()
+    currency = serializers.CharField()
+
+
 class UpdateCartItemSerializer(serializers.Serializer[None]):
     quantity = serializers.IntegerField(min_value=1, required=True)
     comment = serializers.CharField(required=False, allow_blank=True, allow_null=True)

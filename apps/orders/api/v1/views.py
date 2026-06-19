@@ -24,7 +24,13 @@ from apps.orders.services import (
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.exceptions import CartChangedError, CartSessionNotFoundError, DomainError
 
-from .serializers import AddCartItemSerializer, CartItemSerializer, CartSessionSerializer, UpdateCartItemSerializer
+from .serializers import (
+    AddCartItemSerializer,
+    CartItemSerializer,
+    CartSessionSerializer,
+    CheckoutResponseSerializer,
+    UpdateCartItemSerializer,
+)
 
 
 class GuestFallbackAuthMixin:
@@ -274,7 +280,7 @@ class CartCheckoutView(GuestFallbackAuthMixin, APIView):
     @extend_schema(
         request=None,
         responses={
-            201: OpenApiResponse(description="Round checked out; order created (order_id, total, currency)."),
+            201: CheckoutResponseSerializer,
             400: OpenApiResponse(description="Cart is empty."),
             409: OpenApiResponse(description="Cart changed: unavailable items were removed (code CART_CHANGED)."),
         },
