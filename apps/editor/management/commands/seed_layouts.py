@@ -74,16 +74,16 @@ _LAYOUTS: dict[str, dict[str, Any]] = {
             _t("T6", 11, 1, 3, 3, "square", 6, "VIP Room"),
             _t("T7", 11, 5, 3, 3, "square", 6, "VIP Room"),
             # Winter Garden (T8-T10)
-            _t("T8", 17, 1, 4, 3, "rectangle", 8, "Winter Garden", ["window"]),
-            _t("T9", 17, 5, 3, 3, "square", 4, "Winter Garden"),
-            _t("T10", 17, 9, 3, 3, "square", 4, "Winter Garden"),
+            _t("T8", 16, 1, 4, 3, "rectangle", 8, "Winter Garden", ["window"]),
+            _t("T9", 16, 5, 3, 3, "square", 4, "Winter Garden"),
+            _t("T10", 16, 9, 3, 3, "square", 4, "Winter Garden"),
         ],
         "obstacles": [
-            _obs(0, 0, 22, 1, "Main Hall"),
-            _obs(0, 14, 22, 1, "Main Hall"),
+            _obs(0, 0, 8, 1, "Main Hall"),
+            _obs(0, 12, 8, 1, "Main Hall"),
         ],
         "thresholds": [
-            {"x": 1400, "y": 900, "width": 300, "height": 100, "zone_name": "Main Hall"},
+            {"x": 1400, "y": 800, "width": 300, "height": 100, "zone_name": "Main Hall"},
         ],
         "portals": [
             _portal(14, 9, 2, 2, "VIP Room", "VIP Room", "Main Hall"),
@@ -98,7 +98,7 @@ _LAYOUTS: dict[str, dict[str, Any]] = {
             _t("T5", 9, 5, 3, 3, "square", 6, "Terrace"),
         ],
         "obstacles": [
-            _obs(0, 0, 14, 1, "Indoor"),
+            _obs(0, 0, 8, 1, "Indoor"),
         ],
         "thresholds": [],
         "portals": [
