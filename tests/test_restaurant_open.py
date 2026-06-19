@@ -8,7 +8,8 @@ from django.utils import timezone
 
 from apps.orders.services import add_item_to_cart, ensure_active_cart_for_table
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
-from apps.restaurants.models import Restaurant, RestaurantSettings, Table
+from apps.restaurants.management.commands.seed_restaurants import DEFAULT_WORKING_HOURS
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table, validate_working_hours
 from apps.restaurants.selectors import _DAY_KEYS, is_restaurant_open
 from common.exceptions import RestaurantClosedError
 
@@ -23,6 +24,13 @@ def _settings(restaurant: Restaurant, working_hours: dict[str, Any], tz: str = "
         defaults={"currency": "USD", "timezone": tz, "working_hours": working_hours},
     )
     return obj
+
+
+def test_seed_default_working_hours_use_canonical_keys() -> None:
+    # Seeded hours must use the same keys the selector and validator expect,
+    # otherwise every seeded restaurant reads as closed.
+    assert set(DEFAULT_WORKING_HOURS) == set(_DAY_KEYS)
+    validate_working_hours(DEFAULT_WORKING_HOURS)
 
 
 @pytest.mark.django_db
