@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -125,3 +126,27 @@ def test_guest_token_cannot_checkout_other_session(
 
     assert resp.status_code == status.HTTP_401_UNAUTHORIZED
     assert not Order.objects.exists()
+
+
+@pytest.mark.django_db
+def test_authenticated_non_participant_cannot_checkout(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+    api: Callable[..., Any],
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = ensure_active_cart_for_table(table=table)
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1, guest_identity="guest-1")
+
+    # A logged-in customer whose token carries the same restaurant but who is
+    # not a participant of this cart must not be able to check it out.
+    outsider = api(restaurant_id=restaurant.id)
+    url = reverse("cart-checkout", kwargs={"session_pk": cart.public_id})
+    resp = outsider.client.post(url)
+
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+    assert not Order.objects.exists()
+    cart.refresh_from_db()
+    assert cart.status == CartSessionStatus.ACTIVE

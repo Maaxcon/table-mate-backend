@@ -14,7 +14,7 @@ from apps.authentication.models import User
 from apps.orders.billing import checkout_cart_session
 from apps.orders.models import CartItem, CartSession
 from apps.orders.permissions import IsActiveTableGuest
-from apps.orders.selectors import get_cart_session
+from apps.orders.selectors import get_cart_session, is_cart_participant
 from apps.orders.services import (
     add_item_to_cart,
     create_cart_session,
@@ -257,6 +257,10 @@ def _resolve_checkout_session(request: Request, session_pk: str) -> CartSession:
             if restaurant_id is not None
             else None
         )
+        if session is not None:
+            user = _request_user_or_none(request)
+            if user is None or not is_cart_participant(user, session):
+                raise PermissionDenied("Only cart participants may check out this cart.")
     if session is None:
         raise CartSessionNotFoundError(f"Cart session {session_pk} not found.")
     return session
