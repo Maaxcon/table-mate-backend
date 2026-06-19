@@ -73,6 +73,28 @@ def emit_hall_layout_published(
     )
 
 
+def emit_hall_reservation_cancelled(
+    restaurant_id: int,
+    *,
+    reservation_id: str,
+    table_id: str,
+    actor: User,
+) -> None:
+    _broadcast_hall_event(
+        restaurant_id,
+        {
+            "event_name": "HALL_RESERVATION_CANCELLED",
+            "schema_version": "1",
+            "event_id": str(uuid.uuid4()),
+            "reservation_id": reservation_id,
+            "table_id": table_id,
+            "actor_id": actor.pk,
+            "actor_role": actor.role,
+            "occurred_at": timezone.now().isoformat(),
+        },
+    )
+
+
 def emit_hall_new_reservation(
     restaurant_id: int,
     *,

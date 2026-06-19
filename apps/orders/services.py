@@ -28,6 +28,7 @@ from apps.restaurants.models import Table
 from common.exceptions import (
     CartItemNotFoundError,
     CartSessionClosedError,
+    DomainError,
     MenuItemNotFoundError,
     MenuItemUnavailableError,
     ReservationConflictError,
@@ -337,6 +338,11 @@ def create_walk_in_reservation(
     )
 
 
+_SESSION_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    SessionStatus.OPEN: {SessionStatus.CLOSED, SessionStatus.VOIDED},
+}
+
+
 @transaction.atomic
 def update_session_status(
     session: Session,
@@ -344,6 +350,19 @@ def update_session_status(
     new_status: str,
     actor: User,
 ) -> Session:
+    if new_status not in SessionStatus.values:
+        raise DomainError(f"Invalid session status: {new_status}.")
+
+    if session.status in _SESSION_STATUS_TRANSITIONS:
+        if new_status not in _SESSION_STATUS_TRANSITIONS[session.status]:
+            raise ReservationConflictError(
+                f"Cannot transition session from {session.status} to {new_status}."
+            )
+    elif new_status != session.status:
+        raise ReservationConflictError(
+            f"Cannot transition session from terminal state {session.status}."
+        )
+
     previous_status = session.status
     session.status = new_status
     session.save(update_fields=["status", "updated_at"])
@@ -417,6 +436,11 @@ def create_order_with_items(
     items: list[dict[str, Any]],
     actor: User,
 ) -> Order:
+    if session.status != SessionStatus.OPEN:
+        raise ReservationConflictError(
+            "Cannot add items to a session that is not open."
+        )
+
     order = Order.objects.create(
         restaurant=session.restaurant,
         session=session,
@@ -425,6 +449,14 @@ def create_order_with_items(
         source=OrderSource.WAITER_MANUAL,
         status=OrderStatus.SUBMITTED,
         currency=session.currency,
+    )
+
+    ticket = Ticket.objects.create(
+        restaurant=session.restaurant,
+        session=session,
+        order=order,
+        status=TicketStatus.INCOMING,
+        injected_at=timezone.now(),
     )
 
     total = 0
@@ -440,6 +472,7 @@ def create_order_with_items(
         OrderItem.objects.create(
             restaurant=session.restaurant,
             order=order,
+            ticket=ticket,
             menu_item=menu_item,
             guest_slot=guest_slot,
             quantity=quantity,
@@ -451,13 +484,19 @@ def create_order_with_items(
     order.total_amount = total
     order.save(update_fields=["total_amount"])
 
-    Ticket.objects.create(
-        restaurant=session.restaurant,
-        session=session,
-        order=order,
-        status=TicketStatus.INCOMING,
-        injected_at=timezone.now(),
+    agg = OrderItem.objects.filter(
+        order__session=session,
+    ).exclude(
+        status=OrderItemStatus.VOIDED,
+    ).aggregate(
+        subtotal=Sum("total_price"),
+        tax=Sum("tax_amount"),
     )
+
+    session.subtotal = agg["subtotal"] or 0
+    session.tax = agg["tax"] or 0
+    session.total = session.subtotal + session.tax
+    session.save(update_fields=["subtotal", "tax", "total"])
 
     return order
 

@@ -11,7 +11,11 @@ from apps.authentication.models import RoleCode, User
 from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
 from apps.restaurants.models import Table
 from common.exceptions import ReservationConflictError
-from common.hall_events import emit_hall_new_reservation, emit_hall_table_status_changed
+from common.hall_events import (
+    emit_hall_new_reservation,
+    emit_hall_reservation_cancelled,
+    emit_hall_table_status_changed,
+)
 
 from ..editor.selectors import get_available_tables
 from .models import Reservation, ReservationStatus, ReservationType
@@ -326,6 +330,18 @@ def update_reservation_status(
 
     reservation.status = new_status
     reservation.save(update_fields=["status", "updated_at"])
+
+    if new_status == ReservationStatus.CANCELLED and reservation.table is not None:
+        table = reservation.table
+        transaction.on_commit(
+            lambda: emit_hall_reservation_cancelled(
+                reservation.restaurant_id,
+                reservation_id=str(reservation.public_id),
+                table_id=str(table.public_id),
+                actor=actor,
+            )
+        )
+
     return reservation
 
 
@@ -364,7 +380,7 @@ def activate_pending_reservation(
     reservation.save(update_fields=["status", "updated_at"])
 
     restaurant = table.restaurant
-    Session.objects.create(
+    session = Session.objects.create(
         restaurant_id=reservation.restaurant_id,
         table=table,
         reservation=reservation,
@@ -380,7 +396,7 @@ def activate_pending_reservation(
             table_id=str(table.public_id),
             previous_status="free",
             current_status="occupied",
-            session_id=str(reservation.public_id),
+            session_id=str(session.public_id),
             actor=actor,
         )
     )
@@ -399,7 +415,11 @@ def move_session_to_table(
         raise ReservationConflictError("Can only move an open session.")
 
     try:
-        new_table = Table.objects.get(public_id=new_table_id, active=True)
+        new_table = Table.objects.get(
+            public_id=new_table_id,
+            restaurant_id=session.restaurant_id,
+            active=True,
+        )
     except Table.DoesNotExist:
         raise NotFound("Target table not found or inactive.") from None
 
