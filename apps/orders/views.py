@@ -125,6 +125,7 @@ class OrderItemViewSet(
     filterset_fields = [
         "order",
         "order__public_id",
+        "order__session__public_id",
         "ticket",
         "menu_item",
         "status",

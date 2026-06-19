@@ -1552,6 +1552,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: order__session__public_id
+        schema:
+          type: string
+          format: uuid
       - name: ordering
         required: false
         in: query
