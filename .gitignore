@@ -16,3 +16,4 @@ docker-compose.override.yml
 table_mate.egg-info/
 *.sqlite3
 dump.rdb
+build/
