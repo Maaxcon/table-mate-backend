@@ -3386,6 +3386,12 @@ components:
       properties:
         order_id:
           type: string
+        subtotal:
+          type: string
+        tax:
+          type: string
+        service_charge:
+          type: string
         total:
           type: string
         currency:
@@ -3393,6 +3399,9 @@ components:
       required:
       - currency
       - order_id
+      - service_charge
+      - subtotal
+      - tax
       - total
     CreatedBySourceEnum:
       enum:

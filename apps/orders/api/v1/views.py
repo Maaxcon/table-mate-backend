@@ -294,9 +294,15 @@ class CartCheckoutView(GuestFallbackAuthMixin, APIView):
                 {"detail": exc.default_detail, "code": exc.default_code, "removed": exc.removed},
                 status=status.HTTP_409_CONFLICT,
             )
+        # Goods subtotal isn't stored on Order; derive it so the receipt
+        # reconciles: total = subtotal + tax + service_charge.
+        subtotal = order.total_amount - order.tax_total - order.service_charge
         return Response(
             {
                 "order_id": str(order.public_id),
+                "subtotal": str(subtotal),
+                "tax": str(order.tax_total),
+                "service_charge": str(order.service_charge),
                 "total": str(order.total_amount),
                 "currency": order.currency,
             },

@@ -104,6 +104,9 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
 
 class CheckoutResponseSerializer(serializers.Serializer[None]):
     order_id = serializers.CharField()
+    subtotal = serializers.CharField()
+    tax = serializers.CharField()
+    service_charge = serializers.CharField()
     total = serializers.CharField()
     currency = serializers.CharField()
 

@@ -55,7 +55,13 @@ def test_checkout_success_returns_order_and_closes_cart(
     resp = client.post(url)
 
     assert resp.status_code == status.HTTP_201_CREATED
-    assert "order_id" in resp.json()
+    body = resp.json()
+    assert "order_id" in body
+    # Breakdown must reconcile: subtotal + tax + service = total (10% tax, 5% service).
+    assert body["subtotal"] == "59.98"
+    assert body["tax"] == "6.00"
+    assert body["service_charge"] == "3.00"
+    assert body["total"] == "68.98"
     assert Order.objects.count() == 1
     cart.refresh_from_db()
     assert cart.status == CartSessionStatus.CLOSED
