@@ -306,7 +306,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PublishLayout'
-        required: true
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -341,20 +340,6 @@ paths:
         description: A page number within the paginated result set.
         schema:
           type: integer
-      - in: query
-        name: shape
-        schema:
-          type: string
-          enum:
-          - booth
-          - rectangle
-          - round
-          - square
-        description: |-
-          * `rectangle` - Rectangle
-          * `round` - Round
-          * `square` - Square
-          * `booth` - Booth
       tags:
       - Editor
       security:
@@ -3064,8 +3049,8 @@ paths:
   /api/restaurants/tables/layout/:
     get:
       operationId: restaurants_tables_layout_retrieve
-      description: Returns all active tables and today's PENDING reservations for
-        the floor plan.
+      description: Returns all active tables, the latest layout JSON, and today's
+        PENDING reservations for the floor plan.
       summary: Tables layout with upcoming reservations
       tags:
       - Restaurants
@@ -3146,6 +3131,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedZoneList'
+          description: ''
+    post:
+      operationId: restaurants_zones_create
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Zone'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Zone'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Zone'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
           description: ''
   /api/restaurants/zones/{public_id}/:
     get:
@@ -3561,26 +3573,19 @@ components:
           type: string
           format: uuid
           readOnly: true
-        table_number:
+        zone:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        public_number:
           type: string
           readOnly: true
         capacity:
           type: integer
           readOnly: true
-        shape:
-          $ref: '#/components/schemas/TableShape'
         active:
           type: boolean
-        position_x:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
-        position_y:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -3593,9 +3598,10 @@ components:
       - capacity
       - created_at
       - public_id
+      - public_number
       - restaurant
-      - table_number
       - updated_at
+      - zone
     Employee:
       type: object
       properties:
@@ -3750,6 +3756,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Table'
+        layout:
+          nullable: true
         upcoming_reservations:
           type: array
           items:
@@ -3972,6 +3980,35 @@ components:
       - public_id
       - restaurant
       - updated_at
+    ObstacleEntity:
+      type: object
+      properties:
+        x:
+          type: integer
+          minimum: 0
+        y:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        rotation:
+          type: integer
+          maximum: 359
+          minimum: 0
+          default: 0
+        zone_id:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - height
+      - width
+      - x
+      - y
     Order:
       type: object
       properties:
@@ -4786,26 +4823,19 @@ components:
           type: string
           format: uuid
           readOnly: true
-        table_number:
+        zone:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        public_number:
           type: string
           readOnly: true
         capacity:
           type: integer
           readOnly: true
-        shape:
-          $ref: '#/components/schemas/TableShape'
         active:
           type: boolean
-        position_x:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
-        position_y:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -5328,6 +5358,38 @@ components:
         * `settled` - Settled
         * `refunded` - Refunded
         * `cancelled` - Cancelled
+    PortalEntity:
+      type: object
+      properties:
+        x:
+          type: integer
+          minimum: 0
+        y:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        target_zone_id:
+          type: string
+          format: uuid
+          nullable: true
+        portal_label:
+          type: string
+          default: ''
+          maxLength: 64
+        zone_id:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - height
+      - width
+      - x
+      - y
     PublicRestaurant:
       type: object
       properties:
@@ -5410,9 +5472,27 @@ components:
     PublishLayout:
       type: object
       properties:
-        layout_json: {}
-      required:
-      - layout_json
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableEntity'
+        obstacles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObstacleEntity'
+        thresholds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThresholdEntity'
+        portals:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalEntity'
+        deleted_table_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
     Receipt:
       type: object
       properties:
@@ -5818,6 +5898,18 @@ components:
         * `open` - Open
         * `closed` - Closed
         * `voided` - Voided
+    ShapeEnum:
+      enum:
+      - rectangle
+      - round
+      - square
+      - booth
+      type: string
+      description: |-
+        * `rectangle` - rectangle
+        * `round` - round
+        * `square` - square
+        * `booth` - booth
     SourceEnum:
       enum:
       - waiter_manual
@@ -5837,7 +5929,7 @@ components:
           type: string
           format: uuid
           readOnly: true
-        table_number:
+        public_number:
           type: string
           maxLength: 64
         capacity:
@@ -5847,20 +5939,8 @@ components:
         is_occupied:
           type: boolean
           readOnly: true
-        shape:
-          $ref: '#/components/schemas/TableShape'
         active:
           type: boolean
-        position_x:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
-        position_y:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
         zone:
           allOf:
           - $ref: '#/components/schemas/Zone'
@@ -5879,10 +5959,59 @@ components:
       - created_at
       - is_occupied
       - public_id
+      - public_number
       - restaurant
-      - table_number
       - updated_at
       - zone
+    TableEntity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        public_number:
+          type: string
+          default: ''
+          maxLength: 64
+        x:
+          type: integer
+          minimum: 0
+        y:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        rotation:
+          type: integer
+          maximum: 359
+          minimum: 0
+          default: 0
+        shape:
+          $ref: '#/components/schemas/ShapeEnum'
+        capacity:
+          type: integer
+          maximum: 20
+          minimum: 1
+        zone_id:
+          type: string
+          format: uuid
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+      - capacity
+      - height
+      - shape
+      - width
+      - x
+      - y
     TableInfo:
       type: object
       properties:
@@ -5890,31 +6019,45 @@ components:
           type: string
           format: uuid
           readOnly: true
-        table_number:
+        public_number:
           type: string
           maxLength: 64
         capacity:
           type: integer
           maximum: 2147483647
           minimum: 0
-        shape:
-          $ref: '#/components/schemas/TableShape'
       required:
       - capacity
       - public_id
-      - table_number
-    TableShape:
-      enum:
-      - rectangle
-      - round
-      - square
-      - booth
-      type: string
-      description: |-
-        * `rectangle` - Rectangle
-        * `round` - Round
-        * `square` - Square
-        * `booth` - Booth
+      - public_number
+    ThresholdEntity:
+      type: object
+      properties:
+        x:
+          type: integer
+          minimum: 0
+        y:
+          type: integer
+          minimum: 0
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        threshold_label:
+          type: string
+          default: ''
+          maxLength: 64
+        zone_id:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - height
+      - width
+      - x
+      - y
     Ticket:
       type: object
       properties:
@@ -6136,14 +6279,14 @@ components:
           readOnly: true
         name:
           type: string
-          readOnly: true
+          maxLength: 128
         sort_order:
           type: integer
-          readOnly: true
+          maximum: 2147483647
+          minimum: 0
       required:
       - name
       - public_id
-      - sort_order
   securitySchemes:
     jwtAuth:
       type: http
