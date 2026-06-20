@@ -213,5 +213,5 @@ class CreateOrderSerializer(serializers.Serializer[None]):
         super().__init__(*args, **kwargs)
         _scope_to_request_restaurant(self.fields["session"], self.context)
         _scope_to_request_restaurant(
-            self.fields["items"].child.fields["menu_item"], self.context
+            self.fields["items"].child.fields["menu_item"], self.context  # type: ignore[attr-defined]
         )
