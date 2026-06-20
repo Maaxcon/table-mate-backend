@@ -541,4 +541,18 @@ def void_order_item(
     order.total_amount = remaining if remaining is not None else Decimal(0)
     order.save(update_fields=["total_amount"])
 
+    session = order.session
+    agg = (
+        OrderItem.objects.filter(order__session=session)
+        .exclude(status=OrderItemStatus.VOIDED)
+        .aggregate(
+            subtotal=Sum("total_price"),
+            tax=Sum("tax_amount"),
+        )
+    )
+    session.subtotal = agg["subtotal"] or 0
+    session.tax = agg["tax"] or 0
+    session.total = session.subtotal + session.tax
+    session.save(update_fields=["subtotal", "tax", "total"])
+
     return order_item
