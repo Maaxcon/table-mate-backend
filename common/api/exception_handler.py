@@ -13,7 +13,7 @@ _PERMISSION_DENIED_CODE = "permission_denied"
 def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
     if isinstance(exc, DomainError):
         return Response(
-            {"detail": exc.default_detail, "code": exc.default_code},
+            {"detail": str(exc) or exc.default_detail, "code": exc.default_code},
             status=exc.default_status_code,
         )
     if isinstance(exc, PermissionDenied):
