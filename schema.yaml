@@ -5268,6 +5268,18 @@ components:
           type: string
           format: date-time
           nullable: true
+        table_number:
+          type: string
+          readOnly: true
+        server_name:
+          type: string
+          readOnly: true
+        guest_count:
+          type: integer
+          readOnly: true
+        items_count:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -5985,6 +5997,18 @@ components:
           type: string
           format: date-time
           nullable: true
+        table_number:
+          type: string
+          readOnly: true
+        server_name:
+          type: string
+          readOnly: true
+        guest_count:
+          type: integer
+          readOnly: true
+        items_count:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -5995,11 +6019,15 @@ components:
           readOnly: true
       required:
       - created_at
+      - guest_count
       - injected_at
+      - items_count
       - order
       - public_id
       - restaurant
+      - server_name
       - session
+      - table_number
       - updated_at
     TicketStatusEnum:
       enum:
