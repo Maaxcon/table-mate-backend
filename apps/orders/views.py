@@ -63,6 +63,8 @@ class SessionViewSet(
         )
         serializer.instance = instance
 
+    _ALLOWED_SESSION_PATCH_FIELDS = {"status", "currency", "table", "guest_count"}
+
     def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()
 
@@ -74,7 +76,10 @@ class SessionViewSet(
                 actor=request.user,  # type: ignore[arg-type]
             )
 
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        patch_data = {k: v for k, v in request.data.items() if k in self._ALLOWED_SESSION_PATCH_FIELDS}
+        patch_data.pop("status", None)
+
+        serializer = self.get_serializer(instance, data=patch_data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
 

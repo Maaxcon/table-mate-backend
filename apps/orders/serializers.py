@@ -58,7 +58,16 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "restaurant", "opened_by", "created_at", "updated_at"]
+        read_only_fields = [
+            "public_id",
+            "restaurant",
+            "opened_by",
+            "subtotal",
+            "tax",
+            "total",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class OrderSerializer(serializers.ModelSerializer[Order]):
