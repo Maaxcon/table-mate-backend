@@ -9,7 +9,7 @@ from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
 
 from apps.authentication.models import RoleCode
-from apps.authentication.services import issue_tokens_with_restaurant
+from apps.authentication.services import issue_tokens, issue_tokens_with_restaurant
 from apps.editor.consumers import (
     FloorConsumer,
     NotificationStreamConsumer,
@@ -65,6 +65,26 @@ def test_notification_consumer_rejects_customer(restaurant: Any) -> None:
         close_code = await communicator.receive_output(timeout=5)
         assert close_code["type"] == "websocket.close"
         assert close_code["code"] == 4003
+
+    asyncio.run(_test())
+
+
+@pytest.mark.django_db
+def test_notification_consumer_missing_restaurant_claim() -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens)(user)
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+        connected, _ = await communicator.connect()
+        assert connected
+        close_code = await communicator.receive_output(timeout=5)
+        assert close_code["type"] == "websocket.close"
+        assert close_code["code"] == 4001
 
     asyncio.run(_test())
 

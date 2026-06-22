@@ -80,7 +80,7 @@ class SessionViewSet(
 
                 transaction.on_commit(_on_commit)
 
-    _ALLOWED_SESSION_PATCH_FIELDS = {"status", "currency", "table", "guest_count"}
+    _ALLOWED_SESSION_PATCH_FIELDS = {"status", "guest_count"}
 
     def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()

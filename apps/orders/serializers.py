@@ -65,6 +65,7 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
             "opened_by",
             "subtotal",
             "tax",
+            "service_charge",
             "total",
             "currency",
             "opened_at",

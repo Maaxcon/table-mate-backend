@@ -51,7 +51,7 @@ async def authenticate_websocket(scope: dict) -> tuple[User | None, int | None]:
     jwt_auth = TokenVersionJWTAuthentication()
     try:
         validated_token = jwt_auth.get_validated_token(raw_token.encode())
-    except (InvalidToken, TokenError, Exception):
+    except (InvalidToken, TokenError):
         return None, None
 
     user = await _resolve_user(jwt_auth, validated_token)
@@ -78,7 +78,7 @@ async def authenticate_websocket_protocol(
     jwt_auth = TokenVersionJWTAuthentication()
     try:
         validated_token = jwt_auth.get_validated_token(raw_token.encode())
-    except (InvalidToken, TokenError, Exception):
+    except (InvalidToken, TokenError):
         return None, None
 
     user = await _resolve_user(jwt_auth, validated_token)
