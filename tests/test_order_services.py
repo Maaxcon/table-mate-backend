@@ -75,6 +75,7 @@ class TestCreateOrderWithItems:
         api: Callable[..., AuthContext],
         table: Table,
         item: MenuItem,
+        restaurant_settings: Any,
     ) -> None:
         auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
         session_data = _create_session(auth.client, table, table.restaurant_id)
@@ -318,6 +319,48 @@ class TestVoidOrderItem:
         order = Order.objects.get(public_id=order_resp.json()["public_id"])
         assert order.total_amount == Decimal("0")
 
+        session = Session.objects.get(public_id=session_data["public_id"])
+        assert session.subtotal == Decimal("0")
+        assert session.tax == Decimal("0")
+        assert session.total == Decimal("0")
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestOrderItemStatusPatch:
+    def test_rejects_illegal_transition(
+        self,
+        api: Callable[..., AuthContext],
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        floor_ctx = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
+        kitchen_ctx = api(role=RoleCode.COOK, restaurant_id=table.restaurant_id)
+        session_data = _create_session(floor_ctx.client, table, table.restaurant_id)
+
+        order_resp = floor_ctx.client.post(
+            ORDER_LIST_URL,
+            {
+                "session": session_data["public_id"],
+                "items": [{"menu_item": str(item.public_id), "quantity": 1}],
+            },
+            content_type="application/json",
+        )
+        assert order_resp.status_code == status.HTTP_201_CREATED
+
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
+        assert order_item is not None
+
+        url = reverse("order-item-detail", kwargs={"public_id": order_item.public_id})
+        response = kitchen_ctx.client.patch(
+            url,
+            {"status": OrderItemStatus.SERVED},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        order_item.refresh_from_db()
+        assert order_item.status == OrderItemStatus.PENDING
+
     def test_rejects_double_void(
         self,
         api: Callable[..., AuthContext],
@@ -404,3 +447,8 @@ class TestVoidOrderItem:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["void_reason_note"] == "Burnt to a crisp"
+
+        session = Session.objects.get(public_id=session_data["public_id"])
+        assert session.subtotal == Decimal("0")
+        assert session.tax == Decimal("0")
+        assert session.total == Decimal("0")

@@ -89,6 +89,7 @@ class Session(RestaurantScopedModel):
     currency = models.CharField(max_length=3)
     subtotal = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     tax = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    service_charge = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     opened_at = models.DateTimeField()
 

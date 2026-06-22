@@ -3,13 +3,10 @@ from __future__ import annotations
 import json
 
 from channels.generic.websocket import AsyncWebsocketConsumer
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
-from apps.authentication.authentication import TokenVersionJWTAuthentication
 from apps.authentication.models import RoleCode
 from common.channels import (
     TOKEN_SUBPROTOCOL,
-    _resolve_user,
     authenticate_websocket,
     extract_ws_token,
     hall_group_name,
@@ -55,37 +52,16 @@ class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
 class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
-        raw_token, via_subprotocol = extract_ws_token(self.scope)
-        if raw_token is None:
-            await self.accept()
-            await self.close(code=4001)
-            return
-
-        jwt_auth = TokenVersionJWTAuthentication()
         try:
-            validated_token = jwt_auth.get_validated_token(raw_token.encode())
-        except (InvalidToken, TokenError, Exception):
+            user, restaurant_id = await authenticate_websocket(self.scope)
+        except Exception:
             await self.accept()
             await self.close(code=4001)
             return
 
-        user = await _resolve_user(jwt_auth, validated_token)
-        if user is None:
+        if user is None or restaurant_id is None:
             await self.accept()
             await self.close(code=4001)
-            return
-
-        claim = validated_token.get("restaurant_id")
-        if claim is None:
-            await self.accept()
-            await self.close(code=4003)
-            return
-
-        try:
-            restaurant_id = int(claim)
-        except (TypeError, ValueError):
-            await self.accept()
-            await self.close(code=4003)
             return
 
         if user.role not in _STAFF_ALLOWED_ROLES:
@@ -96,6 +72,7 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         self.group_name = staff_group_name(restaurant_id)
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
+        _, via_subprotocol = extract_ws_token(self.scope)
         subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
         await self.accept(subprotocol=subprotocol)
 

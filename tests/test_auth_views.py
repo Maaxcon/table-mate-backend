@@ -272,6 +272,20 @@ class TestCookieTokenRefreshView:
 
         assert response.status_code == 401
 
+    def test_stale_token_version_after_role_change_returns_401(self) -> None:
+        # A role change bumps token_version, so a refresh token issued before it
+        # must be rejected (forces a fresh login instead of looping on 401s).
+        user = UserFactory.create()
+        _, refresh = issue_tokens(user)
+        user.token_version += 1
+        user.save(update_fields=["token_version"])
+        client = APIClient()
+        client.cookies["refresh_token"] = refresh
+
+        response = client.post(self.url)
+
+        assert response.status_code == 401
+
 
 @pytest.mark.django_db
 class TestLogoutView:

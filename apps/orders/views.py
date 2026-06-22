@@ -1,20 +1,27 @@
 from collections.abc import Sequence
+from typing import Any, cast
 
+from django.db import transaction
 from drf_spectacular.utils import extend_schema
-from rest_framework import serializers, status, viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from apps.authentication.models import User
 from apps.authentication.permissions import IsFloor, IsKitchen, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
+from common.exceptions import TableOccupiedError
+from common.hall_events import emit_hall_table_status_changed
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
-from .models import Order, OrderItem, Session, Ticket, VoidReason
+from .billing import close_visit_session, ensure_visit_session
+from .models import Order, OrderItem, Session, SessionStatus, Ticket, VoidReason
 from .serializers import (
     CreateOrderSerializer,
     OrderItemSerializer,
+    OrderItemVoidRequestSerializer,
     OrderSerializer,
     SessionSerializer,
     TicketSerializer,
@@ -22,7 +29,7 @@ from .serializers import (
 )
 from .services import (
     create_order_with_items,
-    open_session,
+    create_walk_in_reservation,
     update_session_status,
     void_order_item,
 )
@@ -49,19 +56,32 @@ class SessionViewSet(
     ordering_fields = ["created_at", "updated_at", "opened_at"]
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
-        restaurant_id = get_restaurant_id_from_auth(self.request)
-        if not self.request.user.is_authenticated or restaurant_id is None:
-            raise serializers.ValidationError("Authentication required")
-        instance = open_session(
-            restaurant_id=restaurant_id,
-            table=serializer.validated_data["table"],
-            guest_count=serializer.validated_data["guest_count"],
-            opened_by=self.request.user,
-            currency=serializer.validated_data["currency"],
-            opened_at=serializer.validated_data["opened_at"],
-            actor=self.request.user,
-        )
-        serializer.instance = instance
+        table = serializer.validated_data["table"]
+        if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+            raise TableOccupiedError()
+        guest_count = serializer.validated_data["guest_count"]
+        with transaction.atomic():
+            reservation = create_walk_in_reservation(table=table, guest_count=guest_count)
+            # ensure_visit_session owns currency/opened_at resolution for every
+            # open-table path (walk-in, scan, activate), so it stays in one place.
+            # IsFloor guarantees an authenticated staff user here.
+            serializer.instance = ensure_visit_session(reservation, opened_by=cast(User, self.request.user))
+            restaurant_id = get_restaurant_id_from_auth(self.request)
+            if restaurant_id is not None:
+
+                def _on_commit() -> None:
+                    emit_hall_table_status_changed(
+                        restaurant_id,
+                        table_id=str(table.public_id),
+                        previous_status="free",
+                        current_status="occupied",
+                        session_id=str(serializer.instance.public_id),
+                        actor=cast(User, self.request.user),
+                    )
+
+                transaction.on_commit(_on_commit)
+
+    _ALLOWED_SESSION_PATCH_FIELDS = {"status", "guest_count"}
 
     def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()
@@ -74,10 +94,26 @@ class SessionViewSet(
                 actor=request.user,  # type: ignore[arg-type]
             )
 
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        patch_data = {k: v for k, v in request.data.items() if k in self._ALLOWED_SESSION_PATCH_FIELDS}
+        patch_data.pop("status", None)
+
+        serializer = self.get_serializer(instance, data=patch_data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Close the check",
+        description="End the visit: close the session, complete the reservation, and close any "
+        "active cart so the table is freed. No payment step yet. Idempotent.",
+        request=None,
+        responses=SessionSerializer,
+    )
+    @action(detail=True, methods=["post"], url_path="close")
+    def close(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        session = close_visit_session(session=self.get_object())
+        serializer = self.get_serializer(session)
         return Response(serializer.data)
 
 
@@ -175,12 +211,16 @@ class TicketViewSet(
                 table_number = session_obj.table.table_number
             except (Session.DoesNotExist, AttributeError):
                 pass
-        emit_kitchen_ticket_injected(
-            instance.restaurant_id,
-            ticket_id=str(instance.public_id),
-            table_number=table_number,
-            items_count=instance.items.count(),
-        )
+
+        def _emit() -> None:
+            emit_kitchen_ticket_injected(
+                instance.restaurant_id,
+                ticket_id=str(instance.public_id),
+                table_number=table_number,
+                items_count=instance.items.count(),
+            )
+
+        transaction.on_commit(_emit)
 
 
 @extend_schema(tags=["Orders"])
@@ -195,6 +235,7 @@ class OrderItemViewSet(
     filterset_fields = [
         "order",
         "order__public_id",
+        "order__session__public_id",
         "ticket",
         "menu_item",
         "status",
@@ -225,23 +266,21 @@ class OrderItemViewSet(
             except AttributeError:
                 pass
 
-            emit_order_item_status_changed(
-                instance.restaurant_id,
-                order_item_id=str(instance.public_id),
-                table_number=table_number,
-                menu_item_name=instance.menu_item.name if instance.menu_item else "",
-                status=instance.status,
-            )
+            def _emit() -> None:
+                emit_order_item_status_changed(
+                    instance.restaurant_id,
+                    order_item_id=str(instance.public_id),
+                    table_number=table_number,
+                    menu_item_name=instance.menu_item.name if instance.menu_item else "",
+                    status=instance.status,
+                )
+
+            transaction.on_commit(_emit)
 
         return Response(serializer.data)
 
     @extend_schema(
-        request=serializers.Serializer(
-            {
-                "void_reason": serializers.CharField(),
-                "note": serializers.CharField(required=False, allow_null=True, default=None),
-            }
-        ),
+        request=OrderItemVoidRequestSerializer,
         responses=OrderItemSerializer,
     )
     @action(detail=True, methods=["post"], url_path="void", permission_classes=[IsFloor])

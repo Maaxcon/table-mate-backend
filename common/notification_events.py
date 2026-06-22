@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 
 from asgiref.sync import async_to_sync
@@ -8,13 +9,21 @@ from django.utils import timezone
 
 from .channels import staff_group_name
 
+logger = logging.getLogger(__name__)
+
 
 def _broadcast_staff_event(restaurant_id: int, event: dict[str, object]) -> None:
     channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        staff_group_name(restaurant_id),
-        {"type": "notification.event", "event": event},
-    )
+    if channel_layer is None:
+        logger.warning("Channel layer unavailable; skipping staff broadcast for restaurant %s", restaurant_id)
+        return
+    try:
+        async_to_sync(channel_layer.group_send)(
+            staff_group_name(restaurant_id),
+            {"type": "notification.event", "event": event},
+        )
+    except Exception:
+        logger.exception("Failed to broadcast staff event for restaurant %s", restaurant_id)
 
 
 def emit_cart_created(
@@ -126,24 +135,6 @@ def emit_kitchen_ticket_injected(
                 "table_number": table_number,
                 "items_count": items_count,
                 "timestamp": timezone.now().isoformat(),
-            },
-        },
-    )
-
-
-def emit_cart_updated(
-    session_id: str,
-    *,
-    client_id: str | None = None,
-) -> None:
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f"cart_{session_id}",
-        {
-            "type": "cart.updated",
-            "payload": {
-                "type": "cart_updated",
-                "client_id": client_id,
             },
         },
     )

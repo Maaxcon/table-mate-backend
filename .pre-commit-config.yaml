@@ -41,3 +41,5 @@ repos:
           - types-requests
           - pydantic
           - factory-boy
+          - "celery[redis]"
+          - django-celery-beat

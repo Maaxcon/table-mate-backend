@@ -117,6 +117,66 @@ def test_customer_cannot_reschedule_another_customers_reservation(
     assert reservation.end_at == end_at
 
 
+def _active_reservation(restaurant: Restaurant, table: Table, customer: Any) -> Reservation:
+    start_at = timezone.now() - timedelta(minutes=10)
+    return Reservation.objects.create(
+        restaurant=restaurant,
+        customer=customer,
+        table=table,
+        guest_count=2,
+        start_at=start_at,
+        end_at=start_at + timedelta(hours=2),
+        status=ReservationStatus.ACTIVE,
+    )
+
+
+@pytest.mark.django_db
+def test_customer_cannot_reschedule_active_reservation(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+    api_factory: Callable[..., AuthContext],
+) -> None:
+    customer = user_factory(role=RoleCode.CUSTOMER)
+    customer.save()
+    reservation = _active_reservation(restaurant, table, customer)
+    original_end = reservation.end_at
+    client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
+
+    response = client.patch(
+        f"/api/reservations/reservations/{reservation.public_id}/",
+        {"end_at": (original_end + timedelta(minutes=30)).isoformat()},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    reservation.refresh_from_db()
+    assert reservation.end_at == original_end
+
+
+@pytest.mark.django_db
+def test_customer_cannot_cancel_active_reservation(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+    api_factory: Callable[..., AuthContext],
+) -> None:
+    customer = user_factory(role=RoleCode.CUSTOMER)
+    customer.save()
+    reservation = _active_reservation(restaurant, table, customer)
+    client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
+
+    response = client.patch(
+        f"/api/reservations/reservations/{reservation.public_id}/",
+        {"status": "cancelled"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    reservation.refresh_from_db()
+    assert reservation.status == ReservationStatus.ACTIVE
+
+
 @pytest.mark.django_db
 def test_my_reservations_filters_active_records_and_supports_limit_offset(
     restaurant: Restaurant,

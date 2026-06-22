@@ -36,8 +36,8 @@ ROLE_ALLOW_MATRIX: dict[str, set[str]] = {
     "restaurant-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
     "session-list": {RoleCode.ADMIN, RoleCode.WAITER},
     "order-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
-    "ticket-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
-    "order-item-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
+    "ticket-list": {RoleCode.ADMIN, RoleCode.COOK},
+    "order-item-list": {RoleCode.ADMIN, RoleCode.COOK},
     "payment-list": {RoleCode.ADMIN},
 }
 
@@ -107,9 +107,7 @@ EDITOR_PATCH_DENIED = {RoleCode.COOK, RoleCode.CUSTOMER}
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("role", ROLES)
-def test_editor_table_patch_role_enforcement(
-    role: str, api: Callable[..., Any], restaurant: Any
-) -> None:
+def test_editor_table_patch_role_enforcement(role: str, api: Callable[..., Any], restaurant: Any) -> None:
     table = Table.objects.create(
         restaurant=restaurant,
         table_number="T-EDIT",
