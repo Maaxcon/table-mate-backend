@@ -3,6 +3,7 @@
 __all__ = [
     "add_item_to_cart",
     "create_order_with_items",
+    "emit_hall_table_status_changed",
     "open_session",
     "remove_item_from_cart",
     "update_cart_item_quantity",

@@ -67,16 +67,18 @@ class SessionViewSet(
             serializer.instance = ensure_visit_session(reservation, opened_by=cast(User, self.request.user))
             restaurant_id = get_restaurant_id_from_auth(self.request)
             if restaurant_id is not None:
-                transaction.on_commit(
-                    lambda rid=restaurant_id: emit_hall_table_status_changed(
-                        rid,
+
+                def _on_commit() -> None:
+                    emit_hall_table_status_changed(
+                        restaurant_id,
                         table_id=str(table.public_id),
                         previous_status="free",
                         current_status="occupied",
                         session_id=str(serializer.instance.public_id),
                         actor=cast(User, self.request.user),
                     )
-                )
+
+                transaction.on_commit(_on_commit)
 
     _ALLOWED_SESSION_PATCH_FIELDS = {"status", "currency", "table", "guest_count"}
 
