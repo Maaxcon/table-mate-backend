@@ -21,7 +21,7 @@ from .sessions import (
 from .walk_in import create_walk_in_reservation
 
 
-def __getattr__(name):
+def __getattr__(name: str) -> object:
     # Backwards compat for any caller still importing these directly
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
