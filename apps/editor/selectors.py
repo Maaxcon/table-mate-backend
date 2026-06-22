@@ -3,8 +3,10 @@ from datetime import time as time_type
 from zoneinfo import ZoneInfo
 
 from django.db import models as dm
-from django.db.models import QuerySet
+from django.db.models import OuterRef, QuerySet, Subquery
+from django.db.models.functions import Greatest
 
+from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.restaurants.models import RestaurantSettings, Table
 
@@ -65,10 +67,22 @@ def get_available_tables(
     if settings and not is_within_working_hours(settings, end_at):
         return Table.objects.none()
 
-    overlapping = Reservation.objects.filter(
+    active_session_subquery = (
+        Session.objects.filter(
+            reservation=OuterRef("pk"),
+            status=SessionStatus.OPEN,
+        )
+        .order_by("opened_at")
+        .values("opened_at")[:1]
+    )
+
+    reservations = Reservation.objects.filter(
         restaurant_id=restaurant_id,
         status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-        start_at__lt=end_at,
+    ).annotate(effective_start=Greatest("start_at", Subquery(active_session_subquery)))
+
+    overlapping = reservations.filter(
+        effective_start__lt=end_at,
         end_at__gt=start_at,
     )
     if current_reservation_id is not None:

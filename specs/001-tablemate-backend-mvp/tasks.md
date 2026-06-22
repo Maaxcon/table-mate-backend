@@ -38,7 +38,7 @@
 - [ ] T011 Configure Channels + Redis layer in `core/settings/base.py` and websocket entry in `core/asgi.py`.
 - [ ] T012 Update root routing in `core/urls.py` and `core/routing.py` for API includes and websocket routes (`ws/cart/:session_id/`, `ws/hall/`).
 - [ ] T013 Add backend quality gates to `.github/workflows/main.yml` for lint/security/tests (`flake8`, `bandit`, `safety`, test suite).
-- [ ] T013A Establish project-wide enum convention: use `models.TextChoices` (not plain Python enums) for role and all status fields (`table`, `order`, `order_item`, `ticket`, `session`) to keep DB constraints and generated client types aligned.
+- [ ] T013A Establish project-wide enum convention: use `models.TextChoices` (not plain Python enums) for role and all status fields (`order`, `order_item`, `ticket`, `session`) to keep DB constraints and generated client types aligned. `Table` has no stored `status` — occupancy is derived from `Session`.
 - [ ] T013B Add TypeScript types pipeline as a foundational gate: generate OpenAPI via `drf-spectacular` (`manage.py spectacular --validate --file schema.yaml`), fail CI on schema drift, and wire frontend `npm run gen:types` to consume backend schema.
 - [ ] T013C Add foundational `VoidReason` model/seed migration with required codes: `mispick`, `guest_changed_mind`, `quality_issue`, `out_of_stock`.
 - [ ] T013D Move `RestaurantSettings` schema to foundational migrations with required fields `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, `default_service_charge`; keep US5 focused on API/service usage.
@@ -86,7 +86,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T024 [US2] Implement `apps/editor/models.py` table fields (position, shape, status, active, capacity) using mixins.
+- [ ] T024 [US2] Implement `apps/editor/models.py` table fields (position, shape, active, capacity) using mixins. Occupancy status is derived from open `Session` — no stored `status` column on `Table`.
 - [ ] T025 [US2] Implement `apps/reservations/models.py` reservation model with guest/table/time interval/status fields.
 - [ ] T026 [US2] Implement availability selectors in `apps/editor/selectors.py` and guest reservation selectors in `apps/reservations/selectors.py`.
 - [ ] T027 [US2] Implement `check_availability()` and transaction-safe `create_reservation()` in `apps/reservations/services.py`.
@@ -151,16 +151,16 @@
 ### Tests for User Story 5
 
 - [ ] T043 [P] [US5] Add restaurants/editor/reservation-status contract tests in `tests/contract/test_staff_ops_api.py`.
-- [ ] T044 [P] [US5] Add hall websocket integration tests in `tests/integration/test_hall_socket_events.py` for `HALL_TABLE_STATUS_CHANGED` and `HALL_NEW_RESERVATION`.
+- [X] T044 [P] [US5] Add hall websocket integration tests in `tests/integration/test_hall_socket_events.py` for `HALL_TABLE_STATUS_CHANGED` and `HALL_NEW_RESERVATION`.
 
 ### Implementation for User Story 5
 
 - [ ] T045 [US5] Implement `apps/restaurants/models.py` usage layer for `Restaurant` + foundational `RestaurantSettings` (`timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`, `default_service_charge`) and employee relation to user.
 - [ ] T046 [US5] Implement `apps/restaurants/selectors.py` and `apps/restaurants/services.py` (`get_restaurant()`, `get_restaurant_settings()`, `manage_employees()`).
 - [ ] T047 [US5] Implement restaurants API in `apps/restaurants/api/{serializers.py,views.py,urls.py}` for list/update endpoints.
-- [ ] T048 [US5] Implement table position update service in `apps/editor/services.py` and connect to editor API patch endpoint.
-- [ ] T049 [US5] Implement `apps/editor/consumers.py` and `apps/editor/routing.py` for `ws/hall/` events.
-- [ ] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with `admin`/`waiter` access rules and explicit denial for `customer`/`cook`.
+- [X] T048 [US5] Implement table position update service in `apps/editor/services.py` and connect to editor API patch endpoint.
+- [X] T049 [US5] Implement `apps/editor/consumers.py` and `apps/editor/routing.py` for `ws/hall/` events.
+- [X] T050 [US5] Implement reservation status update logic in `apps/reservations/services.py` with `admin`/`waiter` access rules and explicit denial for `customer`/`cook`.
 
 **Checkpoint**: Staff operations and hall realtime channels are complete.
 

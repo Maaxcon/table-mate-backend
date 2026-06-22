@@ -61,6 +61,7 @@ dev = [
     "factory-boy>=3.3.3",
     "pytest>=9.0.3",
     "pytest-django>=4.12.0",
+    "pytest-asyncio>=0.24.0",
     "factory-boy>=3.3.0",
     "ruff>=0.15.13",
     "safety>=3.0.0",
@@ -72,6 +73,7 @@ prod = [
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "core.settings.local"
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.setuptools]
 packages = ["core", "apps", "common"]

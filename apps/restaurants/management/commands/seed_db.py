@@ -32,6 +32,9 @@ class Command(BaseCommand):
         self.stdout.write("\n=== Seeding waiters ===")
         call_command("seed_waiter", restaurant_id=restaurant_id)
 
+        self.stdout.write("\n=== Seeding void reasons ===")
+        call_command("seed_void_reasons")
+
         self.stdout.write("\n=== Seeding receipts ===")
         call_command("seed_receipts")
 

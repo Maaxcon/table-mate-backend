@@ -1689,6 +1689,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrderItem'
           description: ''
+  /api/orders/order-items/{public_id}/void/:
+    post:
+      operationId: orders_order_items_void_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderItem'
+          description: ''
   /api/orders/orders/:
     get:
       operationId: orders_orders_list
@@ -2164,6 +2186,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
           description: ''
+  /api/orders/void-reasons/:
+    get:
+      operationId: orders_void_reasons_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VoidReason'
+          description: ''
+  /api/orders/void-reasons/{id}/:
+    get:
+      operationId: orders_void_reasons_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this void reason.
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoidReason'
+          description: ''
   /api/payments/payments/:
     get:
       operationId: payments_payments_list
@@ -2414,6 +2482,78 @@ paths:
         required: true
       tags:
       - Reservations
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/reservations/reservations/{public_id}/close-check/:
+    post:
+      operationId: reservations_reservations_close_check_create
+      description: Closes the session. All items must be served or voided.
+      summary: Close check (session)
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reservation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reservation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reservation'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
+  /api/reservations/reservations/{public_id}/move-table/:
+    post:
+      operationId: reservations_reservations_move_table_create
+      description: Moves an active session to a new table. Cancels the old reservation
+        and creates a new one. Pending items travel with the session.
+      summary: Move session to another table
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                table_id:
+                  type: string
+                  format: uuid
+              required:
+              - table_id
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -3966,7 +4106,11 @@ components:
           format: uuid
           readOnly: true
         void_reason:
-          type: integer
+          type: string
+          readOnly: true
+          nullable: true
+        void_reason_note:
+          type: string
           nullable: true
         is_wasted:
           type: boolean
@@ -3989,6 +4133,7 @@ components:
       - restaurant
       - unit_price
       - updated_at
+      - void_reason
       - voided_by
     OrderItemStatusEnum:
       enum:
@@ -4840,7 +4985,11 @@ components:
           format: uuid
           readOnly: true
         void_reason:
-          type: integer
+          type: string
+          readOnly: true
+          nullable: true
+        void_reason_note:
+          type: string
           nullable: true
         is_wasted:
           type: boolean
@@ -5039,10 +5188,12 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
         tax:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
         service_charge:
           type: string
           format: decimal
@@ -5051,6 +5202,7 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
         opened_at:
           type: string
           format: date-time
@@ -5630,10 +5782,12 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
         tax:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
         service_charge:
           type: string
           format: decimal
@@ -5642,6 +5796,7 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
         opened_at:
           type: string
           format: date-time
@@ -5663,7 +5818,10 @@ components:
       - public_id
       - reservation
       - restaurant
+      - subtotal
       - table
+      - tax
+      - total
       - updated_at
     SessionStatusEnum:
       enum:
@@ -5942,6 +6100,18 @@ components:
       required:
       - detail
       - valid
+    VoidReason:
+      type: object
+      properties:
+        code:
+          type: string
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+      required:
+      - code
+      - label
     WorkingHours:
       type: object
       description: |-

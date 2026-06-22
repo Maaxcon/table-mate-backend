@@ -78,9 +78,7 @@ def test_owner_customer_activates_own_reservation(
 ) -> None:
     customer_ctx = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
     # Within the early window: booking starts in 10 minutes.
-    reservation = _reservation(
-        restaurant, table, customer=customer_ctx.user, start_offset=timedelta(minutes=10)
-    )
+    reservation = _reservation(restaurant, table, customer=customer_ctx.user, start_offset=timedelta(minutes=10))
 
     resp = customer_ctx.client.post(_url(reservation))
 
@@ -97,9 +95,7 @@ def test_customer_cannot_activate_far_future_reservation(
 ) -> None:
     # Booking is hours away: a guest must not open it early. Staff still can.
     customer_ctx = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
-    reservation = _reservation(
-        restaurant, table, customer=customer_ctx.user, start_offset=timedelta(hours=2)
-    )
+    reservation = _reservation(restaurant, table, customer=customer_ctx.user, start_offset=timedelta(hours=2))
 
     resp = customer_ctx.client.post(_url(reservation))
 

@@ -51,7 +51,7 @@ async def authenticate_websocket(scope: dict) -> tuple[User | None, int | None]:
     jwt_auth = TokenVersionJWTAuthentication()
     try:
         validated_token = jwt_auth.get_validated_token(raw_token.encode())
-    except TokenError:
+    except (InvalidToken, TokenError, Exception):
         return None, None
 
     user = await _resolve_user(jwt_auth, validated_token)
@@ -68,9 +68,44 @@ async def authenticate_websocket(scope: dict) -> tuple[User | None, int | None]:
         return None, None
 
 
+async def authenticate_websocket_protocol(
+    scope: dict[str, object],
+) -> tuple[User | None, int | str | None]:
+    raw_token, _ = extract_ws_token(scope)
+    if raw_token is None:
+        return None, None
+
+    jwt_auth = TokenVersionJWTAuthentication()
+    try:
+        validated_token = jwt_auth.get_validated_token(raw_token.encode())
+    except (InvalidToken, TokenError, Exception):
+        return None, None
+
+    user = await _resolve_user(jwt_auth, validated_token)
+    if user is None:
+        return None, None
+
+    claim = validated_token.get("restaurant_id")
+    if claim is not None:
+        try:
+            return user, int(claim)
+        except (TypeError, ValueError):
+            return user, None
+
+    device_id = validated_token.get("device_id")
+    if device_id is not None:
+        return user, device_id
+
+    return user, None
+
+
 def hall_group_name(restaurant_id: int) -> str:
     return f"hall_{restaurant_id}"
 
 
 def cart_group_name(session_id: uuid.UUID) -> str:
     return f"cart_{session_id}"
+
+
+def staff_group_name(restaurant_id: int) -> str:
+    return f"staff_{restaurant_id}"

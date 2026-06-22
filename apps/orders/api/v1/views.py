@@ -202,6 +202,7 @@ class CartSessionItemViewSet(
         )
 
         result = CartItemSerializer(item, context=self.get_serializer_context())
+
         return Response(result.data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -213,6 +214,7 @@ class CartSessionItemViewSet(
             user=self._get_user_or_anon(),
             client_id=_get_client_id_from_request(request),
         )
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(
@@ -242,6 +244,7 @@ class CartSessionItemViewSet(
         item = update_cart_item_quantity(**kwargs)
 
         result = CartItemSerializer(item, context=self.get_serializer_context())
+
         return Response(result.data, status=status.HTTP_200_OK)
 
 

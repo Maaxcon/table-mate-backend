@@ -88,9 +88,7 @@ def close_visit_session(*, session: Session) -> Session:
     """
     closed_carts: list[CartSession] = []
     with transaction.atomic():
-        session = (
-            Session.objects.select_for_update().select_related("reservation").get(pk=session.pk)
-        )
+        session = Session.objects.select_for_update().select_related("reservation").get(pk=session.pk)
         if session.status != SessionStatus.CLOSED:
             session.status = SessionStatus.CLOSED
             session.save(update_fields=["status"])
@@ -101,9 +99,7 @@ def close_visit_session(*, session: Session) -> Session:
                 reservation.status = ReservationStatus.COMPLETED
                 reservation.save(update_fields=["status"])
             closed_carts = list(
-                CartSession.objects.select_for_update().filter(
-                    reservation=reservation, status=CartSessionStatus.ACTIVE
-                )
+                CartSession.objects.select_for_update().filter(reservation=reservation, status=CartSessionStatus.ACTIVE)
             )
             for cart in closed_carts:
                 cart.status = CartSessionStatus.CLOSED
@@ -174,11 +170,7 @@ def checkout_cart_session(
         raise CartChangedError(removed=removed)
 
     with transaction.atomic():
-        cart_session = (
-            CartSession.objects.select_for_update()
-            .select_related("reservation")
-            .get(pk=cart_session.pk)
-        )
+        cart_session = CartSession.objects.select_for_update().select_related("reservation").get(pk=cart_session.pk)
         if cart_session.status != CartSessionStatus.ACTIVE:
             raise CartSessionClosedError("Cart session is closed.")
 

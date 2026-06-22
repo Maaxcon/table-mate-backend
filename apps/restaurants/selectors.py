@@ -115,7 +115,6 @@ def get_layout_data(restaurant_id: int) -> LayoutData:
     reservations = Reservation.objects.filter(
         restaurant_id=restaurant_id,
         status=ReservationStatus.PENDING,
-        start_at__gte=now,
         start_at__lte=today_end,
     ).select_related("table")
 

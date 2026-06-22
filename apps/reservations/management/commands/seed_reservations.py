@@ -6,8 +6,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode, User
+from apps.orders.models import Session
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 
 
 class Command(BaseCommand):
@@ -30,6 +31,7 @@ class Command(BaseCommand):
             return
 
         created_reservations = 0
+        now = timezone.now()
 
         for restaurant in restaurants:
             self.stdout.write(f"Seeding reservations for restaurant: {restaurant.name}")
@@ -44,8 +46,8 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"No customer users for {restaurant.name}. Skipping."))
                 continue
 
-            now = timezone.now()
-
+            # Delete all existing sessions and reservations for a clean seed
+            Session.objects.filter(restaurant=restaurant).delete()
             Reservation.objects.filter(restaurant=restaurant).delete()
 
             reservations_config: list[dict[str, Any]] = [
@@ -124,7 +126,7 @@ class Command(BaseCommand):
                     "status": ReservationStatus.PENDING,
                     "notes": None,
                 },
-                # ── Past reservations (history, no effect on current floor plan) ──
+                # ── Past reservations (now completed, no effect on floor plan) ──
                 {
                     "table": tables[3 % len(tables)],
                     "customer": customers[1 % len(customers)],
@@ -132,7 +134,7 @@ class Command(BaseCommand):
                     "start_at": now - timedelta(days=2),
                     "end_at": now - timedelta(days=2) + timedelta(hours=2),
                     "type": ReservationType.PRE_BOOKED,
-                    "status": ReservationStatus.ACTIVE,
+                    "status": ReservationStatus.COMPLETED,
                     "notes": "День народження",
                 },
                 {
@@ -142,7 +144,7 @@ class Command(BaseCommand):
                     "start_at": now - timedelta(days=1),
                     "end_at": now - timedelta(days=1) + timedelta(hours=2),
                     "type": ReservationType.PRE_BOOKED,
-                    "status": ReservationStatus.ACTIVE,
+                    "status": ReservationStatus.COMPLETED,
                     "notes": None,
                 },
                 # ── Cancelled reservation ──
@@ -157,20 +159,12 @@ class Command(BaseCommand):
                     "notes": "Захворіли",
                 },
                 # ── Future reservation (for table 1, different slot) ──
-                {
-                    "table": tables[0 % len(tables)],
-                    "customer": customers[2 % len(customers)],
-                    "guest_count": 3,
-                    "start_at": now + timedelta(days=1, hours=3),
-                    "end_at": now + timedelta(days=1, hours=5),
-                    "type": ReservationType.PRE_BOOKED,
-                    "status": ReservationStatus.ACTIVE,
-                    "notes": None,
-                },
+                # Removed: previously had status=ACTIVE with start in the future,
+                # which created a nonsensical multi-day "active" reservation.
             ]
 
             for data in reservations_config:
-                _, was_created = Reservation.objects.get_or_create(
+                reservation, was_created = Reservation.objects.get_or_create(
                     restaurant=restaurant,
                     table=data["table"],
                     start_at=data["start_at"],
@@ -184,5 +178,28 @@ class Command(BaseCommand):
                 )
                 if was_created:
                     created_reservations += 1
+
+                # Create Session for ACTIVE reservations (required for is_occupied)
+                if data["status"] == ReservationStatus.ACTIVE:
+                    session_exists = Session.objects.filter(reservation=reservation).exists()
+                    if not session_exists:
+                        staff_user = User.objects.filter(
+                            restaurant=restaurant,
+                            role__in=[RoleCode.WAITER, RoleCode.ADMIN],
+                        ).first()
+                        currency = "EUR"
+                        try:
+                            currency = restaurant.settings.currency
+                        except RestaurantSettings.DoesNotExist:
+                            pass
+                        Session.objects.create(
+                            restaurant=restaurant,
+                            table=data["table"],
+                            reservation=reservation,
+                            opened_by=staff_user,
+                            guest_count=reservation.guest_count,
+                            currency=currency,
+                            opened_at=reservation.start_at,
+                        )
 
         self.stdout.write(self.style.SUCCESS(f"Done: {created_reservations} reservations created"))

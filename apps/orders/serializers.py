@@ -9,7 +9,7 @@ from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
-from .models import Order, OrderItem, Session, Ticket
+from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, VoidReason
 
 
 def _scope_to_request_restaurant(field: Any, context: Mapping[str, object]) -> None:
@@ -19,6 +19,13 @@ def _scope_to_request_restaurant(field: Any, context: Mapping[str, object]) -> N
     restaurant_id = get_restaurant_id_from_auth(request)  # type: ignore[arg-type]
     if restaurant_id is not None and field.queryset is not None:
         field.queryset = field.queryset.filter(restaurant_id=restaurant_id)
+
+
+class VoidReasonSerializer(serializers.ModelSerializer[VoidReason]):
+    class Meta:
+        model = VoidReason
+        fields = ["code", "label"]
+        read_only_fields = ["code", "label"]
 
 
 class SessionSerializer(serializers.ModelSerializer[Session]):
@@ -56,6 +63,9 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
             "public_id",
             "restaurant",
             "opened_by",
+            "subtotal",
+            "tax",
+            "total",
             "currency",
             "opened_at",
             "created_at",
@@ -129,6 +139,15 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]
 
 
+_ORDER_ITEM_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    OrderItemStatus.PENDING: {OrderItemStatus.IN_PROGRESS},
+    OrderItemStatus.IN_PROGRESS: {OrderItemStatus.READY},
+    OrderItemStatus.READY: {OrderItemStatus.SERVED},
+    OrderItemStatus.SERVED: set(),
+    OrderItemStatus.VOIDED: set(),
+}
+
+
 class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     order: PublicIdRelatedField[Order] = PublicIdRelatedField(
@@ -143,6 +162,11 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         queryset=MenuItem.objects.all(),
     )
     voided_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
+    void_reason: serializers.SlugRelatedField[VoidReason] = serializers.SlugRelatedField(
+        slug_field="code",
+        read_only=True,
+        allow_null=True,
+    )
     menu_item_name = serializers.CharField(source="menu_item.name", read_only=True)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -150,6 +174,20 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         _scope_to_request_restaurant(self.fields["order"], self.context)
         _scope_to_request_restaurant(self.fields["ticket"], self.context)
         _scope_to_request_restaurant(self.fields["menu_item"], self.context)
+
+    def validate_status(self, value: str) -> str:
+        if self.instance is None:
+            return value
+        current = self.instance.status
+        allowed = _ORDER_ITEM_STATUS_TRANSITIONS.get(current, set())
+        if value not in allowed:
+            raise serializers.ValidationError(
+                f"Cannot transition from '{current}' to '{value}'. "
+                f"Allowed transitions from '{current}': {', '.join(sorted(allowed)) or 'none'}."
+            )
+        if value == OrderItemStatus.VOIDED:
+            raise serializers.ValidationError("Use the dedicated /void/ endpoint to void an order item.")
+        return value
 
     class Meta:
         model = OrderItem
@@ -172,8 +210,45 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "voided_at",
             "voided_by",
             "void_reason",
+            "void_reason_note",
             "is_wasted",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]
+
+
+class CreateOrderItemSerializer(serializers.Serializer[None]):
+    menu_item = PublicIdRelatedField[MenuItem](
+        queryset=MenuItem.objects.all(),
+        required=True,
+    )
+    guest_slot = serializers.IntegerField(required=False, default=1, min_value=1)
+    quantity = serializers.IntegerField(required=False, default=1, min_value=1)
+    comment = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _scope_to_request_restaurant(self.fields["menu_item"], self.context)
+
+
+class CreateOrderSerializer(serializers.Serializer[None]):
+    session = PublicIdRelatedField[Session](
+        queryset=Session.objects.all(),
+        required=True,
+    )
+    items = CreateOrderItemSerializer(many=True, required=True)
+
+    def validate_session(self, value: Session) -> Session:
+        if value.status != SessionStatus.OPEN:
+            raise serializers.ValidationError("Session is not open.")
+        return value
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        _scope_to_request_restaurant(self.fields["session"], self.context)
+        items_field = self.fields.get("items")
+        if items_field is not None:
+            child = getattr(items_field, "child", None)
+            if child is not None:
+                _scope_to_request_restaurant(child.fields["menu_item"], self.context)

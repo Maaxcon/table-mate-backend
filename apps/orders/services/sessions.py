@@ -123,9 +123,7 @@ def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: i
     total_closed = 0
     while True:
         with transaction.atomic():
-            batch = list(
-                base.select_for_update(skip_locked=True).order_by("pk")[:batch_size]
-            )
+            batch = list(base.select_for_update(skip_locked=True).order_by("pk")[:batch_size])
             if not batch:
                 break
             for cart in batch:

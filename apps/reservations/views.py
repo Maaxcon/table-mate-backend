@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from datetime import date as date_type
 from datetime import datetime, timedelta
 from datetime import time as time_type
+from typing import cast
 from zoneinfo import ZoneInfo
 
 from django.db.models import QuerySet
@@ -14,7 +15,8 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.authentication.models import RoleCode
+from apps.authentication.models import RoleCode, User
+from apps.orders.models import Session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
 
@@ -22,7 +24,16 @@ from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
 from .serializers import ReservationSerializer
-from .services import activate_reservation, cancel_reservation, create_reservation, reschedule_reservation
+from .services import (
+    activate_reservation,
+    cancel_reservation,
+    close_session,
+    create_reservation,
+    create_staff_reservation,
+    move_session_to_table,
+    reschedule_reservation,
+    update_reservation_status,
+)
 
 
 def _parse_time(value: str) -> time_type:
@@ -79,15 +90,32 @@ class ReservationViewSet(
             table = serializer.validated_data["table"]
             restaurant_id = table.restaurant_id
 
-        reservation = create_reservation(
-            restaurant_id=restaurant_id,
-            customer_id=request.user.pk,  # type: ignore[arg-type]
-            table_id=str(serializer.validated_data["table"].public_id),
-            guest_count=serializer.validated_data["guest_count"],
-            start_at=serializer.validated_data["start_at"],
-            end_at=serializer.validated_data["end_at"],
-            notes=serializer.validated_data.get("notes"),
-        )
+        user = cast(User, request.user)
+        guest_name = request.data.get("guest_name")
+
+        if guest_name and getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
+            reservation = create_staff_reservation(
+                restaurant_id=restaurant_id,
+                table_id=str(serializer.validated_data["table"].public_id),
+                guest_count=serializer.validated_data["guest_count"],
+                start_at=serializer.validated_data["start_at"],
+                end_at=serializer.validated_data["end_at"],
+                guest_name=guest_name,
+                guest_phone=request.data.get("guest_phone", ""),
+                notes=serializer.validated_data.get("notes"),
+                actor=user,
+            )
+        else:
+            reservation = create_reservation(
+                restaurant_id=restaurant_id,
+                customer_id=user.pk,
+                table_id=str(serializer.validated_data["table"].public_id),
+                guest_count=serializer.validated_data["guest_count"],
+                start_at=serializer.validated_data["start_at"],
+                end_at=serializer.validated_data["end_at"],
+                notes=serializer.validated_data.get("notes"),
+                actor=user,
+            )
 
         result_serializer = self.get_serializer(reservation)
         return Response(result_serializer.data, status=status.HTTP_201_CREATED)
@@ -103,8 +131,15 @@ class ReservationViewSet(
         serializer.is_valid(raise_exception=True)
 
         status_val = serializer.validated_data.pop("status", None)
-        if status_val == ReservationStatus.CANCELLED:
-            reservation = cancel_reservation(reservation=instance)
+        if status_val is not None:
+            if status_val == ReservationStatus.CANCELLED:
+                reservation = cancel_reservation(reservation=instance)
+            else:
+                reservation = update_reservation_status(
+                    instance,
+                    new_status=status_val,
+                    actor=request.user,  # type: ignore[arg-type]
+                )
             result_serializer = self.get_serializer(reservation)
             return Response(result_serializer.data)
 
@@ -151,7 +186,7 @@ class ReservationViewSet(
     def available_slots(self, request: Request) -> Response:
         table_id = request.query_params.get("table")
         date_str = request.query_params.get("date")
-        exclude_id = request.query_params.get("exclude")
+        exclude_ids = request.query_params.getlist("exclude")
 
         if not table_id:
             raise ValidationError("table query parameter is required.")
@@ -171,8 +206,8 @@ class ReservationViewSet(
             table=table,
             status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
         )
-        if exclude_id:
-            qs = qs.exclude(public_id=exclude_id)
+        if exclude_ids:
+            qs = qs.exclude(public_id__in=exclude_ids)
         reservations = list(qs.values("start_at", "end_at"))
 
         now_utc = timezone.now()
@@ -258,3 +293,62 @@ class ReservationViewSet(
             reservations = reservations[offset:]
         serializer = self.get_serializer(reservations, many=True)
         return Response(serializer.data)
+
+    @extend_schema(
+        summary="Move session to another table",
+        description=(
+            "Moves an active session to a new table. "
+            "Cancels the old reservation and creates a new one. "
+            "Pending items travel with the session."
+        ),
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "table_id": {"type": "string", "format": "uuid"},
+                },
+                "required": ["table_id"],
+            }
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="move-table")
+    def move_table(self, request: Request, public_id: str | None = None) -> Response:
+        reservation = self.get_object()
+        user = cast(User, request.user)
+
+        if getattr(user, "role", None) not in (RoleCode.ADMIN, RoleCode.WAITER):
+            raise PermissionDenied("Only staff can move tables.")
+
+        try:
+            session = Session.objects.get(reservation=reservation, status="open")
+        except Session.DoesNotExist:
+            raise ValidationError("No active session for this reservation.") from None
+
+        table_id = request.data.get("table_id")
+        if not table_id:
+            raise ValidationError("table_id is required.")
+
+        move_session_to_table(session, new_table_id=table_id, actor=user)
+
+        return Response({"detail": "Session moved successfully."})
+
+    @extend_schema(
+        summary="Close check (session)",
+        description="Closes the session. All items must be served or voided.",
+    )
+    @action(detail=True, methods=["post"], url_path="close-check")
+    def close_check(self, request: Request, public_id: str | None = None) -> Response:
+        reservation = self.get_object()
+        user = cast(User, request.user)
+
+        if getattr(user, "role", None) not in (RoleCode.ADMIN, RoleCode.WAITER):
+            raise PermissionDenied("Only staff can close checks.")
+
+        try:
+            session = Session.objects.get(reservation=reservation, status="open")
+        except Session.DoesNotExist:
+            raise ValidationError("No active session for this reservation.") from None
+
+        close_session(session, actor=user)
+
+        return Response({"detail": "Check closed successfully."})

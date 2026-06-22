@@ -51,9 +51,7 @@ def test_returns_cart_for_active_reservation(restaurant: Restaurant, table: Tabl
 
 
 @pytest.mark.django_db
-def test_active_reservation_with_future_start_still_yields_cart(
-    restaurant: Restaurant, table: Table
-) -> None:
+def test_active_reservation_with_future_start_still_yields_cart(restaurant: Restaurant, table: Table) -> None:
     # Guest seated/scanned a few minutes early: reservation is ACTIVE but start is
     # still ahead. The cart must open anyway (active = table is open).
     _make_reservation(

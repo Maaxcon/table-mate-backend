@@ -783,9 +783,7 @@ class TestGuestInit:
         # A table with no booking at all -> NO_ACTIVE_RESERVATION (unchanged).
         from apps.orders.models import CartSession
 
-        bare_table = Table.objects.create(
-            restaurant=restaurant, table_number="NB", capacity=2, active=True
-        )
+        bare_table = Table.objects.create(restaurant=restaurant, table_number="NB", capacity=2, active=True)
 
         response = api_client.post(
             self.url,
