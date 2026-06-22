@@ -74,6 +74,7 @@ class TestCreateOrderWithItems:
         api: Callable[..., AuthContext],
         table: Table,
         item: MenuItem,
+        restaurant_settings: Any,
     ) -> None:
         auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
         session_data = _create_session(auth.client, table, table.restaurant_id)

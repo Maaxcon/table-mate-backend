@@ -238,7 +238,7 @@ def test_session_create_emits_table_status_changed(restaurant: Any, table: Any) 
     admin = UserFactory.build(role=RoleCode.ADMIN)
     admin.save()
 
-    with patch("apps.orders.services.emit_hall_table_status_changed") as mock_emit:
+    with patch("apps.orders.views.emit_hall_table_status_changed") as mock_emit:
         client = APIClient()
         access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
@@ -291,7 +291,7 @@ def test_session_close_emits_table_status_changed(restaurant: Any, table: Any) -
         opened_at=timezone.now(),
     )
 
-    with patch("apps.orders.services.emit_hall_table_status_changed") as mock_emit:
+    with patch("apps.orders.services.cart.emit_hall_table_status_changed") as mock_emit:
         client = APIClient()
         access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")

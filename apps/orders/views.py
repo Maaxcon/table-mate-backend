@@ -13,6 +13,7 @@ from apps.authentication.models import User
 from apps.authentication.permissions import IsFloor, IsStaff
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
 from common.exceptions import TableOccupiedError
+from common.hall_events import emit_hall_table_status_changed
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
 from .billing import close_visit_session, ensure_visit_session
@@ -64,6 +65,18 @@ class SessionViewSet(
             # open-table path (walk-in, scan, activate), so it stays in one place.
             # IsFloor guarantees an authenticated staff user here.
             serializer.instance = ensure_visit_session(reservation, opened_by=cast(User, self.request.user))
+            restaurant_id = get_restaurant_id_from_auth(self.request)
+            if restaurant_id is not None:
+                transaction.on_commit(
+                    lambda rid=restaurant_id: emit_hall_table_status_changed(
+                        rid,
+                        table_id=str(table.public_id),
+                        previous_status="free",
+                        current_status="occupied",
+                        session_id=str(serializer.instance.public_id),
+                        actor=cast(User, self.request.user),
+                    )
+                )
 
     _ALLOWED_SESSION_PATCH_FIELDS = {"status", "currency", "table", "guest_count"}
 

@@ -7,6 +7,7 @@ re-exports the API so the split into cart/sessions/walk_in is internal only.
 from .cart import (
     add_item_to_cart,
     create_order_with_items,
+    emit_hall_table_status_changed,
     open_session,
     remove_item_from_cart,
     update_cart_item_quantity,
@@ -32,6 +33,7 @@ __all__ = [
     "create_cart_session",
     "create_order_with_items",
     "create_walk_in_reservation",
+    "emit_hall_table_status_changed",
     "ensure_active_cart_for_table",
     "open_session",
     "remove_item_from_cart",
