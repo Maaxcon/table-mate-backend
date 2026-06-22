@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 
+from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -176,12 +177,16 @@ class TicketViewSet(
                 table_number = session_obj.table.table_number
             except (Session.DoesNotExist, AttributeError):
                 pass
-        emit_kitchen_ticket_injected(
-            instance.restaurant_id,
-            ticket_id=str(instance.public_id),
-            table_number=table_number,
-            items_count=instance.items.count(),
-        )
+
+        def _emit() -> None:
+            emit_kitchen_ticket_injected(
+                instance.restaurant_id,
+                ticket_id=str(instance.public_id),
+                table_number=table_number,
+                items_count=instance.items.count(),
+            )
+
+        transaction.on_commit(_emit)
 
 
 @extend_schema(tags=["Orders"])
@@ -226,13 +231,16 @@ class OrderItemViewSet(
             except AttributeError:
                 pass
 
-            emit_order_item_status_changed(
-                instance.restaurant_id,
-                order_item_id=str(instance.public_id),
-                table_number=table_number,
-                menu_item_name=instance.menu_item.name if instance.menu_item else "",
-                status=instance.status,
-            )
+            def _emit() -> None:
+                emit_order_item_status_changed(
+                    instance.restaurant_id,
+                    order_item_id=str(instance.public_id),
+                    table_number=table_number,
+                    menu_item_name=instance.menu_item.name if instance.menu_item else "",
+                    status=instance.status,
+                )
+
+            transaction.on_commit(_emit)
 
         return Response(serializer.data)
 
