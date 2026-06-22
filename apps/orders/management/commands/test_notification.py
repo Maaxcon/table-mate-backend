@@ -3,7 +3,8 @@ from __future__ import annotations
 import uuid
 from argparse import ArgumentParser
 
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 
 from common.notification_events import (
     emit_cart_checked_out,
@@ -33,6 +34,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: str, **options: str | int) -> None:
+        if not settings.DEBUG:
+            raise CommandError("This command is only available when DEBUG=True.")
+
         rid = int(options["restaurant_id"])
         kind = str(options["type"])
 

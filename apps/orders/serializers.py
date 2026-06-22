@@ -244,3 +244,8 @@ class CreateOrderSerializer(serializers.Serializer[None]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         _scope_to_request_restaurant(self.fields["session"], self.context)
+        items_field = self.fields.get("items")
+        if items_field is not None:
+            child = getattr(items_field, "child", None)
+            if child is not None:
+                _scope_to_request_restaurant(child.fields["menu_item"], self.context)
