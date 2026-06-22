@@ -3,7 +3,7 @@ from typing import Any, cast
 
 from django.db import transaction
 from drf_spectacular.utils import extend_schema
-from rest_framework import serializers, status, viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -21,6 +21,7 @@ from .models import Order, OrderItem, Session, SessionStatus, Ticket, VoidReason
 from .serializers import (
     CreateOrderSerializer,
     OrderItemSerializer,
+    OrderItemVoidRequestSerializer,
     OrderSerializer,
     SessionSerializer,
     TicketSerializer,
@@ -80,7 +81,7 @@ class SessionViewSet(
 
                 transaction.on_commit(_on_commit)
 
-    _ALLOWED_SESSION_PATCH_FIELDS = {"status", "currency", "table", "guest_count"}
+    _ALLOWED_SESSION_PATCH_FIELDS = {"status", "guest_count"}
 
     def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()
@@ -275,12 +276,7 @@ class OrderItemViewSet(
         return Response(serializer.data)
 
     @extend_schema(
-        request=serializers.Serializer(
-            {
-                "void_reason": serializers.CharField(),
-                "note": serializers.CharField(required=False, allow_null=True, default=None),
-            }
-        ),
+        request=OrderItemVoidRequestSerializer,
         responses=OrderItemSerializer,
     )
     @action(detail=True, methods=["post"], url_path="void", permission_classes=[IsFloor])

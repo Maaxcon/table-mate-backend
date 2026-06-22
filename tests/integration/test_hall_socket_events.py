@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -17,6 +17,7 @@ from apps.editor.consumers import HallConsumer
 from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.services import create_reservation, update_reservation_status
+from apps.restaurants.models import Restaurant
 from common.channels import hall_group_name
 from common.hall_events import (
     emit_hall_new_reservation,
@@ -444,7 +445,10 @@ async def test_session_close_broadcasts_to_hall_subscriber(restaurant: Any, tabl
 
 @pytestmark_rt
 async def test_hall_event_does_not_leak_across_restaurants(restaurant: Any, table: Any) -> None:
-    other_restaurant = await sync_to_async(RestaurantFactory)(name="Other Restaurant")
+    other_restaurant = cast(
+        Restaurant,
+        await sync_to_async(RestaurantFactory)(name="Other Restaurant"),
+    )
     other_admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
     await sync_to_async(other_admin.save)()
 

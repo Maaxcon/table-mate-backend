@@ -65,6 +65,7 @@ class SessionSerializer(serializers.ModelSerializer[Session]):
             "opened_by",
             "subtotal",
             "tax",
+            "service_charge",
             "total",
             "currency",
             "opened_at",
@@ -216,6 +217,11 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "updated_at",
         ]
         read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]
+
+
+class OrderItemVoidRequestSerializer(serializers.Serializer[None]):
+    void_reason = serializers.CharField()
+    note = serializers.CharField(required=False, allow_null=True, default=None)
 
 
 class CreateOrderItemSerializer(serializers.Serializer[None]):

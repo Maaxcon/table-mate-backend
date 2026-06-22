@@ -323,6 +323,42 @@ class TestVoidOrderItem:
         assert session.tax == Decimal("0")
         assert session.total == Decimal("0")
 
+
+@pytest.mark.django_db(databases=["default"])
+class TestOrderItemStatusPatch:
+    def test_rejects_illegal_transition(
+        self,
+        api: Callable[..., AuthContext],
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
+        session_data = _create_session(auth.client, table, table.restaurant_id)
+
+        order_resp = auth.client.post(
+            ORDER_LIST_URL,
+            {
+                "session": session_data["public_id"],
+                "items": [{"menu_item": str(item.public_id), "quantity": 1}],
+            },
+            content_type="application/json",
+        )
+        assert order_resp.status_code == status.HTTP_201_CREATED
+
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
+        assert order_item is not None
+
+        url = reverse("order-item-detail", kwargs={"public_id": order_item.public_id})
+        response = auth.client.patch(
+            url,
+            {"status": OrderItemStatus.SERVED},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        order_item.refresh_from_db()
+        assert order_item.status == OrderItemStatus.PENDING
+
     def test_rejects_double_void(
         self,
         api: Callable[..., AuthContext],
