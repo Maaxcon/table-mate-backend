@@ -270,7 +270,11 @@ class ReservationViewSet(
 
     @extend_schema(
         summary="Move session to another table",
-        description="Moves an active session to a new table. Voids pending items and creates a new reservation.",
+        description=(
+            "Moves an active session to a new table. "
+            "Cancels the old reservation and creates a new one. "
+            "Pending items travel with the session."
+        ),
         request={
             "application/json": {
                 "type": "object",
