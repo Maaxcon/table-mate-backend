@@ -129,21 +129,3 @@ def emit_kitchen_ticket_injected(
             },
         },
     )
-
-
-def emit_cart_updated(
-    session_id: str,
-    *,
-    client_id: str | None = None,
-) -> None:
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f"cart_{session_id}",
-        {
-            "type": "cart.updated",
-            "payload": {
-                "type": "cart_updated",
-                "client_id": client_id,
-            },
-        },
-    )
