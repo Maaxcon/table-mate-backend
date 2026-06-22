@@ -22,7 +22,7 @@ from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
 from .serializers import ReservationSerializer
-from .services import create_reservation, reschedule_reservation
+from .services import activate_reservation, cancel_reservation, create_reservation, reschedule_reservation
 
 
 def _parse_time(value: str) -> time_type:
@@ -94,18 +94,18 @@ class ReservationViewSet(
 
     def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()
-        if getattr(request.user, "role", None) == RoleCode.CUSTOMER and instance.customer_id != request.user.pk:
-            raise PermissionDenied("You can only modify your own reservations.")
+        if getattr(request.user, "role", None) == RoleCode.CUSTOMER:
+            if instance.customer_id != request.user.pk:
+                raise PermissionDenied("You can only modify your own reservations.")
+            if instance.status == ReservationStatus.ACTIVE:
+                raise PermissionDenied("This reservation is already active and can no longer be changed.")
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         status_val = serializer.validated_data.pop("status", None)
         if status_val == ReservationStatus.CANCELLED:
-            if instance.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
-                raise ValidationError("Only pending or active reservations can be cancelled.")
-            instance.status = ReservationStatus.CANCELLED
-            instance.save(update_fields=["status"])
-            result_serializer = self.get_serializer(instance)
+            reservation = cancel_reservation(reservation=instance)
+            result_serializer = self.get_serializer(reservation)
             return Response(result_serializer.data)
 
         reservation = reschedule_reservation(
@@ -115,6 +115,25 @@ class ReservationViewSet(
 
         result_serializer = self.get_serializer(reservation)
         return Response(result_serializer.data)
+
+    @extend_schema(
+        summary="Activate a reservation",
+        description="Flips a pending reservation to active without a QR scan. "
+        "Allowed for restaurant staff or the owning customer. Idempotent if already active.",
+        request=None,
+        responses={200: ReservationSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request: Request, *args: object, **kwargs: object) -> Response:
+        reservation = self.get_object()
+        is_staff = getattr(request.user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER)
+        result = activate_reservation(
+            reservation=reservation,
+            opened_by=request.user,
+            enforce_window=not is_staff,
+        )
+        serializer = self.get_serializer(result)
+        return Response(serializer.data)
 
     @extend_schema(
         summary="Available time slots for a table",
