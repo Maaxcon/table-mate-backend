@@ -20,6 +20,50 @@ def get_restaurant_settings(restaurant_id: int) -> RestaurantSettings | None:
     return RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
 
 
+_DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]  # Monday=0 .. Sunday=6
+
+
+def _hhmm_to_minutes(value: object) -> int | None:
+    if not isinstance(value, str) or len(value) != 5 or value[2] != ":":
+        return None
+    hh, mm = value[:2], value[3:]
+    if not hh.isdigit() or not mm.isdigit():
+        return None
+    return int(hh) * 60 + int(mm)
+
+
+def is_restaurant_open(restaurant_id: int, when: datetime_cls | None = None) -> bool:
+    """Whether the restaurant is open at `when` (default now) per its working hours.
+
+    No settings or no configured hours → treated as open (don't block). Once hours
+    are configured they are authoritative: a day with no usable open/close window —
+    whether its entry is missing or unparseable — is closed. Supports overnight
+    windows (close < open).
+    """
+    settings = get_restaurant_settings(restaurant_id)
+    if settings is None:
+        return True
+    working_hours = settings.working_hours or {}
+    if not working_hours:
+        return True
+
+    tz = ZoneInfo(settings.timezone) if settings.timezone else ZoneInfo("UTC")
+    local = (when or timezone.now()).astimezone(tz)
+    hours = working_hours.get(_DAY_KEYS[local.weekday()])
+    if not isinstance(hours, dict):
+        return False
+
+    open_min = _hhmm_to_minutes(hours.get("open"))
+    close_min = _hhmm_to_minutes(hours.get("close"))
+    if open_min is None or close_min is None:
+        return False  # configured day with unreadable hours — treat as closed
+
+    now_min = local.hour * 60 + local.minute
+    if close_min > open_min:
+        return open_min <= now_min < close_min
+    return now_min >= open_min or now_min < close_min  # overnight window
+
+
 def list_employees(restaurant_id: int) -> QuerySet[User]:
     return User.objects.filter(restaurant_id=restaurant_id).exclude(role=RoleCode.CUSTOMER).order_by("role", "email")
 

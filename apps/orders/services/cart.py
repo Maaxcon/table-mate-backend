@@ -1,8 +1,8 @@
+"""Cart-item operations: add, remove, update, and their shared helpers."""
+
 __all__ = [
     "add_item_to_cart",
-    "create_cart_session",
     "create_order_with_items",
-    "create_walk_in_reservation",
     "open_session",
     "remove_item_from_cart",
     "update_cart_item_quantity",
@@ -11,7 +11,7 @@ __all__ = [
 ]
 
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Final, cast
 
@@ -23,8 +23,8 @@ from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
 from apps.orders.broadcast import cart_group_send
-from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Table
+from apps.restaurants.selectors import is_restaurant_open
 from common.exceptions import (
     CartItemNotFoundError,
     CartSessionClosedError,
@@ -32,12 +32,11 @@ from common.exceptions import (
     MenuItemNotFoundError,
     MenuItemUnavailableError,
     ReservationConflictError,
-    ReservationNotFoundError,
+    RestaurantClosedError,
 )
 from common.hall_events import emit_hall_table_status_changed
-from common.notification_events import emit_cart_created
 
-from .models import (
+from ..models import (
     CartItem,
     CartSession,
     CartSessionStatus,
@@ -52,13 +51,12 @@ from .models import (
     TicketStatus,
     VoidReason,
 )
-from .selectors import (
-    _resolve_allowed_reservation_participant_ids,
+from ..selectors import (
     get_cart_item,
     get_menu_item,
-    get_reservation,
     is_cart_participant,
 )
+from .walk_in import create_walk_in_reservation
 
 
 def _is_authenticated_user(user: User | AnonymousUser | None) -> bool:
@@ -87,49 +85,6 @@ def _assign_guest_slot(session: CartSession, guest_identity: str) -> int:
     return (highest or 0) + 1
 
 
-def create_cart_session(
-    *,
-    restaurant_id: int,
-    reservation_id: str,
-    user: User,
-) -> CartSession:
-    reservation = get_reservation(restaurant_id, reservation_id)
-    if reservation is None:
-        raise ReservationNotFoundError(f"Reservation {reservation_id} not found.")
-
-    allowed_participants = _resolve_allowed_reservation_participant_ids(reservation)
-    if not allowed_participants or user.id not in allowed_participants:
-        raise PermissionDenied("Only reservation participants may open a cart session.")
-
-    with transaction.atomic():
-        existing = (
-            CartSession.objects.select_for_update()
-            .filter(reservation=reservation, status=CartSessionStatus.ACTIVE)
-            .first()
-        )
-        if existing is not None:
-            existing.participants.add(*allowed_participants)
-            return existing
-        try:
-            with transaction.atomic():
-                session = CartSession.objects.create(
-                    restaurant_id=restaurant_id,
-                    reservation=reservation,
-                    created_by=user,
-                )
-        except IntegrityError:
-            session = CartSession.objects.get(reservation=reservation, status=CartSessionStatus.ACTIVE)
-        session.participants.add(*allowed_participants)
-
-    emit_cart_created(
-        restaurant_id,
-        session_id=str(session.public_id),
-        table_number=reservation.table.table_number if reservation.table else "",
-        guest_name=user.get_full_name() if user.get_full_name() else None,
-    )
-    return session
-
-
 def add_item_to_cart(
     *,
     session: CartSession,
@@ -146,6 +101,9 @@ def add_item_to_cart(
 
         if session.status != CartSessionStatus.ACTIVE:
             raise CartSessionClosedError("Cart session is closed.")
+
+        if not is_restaurant_open(session.restaurant_id):
+            raise RestaurantClosedError()
 
         if _is_authenticated_user(user):
             user = cast(User, user)
@@ -304,46 +262,6 @@ def update_cart_item_quantity(
         item.refresh_from_db()
         _broadcast_cart_updated(session, client_id)
         return item
-
-
-@transaction.atomic
-def create_walk_in_reservation(
-    *,
-    table: Table,
-    guest_count: int,
-) -> Reservation:
-    now = timezone.now()
-    default_end = now + timedelta(hours=2)
-
-    next_reservation = (
-        Reservation.objects.filter(
-            table=table,
-            restaurant_id=table.restaurant_id,
-            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-            end_at__gt=now,
-        )
-        .order_by("start_at")
-        .first()
-    )
-
-    if next_reservation is not None:
-        end_at = min(default_end, next_reservation.start_at)
-    else:
-        end_at = default_end
-
-    if end_at <= now:
-        raise ReservationConflictError("Table has no available time for a walk-in reservation.")
-
-    return Reservation.objects.create(
-        table=table,
-        restaurant_id=table.restaurant_id,
-        guest_count=guest_count,
-        start_at=now,
-        end_at=end_at,
-        type=ReservationType.WALK_IN,
-        status=ReservationStatus.ACTIVE,
-        customer=None,
-    )
 
 
 _SESSION_STATUS_TRANSITIONS: dict[str, set[str]] = {

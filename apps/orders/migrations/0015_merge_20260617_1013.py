@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('orders', '0014_alter_session_reservation'),
-        ('orders', '0014_cartsession_one_active_per_reservation'),
+        ("orders", "0014_alter_session_reservation"),
+        ("orders", "0014_cartsession_one_active_per_reservation"),
     ]
 
-    operations = [
-    ]
+    operations = []

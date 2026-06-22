@@ -1376,6 +1376,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/CartSession'
           description: ''
+  /api/orders/cart/sessions/{session_pk}/checkout/:
+    post:
+      operationId: orders_cart_sessions_checkout_create
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+          description: ''
+        '400':
+          description: Cart is empty.
+        '409':
+          description: 'Cart changed: unavailable items were removed (code CART_CHANGED).'
   /api/orders/cart/sessions/{session_pk}/items/:
     get:
       operationId: orders_cart_sessions_items_list
@@ -1526,6 +1552,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: order__session__public_id
+        schema:
+          type: string
+          format: uuid
       - name: ordering
         required: false
         in: query
@@ -1648,28 +1679,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedOrderItem'
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrderItem'
-          description: ''
-  /api/orders/order-items/{public_id}/void/:
-    post:
-      operationId: orders_order_items_void_create
-      parameters:
-      - in: path
-        name: public_id
-        schema:
-          type: string
-          pattern: ^[0-9a-fA-F-]{36}$
-        required: true
-      tags:
-      - Orders
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -2000,6 +2009,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/Session'
           description: ''
+  /api/orders/sessions/{public_id}/close/:
+    post:
+      operationId: orders_sessions_close_create
+      description: 'End the visit: close the session, complete the reservation, and
+        close any active cart so the table is freed. No payment step yet. Idempotent.'
+      summary: Close the check
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
   /api/orders/tickets/:
     get:
       operationId: orders_tickets_list
@@ -2129,52 +2163,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Ticket'
-          description: ''
-  /api/orders/void-reasons/:
-    get:
-      operationId: orders_void_reasons_list
-      parameters:
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      tags:
-      - Orders
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/VoidReason'
-          description: ''
-  /api/orders/void-reasons/{id}/:
-    get:
-      operationId: orders_void_reasons_retrieve
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this void reason.
-        required: true
-      tags:
-      - Orders
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VoidReason'
           description: ''
   /api/payments/payments/:
     get:
@@ -2414,9 +2402,9 @@ paths:
   /api/reservations/reservations/{public_id}/activate/:
     post:
       operationId: reservations_reservations_activate_create
-      description: Activates a pending reservation and creates a session. Only staff
-        can activate. Table must be free with no earlier pending reservations.
-      summary: Activate pending reservation
+      description: Flips a pending reservation to active without a QR scan. Allowed
+        for restaurant staff or the owning customer. Idempotent if already active.
+      summary: Activate a reservation
       parameters:
       - in: path
         name: public_id
@@ -2426,90 +2414,6 @@ paths:
         required: true
       tags:
       - Reservations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Reservation'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Reservation'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Reservation'
-        required: true
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Reservation'
-          description: ''
-  /api/reservations/reservations/{public_id}/close-check/:
-    post:
-      operationId: reservations_reservations_close_check_create
-      description: Closes the session. All items must be served or voided.
-      summary: Close check (session)
-      parameters:
-      - in: path
-        name: public_id
-        schema:
-          type: string
-          pattern: ^[0-9a-fA-F-]{36}$
-        required: true
-      tags:
-      - Reservations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Reservation'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Reservation'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Reservation'
-        required: true
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Reservation'
-          description: ''
-  /api/reservations/reservations/{public_id}/move-table/:
-    post:
-      operationId: reservations_reservations_move_table_create
-      description: Moves an active session to a new table. Voids pending items and
-        creates a new reservation.
-      summary: Move session to another table
-      parameters:
-      - in: path
-        name: public_id
-        schema:
-          type: string
-          pattern: ^[0-9a-fA-F-]{36}$
-        required: true
-      tags:
-      - Reservations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                table_id:
-                  type: string
-                  format: uuid
-              required:
-              - table_id
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -3482,6 +3386,28 @@ components:
       description: |-
         * `active` - Active
         * `closed` - Closed
+    CheckoutResponse:
+      type: object
+      properties:
+        order_id:
+          type: string
+        subtotal:
+          type: string
+        tax:
+          type: string
+        service_charge:
+          type: string
+        total:
+          type: string
+        currency:
+          type: string
+      required:
+      - currency
+      - order_id
+      - service_charge
+      - subtotal
+      - tax
+      - total
     CreatedBySourceEnum:
       enum:
       - staff
@@ -4040,11 +3966,7 @@ components:
           format: uuid
           readOnly: true
         void_reason:
-          type: string
-          readOnly: true
-          nullable: true
-        void_reason_note:
-          type: string
+          type: integer
           nullable: true
         is_wasted:
           type: boolean
@@ -4067,7 +3989,6 @@ components:
       - restaurant
       - unit_price
       - updated_at
-      - void_reason
       - voided_by
     OrderItemStatusEnum:
       enum:
@@ -4919,11 +4840,7 @@ components:
           format: uuid
           readOnly: true
         void_reason:
-          type: string
-          readOnly: true
-          nullable: true
-        void_reason_note:
-          type: string
+          type: integer
           nullable: true
         is_wasted:
           type: boolean
@@ -5117,12 +5034,16 @@ components:
           $ref: '#/components/schemas/SessionStatusEnum'
         currency:
           type: string
-          maxLength: 3
+          readOnly: true
         subtotal:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
         tax:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        service_charge:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
@@ -5133,6 +5054,7 @@ components:
         opened_at:
           type: string
           format: date-time
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -5703,12 +5625,16 @@ components:
           $ref: '#/components/schemas/SessionStatusEnum'
         currency:
           type: string
-          maxLength: 3
+          readOnly: true
         subtotal:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
         tax:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        service_charge:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
@@ -5719,6 +5645,7 @@ components:
         opened_at:
           type: string
           format: date-time
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -6015,18 +5942,6 @@ components:
       required:
       - detail
       - valid
-    VoidReason:
-      type: object
-      properties:
-        code:
-          type: string
-          readOnly: true
-        label:
-          type: string
-          readOnly: true
-      required:
-      - code
-      - label
     WorkingHours:
       type: object
       description: |-

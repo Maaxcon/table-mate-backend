@@ -382,9 +382,7 @@ async def _patch_session(user: Any, restaurant_id: int, session_id: str, status:
 
 
 @pytestmark_rt
-async def test_session_create_broadcasts_to_hall_subscriber(
-    restaurant: Any, table: Any
-) -> None:
+async def test_session_create_broadcasts_to_hall_subscriber(restaurant: Any, table: Any) -> None:
     admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
     await sync_to_async(admin.save)()
 
@@ -403,9 +401,7 @@ async def test_session_create_broadcasts_to_hall_subscriber(
 
 
 @pytestmark_rt
-async def test_session_close_broadcasts_to_hall_subscriber(
-    restaurant: Any, table: Any
-) -> None:
+async def test_session_close_broadcasts_to_hall_subscriber(restaurant: Any, table: Any) -> None:
     admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
     await sync_to_async(admin.save)()
 
@@ -434,9 +430,7 @@ async def test_session_close_broadcasts_to_hall_subscriber(
 
     communicator = await _connect_hall(admin, restaurant.id)
 
-    status_code = await _patch_session(
-        admin, restaurant.id, str(session.public_id), SessionStatus.CLOSED
-    )
+    status_code = await _patch_session(admin, restaurant.id, str(session.public_id), SessionStatus.CLOSED)
     assert status_code == 200
 
     event = await communicator.receive_json_from(timeout=5)
@@ -449,9 +443,7 @@ async def test_session_close_broadcasts_to_hall_subscriber(
 
 
 @pytestmark_rt
-async def test_hall_event_does_not_leak_across_restaurants(
-    restaurant: Any, table: Any
-) -> None:
+async def test_hall_event_does_not_leak_across_restaurants(restaurant: Any, table: Any) -> None:
     other_restaurant = await sync_to_async(RestaurantFactory)(name="Other Restaurant")
     other_admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
     await sync_to_async(other_admin.save)()

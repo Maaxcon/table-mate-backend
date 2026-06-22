@@ -8,9 +8,10 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
 from apps.authentication.models import RoleCode, User
+from apps.orders.billing import ensure_visit_session
 from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
 from apps.restaurants.models import Table
-from common.exceptions import ReservationConflictError
+from common.exceptions import ReservationCancelError, ReservationConflictError
 from common.hall_events import (
     emit_hall_new_reservation,
     emit_hall_reservation_cancelled,
@@ -206,56 +207,17 @@ def create_staff_reservation(
 
 
 @transaction.atomic
-def seat_walk_in_customer(
-    table: Table,
-    guest_count: int,
-    opened_by: User | None = None,
-) -> Reservation:
-    now = timezone.now()
-    default_end = now + timedelta(hours=2)
+def cancel_reservation(reservation: Reservation) -> Reservation:
+    """Cancel a pending or active reservation. Rejects any other state.
 
-    next_reservation = (
-        Reservation.objects.filter(
-            table=table,
-            restaurant_id=table.restaurant_id,
-            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-            end_at__gt=now,
-        )
-        .order_by("start_at")
-        .first()
-    )
-
-    if next_reservation is not None:
-        end_at = min(default_end, next_reservation.start_at)
-    else:
-        end_at = default_end
-
-    if end_at <= now:
-        raise ReservationConflictError("Table has no available time for a walk-in reservation.")
-
-    reservation = Reservation.objects.create(
-        table=table,
-        restaurant_id=table.restaurant_id,
-        guest_count=guest_count,
-        start_at=now,
-        end_at=end_at,
-        type=ReservationType.WALK_IN,
-        status=ReservationStatus.ACTIVE,
-        customer=None,
-    )
-
-    restaurant = table.restaurant
-    Session.objects.create(
-        restaurant_id=table.restaurant_id,
-        table=table,
-        reservation=reservation,
-        opened_by=opened_by,
-        guest_count=guest_count,
-        currency=restaurant.settings.currency,
-        opened_at=now,
-    )
-
-    return reservation
+    Mirrors reschedule/activate: the state-machine lives here, not in the view.
+    """
+    locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
+    if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
+        raise ReservationCancelError("Only pending or active reservations can be cancelled.")
+    locked.status = ReservationStatus.CANCELLED
+    locked.save(update_fields=["status"])
+    return locked
 
 
 @transaction.atomic
@@ -288,6 +250,39 @@ def reschedule_reservation(
     return reservation
 
 
+ACTIVATION_EARLY_WINDOW = timedelta(minutes=15)  # how early a guest may self-activate
+
+
+def activate_reservation(
+    *,
+    reservation: Reservation,
+    opened_by: Any = None,
+    enforce_window: bool = False,
+) -> Reservation:
+    """Flip a pending reservation to active (staff or the owning customer).
+
+    No QR is needed; the waiter or the owning customer opens the table on
+    arrival. Staff have no time limit. When enforce_window is set (customer
+    self-activation) the booking can only be activated near its start — not more
+    than ACTIVATION_EARLY_WINDOW early — so a guest cannot open a far-future
+    booking. Arriving late is always allowed.
+    Idempotent if already active; rejects completed/cancelled reservations.
+    Opens the visit Session (bill) so the floor plan shows the table occupied.
+    """
+    opened_by_user = opened_by if (opened_by is not None and opened_by.is_authenticated) else None
+    with transaction.atomic():
+        locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
+        if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
+            raise ReservationConflictError("Only pending reservations can be activated.")
+        if locked.status == ReservationStatus.PENDING:
+            if enforce_window and locked.start_at - timezone.now() > ACTIVATION_EARLY_WINDOW:
+                raise ReservationConflictError("This reservation cannot be activated yet.")
+            locked.status = ReservationStatus.ACTIVE
+            locked.save(update_fields=["status"])
+        ensure_visit_session(locked, opened_by=opened_by_user)
+    return locked
+
+
 @transaction.atomic
 def activate_reservation_by_scan(
     *,
@@ -295,15 +290,16 @@ def activate_reservation_by_scan(
     user: Any,
 ) -> tuple[bool, str]:
     now = timezone.now()
-    deadline = now + timedelta(minutes=15)
+    earliest_start = now - timedelta(minutes=30)  # allow up to 30 min late
+    latest_start = now + timedelta(minutes=15)  # and up to 15 min early
 
     reservation = (
         Reservation.objects.select_for_update()
         .filter(
             table=table,
             status=ReservationStatus.PENDING,
-            start_at__gte=now,
-            start_at__lte=deadline,
+            start_at__gte=earliest_start,
+            start_at__lte=latest_start,
         )
         .first()
     )
@@ -319,6 +315,8 @@ def activate_reservation_by_scan(
 
     reservation.status = ReservationStatus.ACTIVE
     reservation.save(update_fields=["status"])
+
+    ensure_visit_session(reservation, opened_by=user)
     return True, "Table verified and activated."
 
 
