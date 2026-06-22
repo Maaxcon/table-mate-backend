@@ -219,6 +219,11 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]
 
 
+class OrderItemVoidRequestSerializer(serializers.Serializer[None]):
+    void_reason = serializers.CharField()
+    note = serializers.CharField(required=False, allow_null=True, default=None)
+
+
 class CreateOrderItemSerializer(serializers.Serializer[None]):
     menu_item = PublicIdRelatedField[MenuItem](
         queryset=MenuItem.objects.all(),

@@ -1701,6 +1701,18 @@ paths:
         required: true
       tags:
       - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderItemVoidRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrderItemVoidRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrderItemVoidRequest'
+        required: true
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -4149,6 +4161,16 @@ components:
         * `ready` - Ready
         * `served` - Served
         * `voided` - Voided
+    OrderItemVoidRequest:
+      type: object
+      properties:
+        void_reason:
+          type: string
+        note:
+          type: string
+          nullable: true
+      required:
+      - void_reason
     OrderStatusEnum:
       enum:
       - draft
@@ -5198,6 +5220,7 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
         total:
           type: string
           format: decimal
@@ -5792,6 +5815,7 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
         total:
           type: string
           format: decimal
@@ -5818,6 +5842,7 @@ components:
       - public_id
       - reservation
       - restaurant
+      - service_charge
       - subtotal
       - table
       - tax
