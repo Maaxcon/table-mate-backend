@@ -9,7 +9,7 @@ from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
-from .models import Order, OrderItem, Session, SessionStatus, Ticket, VoidReason
+from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, VoidReason
 
 
 def _scope_to_request_restaurant(field: Any, context: Mapping[str, object]) -> None:
@@ -127,6 +127,15 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]
 
 
+_ORDER_ITEM_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    OrderItemStatus.PENDING: {OrderItemStatus.IN_PROGRESS},
+    OrderItemStatus.IN_PROGRESS: {OrderItemStatus.READY},
+    OrderItemStatus.READY: {OrderItemStatus.SERVED},
+    OrderItemStatus.SERVED: set(),
+    OrderItemStatus.VOIDED: set(),
+}
+
+
 class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     order: PublicIdRelatedField[Order] = PublicIdRelatedField(
@@ -153,6 +162,20 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         _scope_to_request_restaurant(self.fields["order"], self.context)
         _scope_to_request_restaurant(self.fields["ticket"], self.context)
         _scope_to_request_restaurant(self.fields["menu_item"], self.context)
+
+    def validate_status(self, value: str) -> str:
+        if self.instance is None:
+            return value
+        current = self.instance.status
+        allowed = _ORDER_ITEM_STATUS_TRANSITIONS.get(current, set())
+        if value not in allowed:
+            raise serializers.ValidationError(
+                f"Cannot transition from '{current}' to '{value}'. "
+                f"Allowed transitions from '{current}': {', '.join(sorted(allowed)) or 'none'}."
+            )
+        if value == OrderItemStatus.VOIDED:
+            raise serializers.ValidationError("Use the dedicated /void/ endpoint to void an order item.")
+        return value
 
     class Meta:
         model = OrderItem
