@@ -312,16 +312,30 @@ class TestTicketKanbanAPI:
         assert len(results) == 1
         assert results[0]["status"] == TicketStatus.INCOMING
 
-    def test_waiter_cannot_access_ticket_api(
+    def test_waiter_can_list_ticket_api(
         self,
         api: Callable[..., AuthContext],
         restaurant: Any,
+        table: Table,
+        item: MenuItem,
     ) -> None:
         auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
         client = auth.client
+        actor = auth.user
+        restaurant_id = restaurant.id
+
+        session = _build_session(table, restaurant_id, actor)
+        create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        )
 
         resp = client.get(TICKET_LIST_URL)
-        assert resp.status_code == status.HTTP_403_FORBIDDEN
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.json()
+        results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        assert len(results) == 1
 
     def test_waiter_cannot_update_ticket_or_items(
         self,
@@ -361,6 +375,34 @@ class TestTicketKanbanAPI:
             content_type="application/json",
         )
         assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_waiter_can_list_order_items(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = auth.client
+        actor = auth.user
+        restaurant_id = restaurant.id
+
+        session = _build_session(table, restaurant_id, actor)
+        create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 2, "comment": None}],
+            actor=actor,
+        )
+
+        resp = client.get(
+            ORDER_ITEM_LIST_URL,
+            {"order__session__public_id": str(session.public_id)},
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.json()
+        results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        assert len(results) >= 1
 
     def test_cook_can_patch_ticket_status(
         self,

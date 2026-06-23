@@ -202,6 +202,11 @@ class TicketViewSet(
         "completed_at",
     ]
 
+    def get_permissions(self) -> Sequence[object]:  # type: ignore[override]
+        if self.action in {"list", "retrieve"}:
+            return [IsStaff()]
+        return super().get_permissions()
+
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         instance = serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
         table_number = ""
@@ -244,6 +249,13 @@ class OrderItemViewSet(
         "is_wasted",
     ]
     ordering_fields = ["created_at", "updated_at", "guest_slot", "status", "voided_at"]
+
+    def get_permissions(self) -> Sequence[object]:  # type: ignore[override]
+        if self.action in {"list", "retrieve"}:
+            return [IsStaff()]
+        if self.action in {"create", "partial_update"}:
+            return [IsKitchen()]
+        return super().get_permissions()
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
