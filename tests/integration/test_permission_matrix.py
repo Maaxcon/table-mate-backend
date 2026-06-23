@@ -36,8 +36,8 @@ ROLE_ALLOW_MATRIX: dict[str, set[str]] = {
     "restaurant-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
     "session-list": {RoleCode.ADMIN, RoleCode.WAITER},
     "order-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
-    "ticket-list": {RoleCode.ADMIN, RoleCode.COOK},
-    "order-item-list": {RoleCode.ADMIN, RoleCode.COOK},
+    "ticket-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
+    "order-item-list": {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK},
     "payment-list": {RoleCode.ADMIN},
 }
 
