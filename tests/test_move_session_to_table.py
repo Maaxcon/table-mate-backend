@@ -24,7 +24,7 @@ class TestMoveSessionToTable:
 
         table2 = Table.objects.create(
             restaurant=restaurant,
-            table_number="T2",
+            public_number="T2",
             capacity=4,
             active=True,
         )
@@ -92,7 +92,7 @@ class TestMoveSessionToTable:
 
         table2 = Table.objects.create(
             restaurant=restaurant,
-            table_number="T2",
+            public_number="T2",
             capacity=4,
             active=True,
         )
@@ -126,7 +126,7 @@ class TestMoveSessionToTable:
 
         inactive_table = Table.objects.create(
             restaurant=restaurant,
-            table_number="T2",
+            public_number="T2",
             capacity=4,
             active=False,
         )

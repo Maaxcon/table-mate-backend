@@ -113,7 +113,7 @@ class TestSessionPatch:
 
         other_table = Table.objects.create(
             restaurant=table.restaurant,
-            table_number="T2",
+            public_number="T2",
             capacity=4,
             active=True,
         )

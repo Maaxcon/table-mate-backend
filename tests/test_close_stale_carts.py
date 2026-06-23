@@ -13,7 +13,7 @@ from apps.restaurants.models import Restaurant, Table
 
 
 def _table(restaurant: Restaurant, number: str) -> Table:
-    return Table.objects.create(restaurant=restaurant, table_number=number, capacity=4, active=True)
+    return Table.objects.create(restaurant=restaurant, public_number=number, capacity=4, active=True)
 
 
 def _reservation(

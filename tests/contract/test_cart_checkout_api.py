@@ -121,7 +121,7 @@ def test_guest_token_cannot_checkout_other_session(
     _active_reservation(restaurant, table)
     cart_a = ensure_active_cart_for_table(table=table)
 
-    table_b = Table.objects.create(restaurant=restaurant, table_number="TB", capacity=4, active=True)
+    table_b = Table.objects.create(restaurant=restaurant, public_number="TB", capacity=4, active=True)
     _active_reservation(restaurant, table_b)
     cart_b = ensure_active_cart_for_table(table=table_b)
     add_item_to_cart(session=cart_b, menu_item_id=str(item.public_id), quantity=1)
