@@ -87,6 +87,12 @@ class Command(BaseCommand):
             type=int,
             help="Restaurant ID to seed (seeds all if omitted)",
         )
+        parser.add_argument(
+            "--prune",
+            action="store_true",
+            help="Delete tables (and their sessions/reservations) whose public_number "
+            "is not in the canonical seed set for the restaurant.",
+        )
 
     @transaction.atomic
     def handle(self, *args: Any, **options: Any) -> None:
@@ -94,6 +100,7 @@ class Command(BaseCommand):
         created_settings = 0
         created_zones = 0
         created_tables = 0
+        pruned_tables = 0
 
         for data in _RESTAURANTS_DATA:
             if options["restaurant_id"]:
@@ -136,6 +143,7 @@ class Command(BaseCommand):
                 if was_created_zone:
                     created_zones += 1
 
+            canonical_numbers = {t["public_number"] for t in data["tables"]}
             for table_data in data["tables"]:
                 _, was_created_table = Table.objects.update_or_create(
                     restaurant=restaurant,
@@ -149,13 +157,44 @@ class Command(BaseCommand):
                 if was_created_table:
                     created_tables += 1
 
+            if options["prune"]:
+                pruned_tables += self._prune_tables(restaurant, canonical_numbers)
+
             if options["restaurant_id"]:
                 break
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Done: {created_restaurants} restaurants, "
-                f"{created_settings} settings, {created_zones} zones, "
-                f"{created_tables} tables"
-            )
+        summary = (
+            f"Done: {created_restaurants} restaurants, "
+            f"{created_settings} settings, {created_zones} zones, "
+            f"{created_tables} tables"
         )
+        if options["prune"]:
+            summary += f", {pruned_tables} tables pruned"
+        self.stdout.write(self.style.SUCCESS(summary))
+
+    def _prune_tables(self, restaurant: Restaurant, canonical_numbers: set[str]) -> int:
+        """Delete tables not in the canonical seed set, plus their dependents.
+
+        Session.table is on_delete=PROTECT (and Session.reservation too), so the
+        sessions and reservations have to go first; deleting them cascades their
+        orders, tickets, order items and cart sessions.
+        """
+        from apps.orders.models import Session
+        from apps.reservations.models import Reservation
+
+        orphans = list(
+            Table.objects.filter(restaurant=restaurant).exclude(public_number__in=canonical_numbers)
+        )
+        if not orphans:
+            return 0
+
+        orphan_numbers = sorted(t.public_number for t in orphans)
+        orphan_ids = [t.id for t in orphans]
+        Session.objects.filter(restaurant=restaurant, table_id__in=orphan_ids).delete()
+        Reservation.objects.filter(restaurant=restaurant, table_id__in=orphan_ids).delete()
+        deleted, _ = Table.objects.filter(id__in=orphan_ids).delete()
+
+        self.stdout.write(
+            self.style.WARNING(f"  Pruned {len(orphans)} orphaned table(s): {', '.join(orphan_numbers)}")
+        )
+        return len(orphans)
