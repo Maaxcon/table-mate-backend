@@ -204,7 +204,7 @@ class TicketViewSet(
         if instance.session_id:
             try:
                 session_obj = Session.objects.get(pk=instance.session_id)
-                table_number = session_obj.table.table_number
+                table_number = session_obj.table.public_number
             except (Session.DoesNotExist, AttributeError):
                 pass
 
@@ -258,7 +258,7 @@ class OrderItemViewSet(
             table_number = ""
             try:
                 order_session = instance.order.session
-                table_number = order_session.table.table_number
+                table_number = order_session.table.public_number
             except AttributeError:
                 pass
 

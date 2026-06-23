@@ -127,7 +127,7 @@ def create_reservation(
         lambda: emit_hall_new_reservation_notification(
             restaurant_id,
             reservation_id=str(reservation.public_id),
-            table_number=table.table_number,
+            table_number=table.public_number,
             guest_name=actor.get_full_name() if actor else None,
             guest_count=guest_count,
         )
@@ -197,7 +197,7 @@ def create_staff_reservation(
         lambda: emit_hall_new_reservation_notification(
             restaurant_id,
             reservation_id=str(reservation.public_id),
-            table_number=table.table_number,
+            table_number=table.public_number,
             guest_name=guest_name,
             guest_count=guest_count,
         )
