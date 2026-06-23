@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from apps.authentication.models import RoleCode, User
 from apps.orders.models import Session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
+from apps.restaurants.selectors import _DAY_KEYS
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
 
 from .models import Reservation, ReservationStatus
@@ -213,8 +214,7 @@ class ReservationViewSet(
         now_utc = timezone.now()
 
         def day_slots(d: date_type) -> list[str]:
-            day_name = d.strftime("%A").lower()
-            day_config = working_hours.get(day_name)
+            day_config = working_hours.get(_DAY_KEYS[d.weekday()])
             if not day_config:
                 return []
 
