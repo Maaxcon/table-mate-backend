@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -17,6 +17,7 @@ from apps.editor.consumers import HallConsumer
 from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.services import create_reservation, update_reservation_status
+from apps.restaurants.models import Restaurant
 from common.channels import hall_group_name
 from common.hall_events import (
     emit_hall_new_reservation,
@@ -238,7 +239,7 @@ def test_session_create_emits_table_status_changed(restaurant: Any, table: Any) 
     admin = UserFactory.build(role=RoleCode.ADMIN)
     admin.save()
 
-    with patch("apps.orders.services.emit_hall_table_status_changed") as mock_emit:
+    with patch("apps.orders.views.emit_hall_table_status_changed") as mock_emit:
         client = APIClient()
         access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
@@ -291,7 +292,7 @@ def test_session_close_emits_table_status_changed(restaurant: Any, table: Any) -
         opened_at=timezone.now(),
     )
 
-    with patch("apps.orders.services.emit_hall_table_status_changed") as mock_emit:
+    with patch("apps.orders.services.cart.emit_hall_table_status_changed") as mock_emit:
         client = APIClient()
         access, _ = issue_tokens_with_restaurant(admin, restaurant.id)
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
@@ -382,9 +383,7 @@ async def _patch_session(user: Any, restaurant_id: int, session_id: str, status:
 
 
 @pytestmark_rt
-async def test_session_create_broadcasts_to_hall_subscriber(
-    restaurant: Any, table: Any
-) -> None:
+async def test_session_create_broadcasts_to_hall_subscriber(restaurant: Any, table: Any) -> None:
     admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
     await sync_to_async(admin.save)()
 
@@ -403,9 +402,7 @@ async def test_session_create_broadcasts_to_hall_subscriber(
 
 
 @pytestmark_rt
-async def test_session_close_broadcasts_to_hall_subscriber(
-    restaurant: Any, table: Any
-) -> None:
+async def test_session_close_broadcasts_to_hall_subscriber(restaurant: Any, table: Any) -> None:
     admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
     await sync_to_async(admin.save)()
 
@@ -434,9 +431,7 @@ async def test_session_close_broadcasts_to_hall_subscriber(
 
     communicator = await _connect_hall(admin, restaurant.id)
 
-    status_code = await _patch_session(
-        admin, restaurant.id, str(session.public_id), SessionStatus.CLOSED
-    )
+    status_code = await _patch_session(admin, restaurant.id, str(session.public_id), SessionStatus.CLOSED)
     assert status_code == 200
 
     event = await communicator.receive_json_from(timeout=5)
@@ -449,10 +444,11 @@ async def test_session_close_broadcasts_to_hall_subscriber(
 
 
 @pytestmark_rt
-async def test_hall_event_does_not_leak_across_restaurants(
-    restaurant: Any, table: Any
-) -> None:
-    other_restaurant = await sync_to_async(RestaurantFactory)(name="Other Restaurant")
+async def test_hall_event_does_not_leak_across_restaurants(restaurant: Any, table: Any) -> None:
+    other_restaurant = cast(
+        Restaurant,
+        await sync_to_async(RestaurantFactory)(name="Other Restaurant"),
+    )
     other_admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
     await sync_to_async(other_admin.save)()
 

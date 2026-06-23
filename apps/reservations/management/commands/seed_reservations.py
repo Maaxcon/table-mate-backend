@@ -8,7 +8,7 @@ from django.utils import timezone
 from apps.authentication.models import RoleCode, User
 from apps.orders.models import Session
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 
 
 class Command(BaseCommand):
@@ -187,13 +187,18 @@ class Command(BaseCommand):
                             restaurant=restaurant,
                             role__in=[RoleCode.WAITER, RoleCode.ADMIN],
                         ).first()
+                        currency = "EUR"
+                        try:
+                            currency = restaurant.settings.currency
+                        except RestaurantSettings.DoesNotExist:
+                            pass
                         Session.objects.create(
                             restaurant=restaurant,
                             table=data["table"],
                             reservation=reservation,
                             opened_by=staff_user,
                             guest_count=reservation.guest_count,
-                            currency="EUR",
+                            currency=currency,
                             opened_at=reservation.start_at,
                         )
 

@@ -1,6 +1,7 @@
 # mypy: disable-error-code="no-untyped-call"
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import pytest
 from django.urls import reverse
@@ -83,3 +84,83 @@ class TestSessionCreate:
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestSessionPatch:
+    def _open_session(self, client: Any, table: Table) -> dict[str, Any]:
+        response = client.post(
+            URL,
+            {
+                "table": str(table.public_id),
+                "guest_count": 2,
+                "opened_at": datetime.now(UTC).isoformat(),
+                "currency": "UAH",
+            },
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        return cast(dict[str, Any], response.json())
+
+    def test_patch_table_is_ignored(
+        self,
+        api: Callable[..., AuthContext],
+        table: Table,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
+        session = self._open_session(auth.client, table)
+        session_id = str(session["public_id"])
+
+        other_table = Table.objects.create(
+            restaurant=table.restaurant,
+            table_number="T2",
+            capacity=4,
+            active=True,
+        )
+
+        url = reverse("session-detail", kwargs={"public_id": session_id})
+        response = auth.client.patch(
+            url,
+            {"table": str(other_table.public_id)},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["table"] == str(table.public_id)
+
+        refreshed = Session.objects.get(public_id=session_id)
+        assert refreshed.table_id == table.id
+
+    def test_patch_money_fields_are_ignored(
+        self,
+        api: Callable[..., AuthContext],
+        table: Table,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
+        session = self._open_session(auth.client, table)
+        session_id = str(session["public_id"])
+
+        url = reverse("session-detail", kwargs={"public_id": session_id})
+        before = Session.objects.get(public_id=session_id)
+
+        response = auth.client.patch(
+            url,
+            {
+                "subtotal": "999.99",
+                "tax": "11.11",
+                "service_charge": "7.00",
+                "total": "1018.10",
+                "currency": "USD",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        refreshed = Session.objects.get(public_id=session_id)
+        assert refreshed.subtotal == before.subtotal
+        assert refreshed.tax == before.tax
+        assert refreshed.service_charge == before.service_charge
+        assert refreshed.total == before.total
+        assert refreshed.currency == before.currency

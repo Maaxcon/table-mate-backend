@@ -5,7 +5,6 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from django.db import connection
 from django.urls import reverse
 from rest_framework import status
 
@@ -19,9 +18,7 @@ from apps.orders.models import (
     SessionStatus,
     Ticket,
     TicketStatus,
-    VoidReason,
 )
-from apps.orders.services import create_order_with_items, void_order_item
 from apps.restaurants.models import Table
 
 from .conftest import AuthContext
@@ -31,9 +28,7 @@ SESSION_LIST_URL = reverse("session-list")
 ORDER_ITEM_VOID_URL = "order-item-void"
 
 
-def _create_session(
-    client: Any, table: Table, restaurant_id: int
-) -> dict[str, Any]:
+def _create_session(client: Any, table: Table, restaurant_id: int) -> Any:
     response = client.post(
         SESSION_LIST_URL,
         {
@@ -79,6 +74,7 @@ class TestCreateOrderWithItems:
         api: Callable[..., AuthContext],
         table: Table,
         item: MenuItem,
+        restaurant_settings: Any,
     ) -> None:
         auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
         session_data = _create_session(auth.client, table, table.restaurant_id)
@@ -306,9 +302,7 @@ class TestVoidOrderItem:
         )
         assert order_resp.status_code == status.HTTP_201_CREATED
 
-        order_item = OrderItem.objects.filter(
-            order__public_id=order_resp.json()["public_id"]
-        ).first()
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
         assert order_item is not None
 
         url = reverse(ORDER_ITEM_VOID_URL, kwargs={"public_id": order_item.public_id})
@@ -323,6 +317,47 @@ class TestVoidOrderItem:
 
         order = Order.objects.get(public_id=order_resp.json()["public_id"])
         assert order.total_amount == Decimal("0")
+
+        session = Session.objects.get(public_id=session_data["public_id"])
+        assert session.subtotal == Decimal("0")
+        assert session.tax == Decimal("0")
+        assert session.total == Decimal("0")
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestOrderItemStatusPatch:
+    def test_rejects_illegal_transition(
+        self,
+        api: Callable[..., AuthContext],
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
+        session_data = _create_session(auth.client, table, table.restaurant_id)
+
+        order_resp = auth.client.post(
+            ORDER_LIST_URL,
+            {
+                "session": session_data["public_id"],
+                "items": [{"menu_item": str(item.public_id), "quantity": 1}],
+            },
+            content_type="application/json",
+        )
+        assert order_resp.status_code == status.HTTP_201_CREATED
+
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
+        assert order_item is not None
+
+        url = reverse("order-item-detail", kwargs={"public_id": order_item.public_id})
+        response = auth.client.patch(
+            url,
+            {"status": OrderItemStatus.SERVED},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        order_item.refresh_from_db()
+        assert order_item.status == OrderItemStatus.PENDING
 
     def test_rejects_double_void(
         self,
@@ -343,9 +378,8 @@ class TestVoidOrderItem:
         )
         assert order_resp.status_code == status.HTTP_201_CREATED
 
-        order_item = OrderItem.objects.filter(
-            order__public_id=order_resp.json()["public_id"]
-        ).first()
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
+        assert order_item is not None
 
         url = reverse(ORDER_ITEM_VOID_URL, kwargs={"public_id": order_item.public_id})
         first = auth.client.post(url, {"void_reason": "mispick"}, content_type="application/json")
@@ -373,14 +407,11 @@ class TestVoidOrderItem:
         )
         assert order_resp.status_code == status.HTTP_201_CREATED
 
-        order_item = OrderItem.objects.filter(
-            order__public_id=order_resp.json()["public_id"]
-        ).first()
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
+        assert order_item is not None
 
         url = reverse(ORDER_ITEM_VOID_URL, kwargs={"public_id": order_item.public_id})
-        response = auth.client.post(
-            url, {"void_reason": "bogus_reason"}, content_type="application/json"
-        )
+        response = auth.client.post(url, {"void_reason": "bogus_reason"}, content_type="application/json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_with_note(
@@ -402,9 +433,8 @@ class TestVoidOrderItem:
         )
         assert order_resp.status_code == status.HTTP_201_CREATED
 
-        order_item = OrderItem.objects.filter(
-            order__public_id=order_resp.json()["public_id"]
-        ).first()
+        order_item = OrderItem.objects.filter(order__public_id=order_resp.json()["public_id"]).first()
+        assert order_item is not None
 
         url = reverse(ORDER_ITEM_VOID_URL, kwargs={"public_id": order_item.public_id})
         response = auth.client.post(
@@ -415,3 +445,8 @@ class TestVoidOrderItem:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["void_reason_note"] == "Burnt to a crisp"
+
+        session = Session.objects.get(public_id=session_data["public_id"])
+        assert session.subtotal == Decimal("0")
+        assert session.tax == Decimal("0")
+        assert session.total == Decimal("0")

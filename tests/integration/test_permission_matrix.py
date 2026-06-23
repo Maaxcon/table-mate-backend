@@ -107,9 +107,7 @@ EDITOR_PATCH_DENIED = {RoleCode.COOK, RoleCode.CUSTOMER}
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("role", ROLES)
-def test_editor_table_patch_role_enforcement(
-    role: str, api: Callable[..., Any], restaurant: Any
-) -> None:
+def test_editor_table_patch_role_enforcement(role: str, api: Callable[..., Any], restaurant: Any) -> None:
     table = Table.objects.create(
         restaurant=restaurant,
         public_number="T-EDIT",

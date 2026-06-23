@@ -24,9 +24,7 @@ def _broadcast_hall_event(restaurant_id: int, event: dict[str, object]) -> None:
             {"type": "hall.event", "event": event},
         )
     except Exception:
-        logger.exception(
-            "Failed to broadcast hall event for restaurant %s", restaurant_id
-        )
+        logger.exception("Failed to broadcast hall event for restaurant %s", restaurant_id)
 
 
 def emit_hall_table_status_changed(

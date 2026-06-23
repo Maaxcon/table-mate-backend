@@ -68,13 +68,13 @@ _RESTAURANTS_DATA: list[_RestaurantData] = [
 ]
 
 DEFAULT_WORKING_HOURS: dict[str, dict[str, str]] = {
-    "monday": {"open": "10:00", "close": "23:00"},
-    "tuesday": {"open": "10:00", "close": "23:00"},
-    "wednesday": {"open": "10:00", "close": "23:00"},
-    "thursday": {"open": "10:00", "close": "23:00"},
-    "friday": {"open": "10:00", "close": "00:00"},
-    "saturday": {"open": "10:00", "close": "00:00"},
-    "sunday": {"open": "11:00", "close": "22:00"},
+    "mon": {"open": "10:00", "close": "23:00"},
+    "tue": {"open": "10:00", "close": "23:00"},
+    "wed": {"open": "10:00", "close": "23:00"},
+    "thu": {"open": "10:00", "close": "23:00"},
+    "fri": {"open": "10:00", "close": "00:00"},
+    "sat": {"open": "10:00", "close": "00:00"},
+    "sun": {"open": "11:00", "close": "22:00"},
 }
 
 
@@ -121,6 +121,7 @@ class Command(BaseCommand):
                     "working_hours": DEFAULT_WORKING_HOURS,
                 },
             )
+            settings.full_clean()  # catch invalid working_hours keys instead of seeding bad data
             if was_created_settings:
                 created_settings += 1
 
