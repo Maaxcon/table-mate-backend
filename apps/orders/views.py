@@ -32,6 +32,7 @@ from .serializers import (
     OrderSerializer,
     SessionSerializer,
     TicketSerializer,
+    TicketStatsSerializer,
     VoidReasonSerializer,
 )
 from .services import (
@@ -241,6 +242,7 @@ class TicketViewSet(
 
         transaction.on_commit(_emit)
 
+    @extend_schema(responses=TicketStatsSerializer)
     @action(
         detail=False,
         methods=["get"],
@@ -250,7 +252,9 @@ class TicketViewSet(
     def stats(self, request: Request, *args: object, **kwargs: object) -> Response:
         restaurant_id = require_restaurant_id_from_auth(request)
         avg = compute_avg_prep_time(restaurant_id)
-        return Response({"avg_prep_time_seconds": avg})
+        serializer = TicketStatsSerializer(data={"avg_prep_time_seconds": avg})
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data)
 
 
 @extend_schema(tags=["Orders"])

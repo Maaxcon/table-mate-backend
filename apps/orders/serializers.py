@@ -186,6 +186,10 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         ]
 
 
+class TicketStatsSerializer(serializers.Serializer[None]):
+    avg_prep_time_seconds = serializers.FloatField(allow_null=True)
+
+
 _ORDER_ITEM_STATUS_TRANSITIONS: dict[str, set[str]] = {
     OrderItemStatus.PENDING: {OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY},
     OrderItemStatus.IN_PROGRESS: {OrderItemStatus.READY},
