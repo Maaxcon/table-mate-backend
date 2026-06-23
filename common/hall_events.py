@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.core.cache import cache
 from django.utils import timezone
 
 from .channels import hall_group_name
@@ -15,8 +16,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_DEDUP_NAMESPACE = uuid.UUID("a3f7b2c1-4d5e-6f78-9a0b-1c2d3e4f5a6b")
+_DEDUP_TTL_SECONDS = 60
+
+
+def _stable_event_id(event_name: str, *parts: str | int) -> str:
+    """Derive a deterministic event_id from the event name and business keys."""
+    key = f"{event_name}:{':'.join(str(p) for p in parts)}"
+    return str(uuid.uuid5(_DEDUP_NAMESPACE, key))
+
 
 def _broadcast_hall_event(restaurant_id: int, event: dict[str, object]) -> None:
+    event_id = str(event.get("event_id", ""))
+    dedup_key = f"dedup:hall:{event_id}"
+    if not cache.add(dedup_key, "1", timeout=_DEDUP_TTL_SECONDS):
+        logger.debug("Dedup: skipping duplicate hall event %s", event_id)
+        return
+
     channel_layer = get_channel_layer()
     try:
         async_to_sync(channel_layer.group_send)(
@@ -41,7 +57,7 @@ def emit_hall_table_status_changed(
         {
             "event_name": "HALL_TABLE_STATUS_CHANGED",
             "schema_version": "1",
-            "event_id": str(uuid.uuid4()),
+            "event_id": _stable_event_id("HALL_TABLE_STATUS_CHANGED", table_id, current_status, session_id),
             "table_id": table_id,
             "previous_status": previous_status,
             "current_status": current_status,
@@ -63,7 +79,7 @@ def emit_hall_layout_published(
         {
             "event_name": "LAYOUT_PUBLISHED",
             "schema_version": "1",
-            "event_id": str(uuid.uuid4()),
+            "event_id": _stable_event_id("LAYOUT_PUBLISHED", layout_version_id),
             "layout_version_id": layout_version_id,
             "restaurant_id": restaurant_id,
             "occurred_at": timezone.now().isoformat(),
@@ -83,7 +99,7 @@ def emit_hall_reservation_cancelled(
         {
             "event_name": "HALL_RESERVATION_CANCELLED",
             "schema_version": "1",
-            "event_id": str(uuid.uuid4()),
+            "event_id": _stable_event_id("HALL_RESERVATION_CANCELLED", reservation_id, table_id),
             "reservation_id": reservation_id,
             "table_id": table_id,
             "actor_id": actor.pk,
@@ -107,7 +123,7 @@ def emit_hall_new_reservation(
         {
             "event_name": "HALL_NEW_RESERVATION",
             "schema_version": "1",
-            "event_id": str(uuid.uuid4()),
+            "event_id": _stable_event_id("HALL_NEW_RESERVATION", reservation_id, table_id),
             "reservation_id": reservation_id,
             "table_id": table_id,
             "start_at": start_at,

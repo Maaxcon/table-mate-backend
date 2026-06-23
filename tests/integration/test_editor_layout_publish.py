@@ -12,6 +12,7 @@ from apps.authentication.services import issue_tokens_with_restaurant
 from apps.editor.models import LayoutVersion
 from common.channels import hall_group_name
 from common.hall_events import emit_hall_layout_published
+from django.core.cache import cache
 from tests.conftest import UserFactory
 
 
@@ -86,6 +87,7 @@ TABLE_LAYOUT_C = {
 @pytest.mark.django_db
 class TestEmitHallLayoutPublished:
     def test_sends_to_correct_group(self, restaurant: Any) -> None:
+        cache.clear()
         with patch("common.hall_events.get_channel_layer") as mock_get_layer:
             mock_layer = AsyncMock()
             mock_get_layer.return_value = mock_layer
@@ -107,6 +109,7 @@ class TestEmitHallLayoutPublished:
             assert "occurred_at" in event
 
     def test_unique_event_id_per_call(self, restaurant: Any) -> None:
+        cache.clear()
         with patch("common.hall_events.get_channel_layer") as mock_get_layer:
             mock_layer = AsyncMock()
             mock_get_layer.return_value = mock_layer
@@ -118,6 +121,31 @@ class TestEmitHallLayoutPublished:
             event_id_2 = mock_layer.group_send.call_args[0][1]["event"]["event_id"]
 
             assert event_id_1 != event_id_2
+
+    def test_stable_event_id_for_same_operation(self, restaurant: Any) -> None:
+        cache.clear()
+        with patch("common.hall_events.get_channel_layer") as mock_get_layer:
+            mock_layer = AsyncMock()
+            mock_get_layer.return_value = mock_layer
+
+            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=1)
+            event_id_1 = mock_layer.group_send.call_args[0][1]["event"]["event_id"]
+
+            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=1)
+            event_id_2 = mock_layer.group_send.call_args[0][1]["event"]["event_id"]
+
+            assert event_id_1 == event_id_2
+
+    def test_dedup_skips_duplicate_broadcast(self, restaurant: Any) -> None:
+        cache.clear()
+        with patch("common.hall_events.get_channel_layer") as mock_get_layer:
+            mock_layer = AsyncMock()
+            mock_get_layer.return_value = mock_layer
+
+            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=1)
+            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=1)
+
+            assert mock_layer.group_send.call_count == 1
 
 
 @pytest.mark.django_db(databases=["default"], transaction=True)
