@@ -87,7 +87,7 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {
     "HALL_TABLE_STATUS_CHANGED": {"event_name", "table_id", "current_status", "occurred_at"},
     "HALL_NEW_RESERVATION": {"event_name", "table_id", "reservation_id", "start_at", "end_at", "occurred_at"},
-    "HALL_RESERVATION_CANCELLED": {"event_name", "table_id", "occurred_at"},
+    "HALL_RESERVATION_CANCELLED": {"event_name", "table_id", "reservation_id", "occurred_at"},
 }
 
 
