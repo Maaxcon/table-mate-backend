@@ -6,14 +6,13 @@ from django.db import transaction
 from apps.authentication.models import RoleCode, User
 from apps.orders.models import Order, OrderItemStatus, OrderPaymentStatus
 from apps.payments.models import Payment
+from common.money import quantize_money
 
 from .models import PaymentMethod, Receipt, ReceiptItem
 
-_CENTS = Decimal("0.01")
-
 
 def _money(value: Decimal) -> Decimal:
-    return Decimal(value).quantize(_CENTS)
+    return quantize_money(value)
 
 
 def _resolve_customer(order: Order) -> User | None:

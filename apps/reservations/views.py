@@ -25,7 +25,8 @@ from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
 from .serializers import ReservationSerializer
 from .services import (
-    activate_pending_reservation,
+    activate_reservation,
+    cancel_reservation,
     close_session,
     create_reservation,
     create_staff_reservation,
@@ -121,18 +122,24 @@ class ReservationViewSet(
 
     def partial_update(self, request: Request, *args: object, **kwargs: object) -> Response:
         instance = self.get_object()
-        if getattr(request.user, "role", None) == RoleCode.CUSTOMER and instance.customer_id != request.user.pk:
-            raise PermissionDenied("You can only modify your own reservations.")
+        if getattr(request.user, "role", None) == RoleCode.CUSTOMER:
+            if instance.customer_id != request.user.pk:
+                raise PermissionDenied("You can only modify your own reservations.")
+            if instance.status == ReservationStatus.ACTIVE:
+                raise PermissionDenied("This reservation is already active and can no longer be changed.")
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         status_val = serializer.validated_data.pop("status", None)
         if status_val is not None:
-            reservation = update_reservation_status(
-                instance,
-                new_status=status_val,
-                actor=request.user,  # type: ignore[arg-type]
-            )
+            if status_val == ReservationStatus.CANCELLED:
+                reservation = cancel_reservation(reservation=instance)
+            else:
+                reservation = update_reservation_status(
+                    instance,
+                    new_status=status_val,
+                    actor=request.user,  # type: ignore[arg-type]
+                )
             result_serializer = self.get_serializer(reservation)
             return Response(result_serializer.data)
 
@@ -143,6 +150,25 @@ class ReservationViewSet(
 
         result_serializer = self.get_serializer(reservation)
         return Response(result_serializer.data)
+
+    @extend_schema(
+        summary="Activate a reservation",
+        description="Flips a pending reservation to active without a QR scan. "
+        "Allowed for restaurant staff or the owning customer. Idempotent if already active.",
+        request=None,
+        responses={200: ReservationSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request: Request, *args: object, **kwargs: object) -> Response:
+        reservation = self.get_object()
+        is_staff = getattr(request.user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER)
+        result = activate_reservation(
+            reservation=reservation,
+            opened_by=request.user,
+            enforce_window=not is_staff,
+        )
+        serializer = self.get_serializer(result)
+        return Response(serializer.data)
 
     @extend_schema(
         summary="Available time slots for a table",
@@ -270,7 +296,11 @@ class ReservationViewSet(
 
     @extend_schema(
         summary="Move session to another table",
-        description="Moves an active session to a new table. Voids pending items and creates a new reservation.",
+        description=(
+            "Moves an active session to a new table. "
+            "Cancels the old reservation and creates a new one. "
+            "Pending items travel with the session."
+        ),
         request={
             "application/json": {
                 "type": "object",
@@ -322,21 +352,3 @@ class ReservationViewSet(
         close_session(session, actor=user)
 
         return Response({"detail": "Check closed successfully."})
-
-    @extend_schema(
-        summary="Activate pending reservation",
-        description="Activates a pending reservation and creates a session. "
-        "Only staff can activate. Table must be free with no earlier pending reservations.",
-    )
-    @action(detail=True, methods=["post"], url_path="activate")
-    def activate(self, request: Request, public_id: str | None = None) -> Response:
-        reservation = self.get_object()
-        user = cast(User, request.user)
-
-        if getattr(user, "role", None) not in (RoleCode.ADMIN, RoleCode.WAITER):
-            raise PermissionDenied("Only staff can activate reservations.")
-
-        updated = activate_pending_reservation(reservation, actor=user)
-
-        result_serializer = self.get_serializer(updated)
-        return Response(result_serializer.data)

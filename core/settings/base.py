@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "corsheaders",
     "channels",
+    "django_celery_beat",
     "apps.authentication",
     "apps.restaurants",
     "apps.editor",
@@ -164,6 +165,20 @@ CACHES = {
         "LOCATION": REDIS_URL,
         "KEY_PREFIX": "tablemate",
     }
+}
+
+# Celery: background/periodic tasks. Reuses Redis as the broker. Beat schedules
+# are stored in the DB (django_celery_beat) and seeded from CELERY_BEAT_SCHEDULE.
+CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", default=REDIS_URL)
+CELERY_RESULT_BACKEND = env.str("CELERY_RESULT_BACKEND", default="")
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_BEAT_SCHEDULE = {
+    "close-stale-carts": {
+        "task": "orders.close_stale_carts",
+        "schedule": float(env.int("CLOSE_STALE_CARTS_INTERVAL_SECONDS", default=300)),
+    },
 }
 
 SPECTACULAR_SETTINGS = {
