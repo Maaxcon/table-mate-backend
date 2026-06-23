@@ -99,7 +99,7 @@ def _filter_event_for_floor(event: dict[str, object]) -> dict[str, object]:
     return {k: v for k, v in event.items() if k in allowed}
 
 
-@database_sync_to_async
+@database_sync_to_async  # type: ignore[untyped-decorator]
 def _resolve_restaurant_from_uuid(public_id: str) -> int | None:
     from apps.restaurants.models import Restaurant
 

@@ -54,11 +54,12 @@ def create_cart_session(
             session = CartSession.objects.get(reservation=reservation, status=CartSessionStatus.ACTIVE)
 
         if created:
+            table_number = reservation.table.public_number if reservation.table else ""
             transaction.on_commit(
                 lambda: emit_cart_created(
                     restaurant_id,
                     session_id=str(session.public_id),
-                    table_number=reservation.table.public_number,
+                    table_number=table_number,
                     guest_name=user.get_full_name() if user else None,
                 )
             )
