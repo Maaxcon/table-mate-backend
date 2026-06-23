@@ -193,7 +193,7 @@ class TicketStatsSerializer(serializers.Serializer[None]):
 _ORDER_ITEM_STATUS_TRANSITIONS: dict[str, set[str]] = {
     OrderItemStatus.PENDING: {OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY},
     OrderItemStatus.IN_PROGRESS: {OrderItemStatus.READY},
-    OrderItemStatus.READY: {OrderItemStatus.SERVED},
+    OrderItemStatus.READY: {OrderItemStatus.SERVED, OrderItemStatus.PENDING},
     OrderItemStatus.SERVED: set(),
     OrderItemStatus.VOIDED: set(),
 }
