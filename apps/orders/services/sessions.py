@@ -10,6 +10,7 @@ from apps.reservations.models import ReservationStatus
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import Table
 from common.exceptions import NoActiveReservationError, ReservationNotFoundError
+from common.notification_events import emit_cart_created
 
 from ..models import CartSession, CartSessionStatus
 from ..selectors import _resolve_allowed_reservation_participant_ids, get_reservation
@@ -39,6 +40,8 @@ def create_cart_session(
         if existing is not None:
             existing.participants.add(*allowed_participants)
             return existing
+
+        created = False
         try:
             with transaction.atomic():
                 session = CartSession.objects.create(
@@ -46,8 +49,20 @@ def create_cart_session(
                     reservation=reservation,
                     created_by=user,
                 )
+                created = True
         except IntegrityError:
             session = CartSession.objects.get(reservation=reservation, status=CartSessionStatus.ACTIVE)
+
+        if created:
+            transaction.on_commit(
+                lambda: emit_cart_created(
+                    restaurant_id,
+                    session_id=str(session.public_id),
+                    table_number=reservation.table.public_number,
+                    guest_name=user.get_full_name() if user else None,
+                )
+            )
+
         session.participants.add(*allowed_participants)
     return session
 
@@ -84,6 +99,8 @@ def ensure_active_cart_for_table(
             if user is not None:
                 existing.participants.add(user)
             return existing
+
+        created = False
         try:
             with transaction.atomic():
                 session = CartSession.objects.create(
@@ -91,8 +108,20 @@ def ensure_active_cart_for_table(
                     reservation=reservation,
                     created_by=user,
                 )
+                created = True
         except IntegrityError:
             session = CartSession.objects.get(reservation=reservation, status=CartSessionStatus.ACTIVE)
+
+        if created:
+            transaction.on_commit(
+                lambda: emit_cart_created(
+                    reservation.restaurant_id,
+                    session_id=str(session.public_id),
+                    table_number=table.public_number,
+                    guest_name=user.get_full_name() if user else None,
+                )
+            )
+
         if user is not None:
             session.participants.add(user)
     return session
