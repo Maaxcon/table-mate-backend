@@ -88,6 +88,7 @@ class _UpcomingReservation(TypedDict):
     public_id: Any
     table_id: Any
     start_at: Any
+    end_at: Any
 
 
 class LayoutData(TypedDict):
@@ -123,6 +124,7 @@ def get_layout_data(restaurant_id: int) -> LayoutData:
             "public_id": r.public_id,
             "table_id": r.table.public_id,
             "start_at": r.start_at,
+            "end_at": r.end_at,
         }
         for r in reservations
         if r.table is not None

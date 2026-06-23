@@ -225,6 +225,7 @@ class UpcomingReservationSerializer(serializers.Serializer[None]):
     public_id = serializers.UUIDField()
     table_id = serializers.UUIDField()
     start_at = serializers.DateTimeField()
+    end_at = serializers.DateTimeField()
 
 
 class LayoutResponseSerializer(serializers.Serializer[None]):
