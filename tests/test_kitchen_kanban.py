@@ -28,6 +28,7 @@ ORDER_LIST_URL = reverse("order-list")
 SESSION_LIST_URL = reverse("session-list")
 TICKET_LIST_URL = reverse("ticket-list")
 ORDER_ITEM_LIST_URL = reverse("order-item-list")
+TICKET_STATS_URL = reverse("ticket-stats")
 
 
 def _create_session(client: Any, table: Table, restaurant_id: int) -> dict[str, Any]:
@@ -80,7 +81,7 @@ class TestKitchenSelectors:
             actor=actor,
         )
 
-        tickets = get_kitchen_tickets(restaurant_id)
+        tickets = list(get_kitchen_tickets(restaurant_id))
         assert len(tickets) == 1
         ticket = tickets[0]
         annotated = cast(Any, ticket)
@@ -108,17 +109,17 @@ class TestKitchenSelectors:
             actor=actor,
         )
 
-        incoming = get_kitchen_tickets(restaurant_id, status="incoming")
+        incoming = list(get_kitchen_tickets(restaurant_id, status="incoming"))
         assert len(incoming) == 1
 
-        active = get_kitchen_tickets(restaurant_id, status="active")
+        active = list(get_kitchen_tickets(restaurant_id, status="active"))
         assert len(active) == 0
 
     def test_get_kitchen_tickets_empty_restaurant(
         self,
         empty_restaurant: Any,
     ) -> None:
-        tickets = get_kitchen_tickets(empty_restaurant.id)
+        tickets = list(get_kitchen_tickets(empty_restaurant.id))
         assert tickets == []
 
     def test_get_kitchen_order_items_by_ticket(
@@ -142,7 +143,7 @@ class TestKitchenSelectors:
         ticket = order.tickets.first()
         assert ticket is not None
 
-        items = get_kitchen_order_items(restaurant_id, ticket_id=str(ticket.public_id))
+        items = list(get_kitchen_order_items(restaurant_id, ticket_id=str(ticket.public_id)))
         assert len(items) == 1
         assert items[0].menu_item.name == item.name
         assert items[0].status == OrderItemStatus.PENDING
@@ -172,10 +173,10 @@ class TestKitchenSelectors:
         order_item.status = OrderItemStatus.READY
         order_item.save(update_fields=["status"])
 
-        pending = get_kitchen_order_items(restaurant_id, ticket_id=str(ticket.public_id), status="pending")
+        pending = list(get_kitchen_order_items(restaurant_id, ticket_id=str(ticket.public_id), status="pending"))
         assert len(pending) == 0
 
-        ready = get_kitchen_order_items(restaurant_id, ticket_id=str(ticket.public_id), status="ready")
+        ready = list(get_kitchen_order_items(restaurant_id, ticket_id=str(ticket.public_id), status="ready"))
         assert len(ready) == 1
 
     def test_compute_avg_prep_time_no_completed_tickets(
@@ -403,6 +404,141 @@ class TestTicketKanbanAPI:
         payload = resp.json()
         results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
         assert len(results) >= 1
+
+    def test_ticket_list_fifo_counts_and_server_name_sanitized(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        cook = api(role=RoleCode.COOK, restaurant_id=restaurant.id)
+        waiter = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        waiter_user = waiter.user
+        waiter_user.first_name = ""
+        waiter_user.last_name = ""
+        waiter_user.save(update_fields=["first_name", "last_name"])
+
+        session = _build_session(table, restaurant.id, waiter_user)
+        order = create_order_with_items(
+            session=session,
+            items=[
+                {"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None},
+                {"menu_item": item, "guest_slot": 2, "quantity": 1, "comment": None},
+            ],
+            actor=waiter_user,
+        )
+        first_ticket = order.tickets.first()
+        assert first_ticket is not None
+        void_candidate = first_ticket.items.first()
+        assert void_candidate is not None
+        void_candidate.status = OrderItemStatus.VOIDED
+        void_candidate.save(update_fields=["status"])
+
+        later_order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=waiter_user,
+        )
+        second_ticket = later_order.tickets.first()
+        assert second_ticket is not None
+
+        resp = cook.client.get(TICKET_LIST_URL)
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.json()
+        results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        assert len(results) >= 2
+        assert [row["public_id"] for row in results[:2]] == [
+            str(first_ticket.public_id),
+            str(second_ticket.public_id),
+        ]
+        assert results[0]["items_count"] == 1
+        assert results[0]["server_name"] == ""
+
+    def test_ticket_stats_returns_avg_prep_time(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.COOK, restaurant_id=restaurant.id)
+        client = auth.client
+        user = auth.user
+        session = _build_session(table, restaurant.id, user)
+        order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=user,
+        )
+        ticket = order.tickets.first()
+        assert ticket is not None
+        ticket.status = TicketStatus.COMPLETED
+        ticket.injected_at = datetime.now(UTC) - timedelta(minutes=12)
+        ticket.completed_at = ticket.injected_at + timedelta(minutes=6)
+        ticket.save(update_fields=["status", "injected_at", "completed_at"])
+
+        resp = client.get(TICKET_STATS_URL)
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        assert data["avg_prep_time_seconds"] == pytest.approx(360.0, rel=0.1)
+
+    def test_waiter_can_mark_order_item_served(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        waiter = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = waiter.client
+        user = waiter.user
+        session = _build_session(table, restaurant.id, user)
+        order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=user,
+        )
+        order_item = order.items.first()
+        assert order_item is not None
+        order_item.status = OrderItemStatus.READY
+        order_item.save(update_fields=["status"])
+
+        item_url = reverse("order-item-detail", kwargs={"public_id": str(order_item.public_id)})
+        resp = client.patch(
+            item_url,
+            {"status": OrderItemStatus.SERVED},
+            content_type="application/json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["status"] == OrderItemStatus.SERVED
+
+    def test_waiter_cannot_mark_item_ready(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        waiter = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = waiter.client
+        user = waiter.user
+        session = _build_session(table, restaurant.id, user)
+        order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=user,
+        )
+        order_item = order.items.first()
+        assert order_item is not None
+
+        item_url = reverse("order-item-detail", kwargs={"public_id": str(order_item.public_id)})
+        resp = client.patch(
+            item_url,
+            {"status": OrderItemStatus.READY},
+            content_type="application/json",
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
 
     def test_cook_can_patch_ticket_status(
         self,

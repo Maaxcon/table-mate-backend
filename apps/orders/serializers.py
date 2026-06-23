@@ -129,17 +129,27 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
     items_count = serializers.SerializerMethodField()
 
     def get_server_name(self, obj: Ticket) -> str:
+        annotated_name = getattr(obj, "server_name", None)
+        if isinstance(annotated_name, str):
+            trimmed = annotated_name.strip()
+            if trimmed:
+                return trimmed
+
         created_by = getattr(obj.order, "created_by", None)
-        if not isinstance(created_by, User):
-            return ""
-        full_name = created_by.get_full_name().strip()
-        if full_name:
-            return full_name
-        email = getattr(created_by, "email", "")
-        return email or ""
+        if isinstance(created_by, User):
+            full_name = f"{created_by.first_name} {created_by.last_name}".strip()
+            if full_name:
+                return full_name
+        return ""
 
     def get_items_count(self, obj: Ticket) -> int:
-        return obj.items.count()
+        annotated_count = getattr(obj, "items_count", None)
+        if annotated_count is not None:
+            try:
+                return int(annotated_count)
+            except (TypeError, ValueError):
+                return 0
+        return obj.items.exclude(status=OrderItemStatus.VOIDED).count()
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

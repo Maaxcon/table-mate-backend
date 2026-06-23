@@ -2,22 +2,29 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 from django.db import transaction
+from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.authentication.models import User
+from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsFloor, IsKitchen, IsStaff
-from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
+from apps.orders.selectors import compute_avg_prep_time, get_kitchen_order_items, get_kitchen_tickets
+from common.api import (
+    RestaurantScopedViewSetMixin,
+    get_restaurant_id_from_auth,
+    require_restaurant_id_from_auth,
+)
 from common.exceptions import TableOccupiedError
 from common.hall_events import emit_hall_table_status_changed
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
 from .billing import close_visit_session, ensure_visit_session
-from .models import Order, OrderItem, Session, SessionStatus, Ticket, VoidReason
+from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, VoidReason
 from .serializers import (
     CreateOrderSerializer,
     OrderItemSerializer,
@@ -190,6 +197,7 @@ class TicketViewSet(
         "session__table",
         "order__created_by",
         "session",
+        "restaurant",
     ).prefetch_related("items")
     serializer_class = TicketSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
@@ -206,6 +214,12 @@ class TicketViewSet(
         if self.action in {"list", "retrieve"}:
             return [IsStaff()]
         return super().get_permissions()
+
+    def safely_get_queryset(self, qs: QuerySet[Ticket]) -> QuerySet[Ticket]:
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        if restaurant_id is None:
+            return qs.none()
+        return get_kitchen_tickets(restaurant_id)
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         instance = serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
@@ -226,6 +240,17 @@ class TicketViewSet(
             )
 
         transaction.on_commit(_emit)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="stats",
+        permission_classes=[IsStaff],
+    )
+    def stats(self, request: Request, *args: object, **kwargs: object) -> Response:
+        restaurant_id = require_restaurant_id_from_auth(request)
+        avg = compute_avg_prep_time(restaurant_id)
+        return Response({"avg_prep_time_seconds": avg})
 
 
 @extend_schema(tags=["Orders"])
@@ -253,9 +278,17 @@ class OrderItemViewSet(
     def get_permissions(self) -> Sequence[object]:  # type: ignore[override]
         if self.action in {"list", "retrieve"}:
             return [IsStaff()]
-        if self.action in {"create", "partial_update"}:
+        if self.action == "partial_update":
+            return [IsStaff()]
+        if self.action == "create":
             return [IsKitchen()]
         return super().get_permissions()
+
+    def safely_get_queryset(self, qs: QuerySet[OrderItem]) -> QuerySet[OrderItem]:
+        restaurant_id = get_restaurant_id_from_auth(self.request)
+        if restaurant_id is None:
+            return qs.none()
+        return get_kitchen_order_items(restaurant_id)
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
@@ -266,6 +299,10 @@ class OrderItemViewSet(
 
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+
+        new_status = serializer.validated_data.get("status")
+        if new_status is not None:
+            self._enforce_status_permissions(request, new_status)
         serializer.save()
 
         instance.refresh_from_db()
@@ -290,6 +327,14 @@ class OrderItemViewSet(
             transaction.on_commit(_emit)
 
         return Response(serializer.data)
+
+    def _enforce_status_permissions(self, request: Request, status_value: str) -> None:
+        role = getattr(request.user, "role", None)
+        if role in {RoleCode.ADMIN, RoleCode.COOK}:
+            return
+        if role == RoleCode.WAITER and status_value == OrderItemStatus.SERVED:
+            return
+        raise PermissionDenied("Only kitchen staff can update this order item status.")
 
     @extend_schema(
         request=OrderItemVoidRequestSerializer,

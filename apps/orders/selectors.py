@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import MutableMapping, Sequence
+from collections.abc import MutableMapping
 from typing import cast
 
-from django.db.models import Avg, CharField, Count, F, OuterRef, Subquery, Value
+from django.db.models import Avg, CharField, Count, F, OuterRef, QuerySet, Subquery, Value
 from django.db.models.functions import Coalesce, Concat, Extract, Trim
 
 from apps.authentication.models import User
@@ -24,7 +24,9 @@ def get_kitchen_tickets(
     restaurant_id: int,
     *,
     status: str | None = None,
-) -> Sequence[Ticket]:
+    session_public_id: str | None = None,
+    order_public_id: str | None = None,
+) -> QuerySet[Ticket]:
     """Return tickets annotated with table_number, server_name, guest_count, items_count.
 
     Results are ordered by injected_at (FIFO) per the constitution's injection-time
@@ -43,7 +45,9 @@ def get_kitchen_tickets(
             "session__table",
             "order__created_by",
             "session",
+            "restaurant",
         )
+        .prefetch_related("items")
         .annotate(
             table_number=F("session__table__table_number"),
             server_name=Trim(
@@ -64,7 +68,13 @@ def get_kitchen_tickets(
     if status is not None:
         qs = qs.filter(status=status)
 
-    return list(qs)
+    if session_public_id is not None:
+        qs = qs.filter(session__public_id=session_public_id)
+
+    if order_public_id is not None:
+        qs = qs.filter(order__public_id=order_public_id)
+
+    return qs
 
 
 def get_kitchen_order_items(
@@ -72,12 +82,14 @@ def get_kitchen_order_items(
     *,
     ticket_id: str | None = None,
     status: str | None = None,
-) -> Sequence[OrderItem]:
+    session_public_id: str | None = None,
+    order_public_id: str | None = None,
+) -> QuerySet[OrderItem]:
     """Return order items for kitchen kanban view, filtered by ticket or status."""
     qs = (
-        OrderItem.objects.select_related("menu_item", "ticket")
+        OrderItem.objects.select_related("menu_item", "ticket", "order__session", "restaurant")
         .filter(restaurant_id=restaurant_id)
-        .order_by("created_at")
+        .order_by("created_at", "id")
     )
 
     if ticket_id is not None:
@@ -86,7 +98,13 @@ def get_kitchen_order_items(
     if status is not None:
         qs = qs.filter(status=status)
 
-    return list(qs)
+    if session_public_id is not None:
+        qs = qs.filter(order__session__public_id=session_public_id)
+
+    if order_public_id is not None:
+        qs = qs.filter(order__public_id=order_public_id)
+
+    return qs
 
 
 def compute_avg_prep_time(restaurant_id: int) -> float | None:
