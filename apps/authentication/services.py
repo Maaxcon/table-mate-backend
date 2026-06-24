@@ -49,7 +49,7 @@ def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
 
 def verify_google_id_token(token: str) -> dict[str, Any]:
     try:
-        claims = verify_oauth2_token(token, GoogleAuthRequest(), settings.GOOGLE_CLIENT_ID)
+        claims = verify_oauth2_token(token, GoogleAuthRequest(), settings.GOOGLE_CLIENT_ID)  # type: ignore[no-untyped-call]
     except ValueError as exc:
         logger.warning("Google id_token verification failed: %s", exc)
         raise ValueError("Google id_token verification failed.") from exc
@@ -71,7 +71,6 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
     email: str | None = claims.get("email")
     if not email:
         raise ValueError("Google account has no email.")
-    email = email.lower()
 
     user = get_user_by_email(email)
     if user is None:

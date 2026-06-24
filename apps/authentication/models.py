@@ -3,6 +3,7 @@ from typing import Any, ClassVar
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
+from django.db.models.functions import Lower
 
 from common.models import BaseModel
 
@@ -82,9 +83,18 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
             models.CheckConstraint(
                 condition=models.Q(role__in=RoleCode.values),
                 name="authentication_user_role_valid",
-            )
+            ),
+            models.UniqueConstraint(
+                Lower("email"),
+                name="authentication_user_email_ci_unique",
+            ),
         ]
         ordering = ["id"]
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if self.email:
+            self.email = self.email.lower()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.email

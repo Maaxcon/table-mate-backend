@@ -5,10 +5,10 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework_simplejwt.tokens import AccessToken, Token
 
-from apps.authentication.models import RoleCode
+from apps.authentication.models import RoleCode, User
 from apps.authentication.services import google_authenticate, issue_tokens, issue_tokens_with_restaurant
 from tests.conftest import UserFactory
 
@@ -205,6 +205,19 @@ class TestGoogleAuthenticate:
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.pk == existing.pk
+
+
+@pytest.mark.django_db
+class TestUserEmailNormalization:
+    def test_save_lowercases_email(self) -> None:
+        user = User.objects.create_user(email="Mixed.Case@Example.com")
+        assert user.email == "mixed.case@example.com"
+
+    def test_email_unique_is_case_insensitive(self) -> None:
+        User.objects.create_user(email="dupe@example.com")
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                User.objects.create_user(email="Dupe@Example.com")
 
 
 @pytest.mark.django_db
