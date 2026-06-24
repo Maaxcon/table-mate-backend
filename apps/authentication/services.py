@@ -1,4 +1,5 @@
 import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -9,6 +10,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import RoleCode, User
 from .selectors import get_user_by_email
+
+logger = logging.getLogger(__name__)
 
 _GOOGLE_OAUTH_EXCHANGE_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
@@ -29,12 +32,16 @@ def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
         with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             return cast(dict[str, Any], json.loads(resp.read()))
     except urllib.error.HTTPError as exc:
+        raw = exc.read()
         try:
-            body: dict[str, Any] = json.loads(exc.read())
+            body: dict[str, Any] = json.loads(raw)
         except json.JSONDecodeError:
+            logger.warning("Google token exchange failed (status=%s): %s", exc.code, raw[:1000])
             raise ValueError("Google token exchange failed.") from exc
+        logger.warning("Google token exchange failed (status=%s): %s", exc.code, body)
         raise ValueError(body.get("error_description", "Google token exchange failed.")) from exc
     except urllib.error.URLError as exc:
+        logger.warning("Failed to reach Google token endpoint: %s", exc.reason)
         raise ValueError(f"Failed to reach Google: {exc.reason}") from exc
 
 
@@ -46,7 +53,11 @@ def fetch_google_userinfo(access_token: str) -> dict[str, Any]:
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
             return cast(dict[str, Any], json.loads(resp.read()))
+    except urllib.error.HTTPError as exc:
+        logger.warning("Google userinfo failed (status=%s): %s", exc.code, exc.read()[:1000])
+        raise ValueError("Failed to fetch Google account info.") from exc
     except urllib.error.URLError as exc:
+        logger.warning("Failed to reach Google userinfo endpoint: %s", exc.reason)
         raise ValueError(f"Failed to reach Google: {exc.reason}") from exc
 
 
