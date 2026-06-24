@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from django.core.cache import cache
 from rest_framework.test import APIClient
 
 from apps.authentication.models import RoleCode
@@ -12,7 +13,6 @@ from apps.authentication.services import issue_tokens_with_restaurant
 from apps.editor.models import LayoutVersion
 from common.channels import hall_group_name
 from common.hall_events import emit_hall_layout_published
-from django.core.cache import cache
 from tests.conftest import UserFactory
 
 
