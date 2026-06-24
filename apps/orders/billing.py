@@ -209,6 +209,11 @@ def checkout_cart_session(
 
         order_subtotal = Decimal("0")
         order_tax = Decimal("0")
+        # Build a map of guest_identity → display_name for this session.
+        from apps.orders.models import GuestProfile
+        guest_names = dict(
+            GuestProfile.objects.filter(cart_session=cart_session).values_list("guest_identity", "display_name")
+        )
         for cart_item in cart_items:
             unit_price = cart_item.menu_item.price
             line_total = quantize_money(unit_price * cart_item.quantity)
@@ -219,6 +224,7 @@ def checkout_cart_session(
                 ticket=ticket,
                 menu_item=cart_item.menu_item,
                 guest_slot=cart_item.guest_slot or 0,
+                guest_display_name=guest_names.get(cart_item.guest_identity),
                 quantity=cart_item.quantity,
                 comment=cart_item.comment,
                 unit_price=unit_price,
