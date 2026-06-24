@@ -134,6 +134,10 @@ SIMPLE_JWT = {
 
 GOOGLE_CLIENT_ID = env.str("GOOGLE_CLIENT_ID", default="")
 GOOGLE_CLIENT_SECRET = env.str("GOOGLE_CLIENT_SECRET", default="")
+GOOGLE_ALLOWED_REDIRECT_URIS = env.list(
+    "GOOGLE_ALLOWED_REDIRECT_URIS",
+    default=["http://localhost:5173", "http://127.0.0.1:5173"],
+)
 
 CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 CORS_ALLOWED_ORIGINS = env.list(
