@@ -127,14 +127,17 @@ class ReservationViewSet(
         if getattr(request.user, "role", None) == RoleCode.CUSTOMER:
             if instance.customer_id != request.user.pk:
                 raise PermissionDenied("You can only modify your own reservations.")
-            if instance.status == ReservationStatus.ACTIVE:
-                raise PermissionDenied("This reservation is already active and can no longer be changed.")
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         status_val = serializer.validated_data.pop("status", None)
         if status_val is not None:
             if status_val == ReservationStatus.CANCELLED:
+                if (
+                    getattr(request.user, "role", None) == RoleCode.CUSTOMER
+                    and instance.status == ReservationStatus.ACTIVE
+                ):
+                    raise PermissionDenied("You cannot cancel an active reservation.")
                 reservation = cancel_reservation(reservation=instance)
             else:
                 reservation = update_reservation_status(

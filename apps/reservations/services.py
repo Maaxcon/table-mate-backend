@@ -225,6 +225,14 @@ def reschedule_reservation(
     reservation: Reservation,
     validated_data: dict[str, Any],
 ) -> Reservation:
+    if reservation.status == ReservationStatus.ACTIVE:
+        allowed = {"end_at", "notes"}
+        disallowed = set(validated_data) - allowed
+        if disallowed:
+            raise ReservationConflictError(
+                f"Active reservations can only be prolonged (end_at). Cannot change: {', '.join(sorted(disallowed))}."
+            )
+
     table = validated_data.get("table", reservation.table)
     if table is None:
         raise ReservationConflictError("Table not found or inactive.")
