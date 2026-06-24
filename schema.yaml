@@ -1414,6 +1414,36 @@ paths:
           description: Cart is empty.
         '409':
           description: 'Cart changed: unavailable items were removed (code CART_CHANGED).'
+  /api/orders/cart/sessions/{session_pk}/guest-name/:
+    post:
+      operationId: orders_cart_sessions_guest_name_create
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetGuestName'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SetGuestName'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SetGuestName'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          description: No response body
   /api/orders/cart/sessions/{session_pk}/items/:
     get:
       operationId: orders_cart_sessions_items_list
@@ -3519,6 +3549,10 @@ components:
         is_paid:
           type: boolean
           readOnly: true
+        display_name:
+          type: string
+          nullable: true
+          readOnly: true
         cart_session:
           type: string
           format: uuid
@@ -3539,6 +3573,7 @@ components:
       - added_by
       - cart_session
       - created_at
+      - display_name
       - guest_slot
       - is_mine
       - is_paid
@@ -4206,6 +4241,10 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        guest_display_name:
+          type: string
+          nullable: true
+          maxLength: 128
         quantity:
           type: integer
           maximum: 2147483647
@@ -5088,6 +5127,10 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        guest_display_name:
+          type: string
+          nullable: true
+          maxLength: 128
         quantity:
           type: integer
           maximum: 2147483647
@@ -6043,6 +6086,14 @@ components:
         * `open` - Open
         * `closed` - Closed
         * `voided` - Voided
+    SetGuestName:
+      type: object
+      properties:
+        display_name:
+          type: string
+          maxLength: 128
+      required:
+      - display_name
     ShapeEnum:
       enum:
       - rectangle
