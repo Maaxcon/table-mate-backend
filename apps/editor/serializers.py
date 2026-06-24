@@ -63,8 +63,8 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
 class TableEntitySerializer(serializers.Serializer[Any]):
     id = serializers.UUIDField(required=False, allow_null=True, default=None)
     public_number = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
-    x = serializers.IntegerField(min_value=0)
-    y = serializers.IntegerField(min_value=0)
+    x = serializers.IntegerField(min_value=-100)
+    y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
     rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
@@ -86,8 +86,8 @@ class TableEntitySerializer(serializers.Serializer[Any]):
 
 
 class ObstacleEntitySerializer(serializers.Serializer[Any]):
-    x = serializers.IntegerField(min_value=0)
-    y = serializers.IntegerField(min_value=0)
+    x = serializers.IntegerField(min_value=-100)
+    y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
     rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
@@ -95,8 +95,8 @@ class ObstacleEntitySerializer(serializers.Serializer[Any]):
 
 
 class ThresholdEntitySerializer(serializers.Serializer[Any]):
-    x = serializers.IntegerField(min_value=0)
-    y = serializers.IntegerField(min_value=0)
+    x = serializers.IntegerField(min_value=-100)
+    y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
     threshold_label = serializers.CharField(
@@ -106,8 +106,8 @@ class ThresholdEntitySerializer(serializers.Serializer[Any]):
 
 
 class PortalEntitySerializer(serializers.Serializer[Any]):
-    x = serializers.IntegerField(min_value=0)
-    y = serializers.IntegerField(min_value=0)
+    x = serializers.IntegerField(min_value=-100)
+    y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
     target_zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
