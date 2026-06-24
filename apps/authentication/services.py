@@ -71,6 +71,7 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
     email: str | None = claims.get("email")
     if not email:
         raise ValueError("Google account has no email.")
+    email = email.lower()
 
     user = get_user_by_email(email)
     if user is None:

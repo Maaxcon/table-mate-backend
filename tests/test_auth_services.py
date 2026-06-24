@@ -164,6 +164,30 @@ class TestGoogleAuthenticate:
             with pytest.raises(ValueError, match="no email"):
                 google_authenticate("code123", "http://localhost:3000")
 
+    def test_matches_existing_user_case_insensitively(self) -> None:
+        existing = UserFactory.create(email="mixed@example.com")
+
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {"email": "Mixed@Example.com", "email_verified": True}
+            user = google_authenticate("code123", "http://localhost:3000")
+
+        assert user.pk == existing.pk
+
+    def test_creates_new_user_with_lowercased_email(self) -> None:
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {"email": "New.User@Example.com", "email_verified": True}
+            user = google_authenticate("code123", "http://localhost:3000")
+
+        assert user.email == "new.user@example.com"
+
     def test_reuses_user_created_by_concurrent_login(self) -> None:
         existing = UserFactory.create(email="race@example.com")
 
