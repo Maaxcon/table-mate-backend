@@ -2396,6 +2396,10 @@ paths:
           * `completed` - Completed
           * `cancelled` - Cancelled
       - in: query
+        name: status__in
+        schema:
+          type: string
+      - in: query
         name: table
         schema:
           type: integer
@@ -2641,6 +2645,10 @@ paths:
           * `active` - Active
           * `completed` - Completed
           * `cancelled` - Cancelled
+      - in: query
+        name: status__in
+        schema:
+          type: string
       - in: query
         name: table
         schema:
@@ -4063,10 +4071,10 @@ components:
       properties:
         x:
           type: integer
-          minimum: 0
+          minimum: -100
         y:
           type: integer
-          minimum: 0
+          minimum: -100
         width:
           type: integer
           minimum: 1
@@ -5460,10 +5468,10 @@ components:
       properties:
         x:
           type: integer
-          minimum: 0
+          minimum: -100
         y:
           type: integer
-          minimum: 0
+          minimum: -100
         width:
           type: integer
           minimum: 1
@@ -6086,10 +6094,10 @@ components:
           maxLength: 64
         x:
           type: integer
-          minimum: 0
+          minimum: -100
         y:
           type: integer
-          minimum: 0
+          minimum: -100
         width:
           type: integer
           minimum: 1
@@ -6145,10 +6153,10 @@ components:
       properties:
         x:
           type: integer
-          minimum: 0
+          minimum: -100
         y:
           type: integer
-          minimum: 0
+          minimum: -100
         width:
           type: integer
           minimum: 1
@@ -6281,7 +6289,11 @@ components:
         start_at:
           type: string
           format: date-time
+        end_at:
+          type: string
+          format: date-time
       required:
+      - end_at
       - public_id
       - start_at
       - table_id
