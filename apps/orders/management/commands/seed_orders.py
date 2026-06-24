@@ -244,7 +244,7 @@ class Command(BaseCommand):
                         guest_slot=1,
                         defaults={
                             "quantity": 2,
-                            "status": OrderItemStatus.SERVED,
+                            "status": OrderItemStatus.READY,
                             "unit_price": mi.price,
                             "total_price": mi.price * 2,
                             "tax_rate": 0.1,
@@ -266,6 +266,5 @@ def random_item_status() -> str:
             OrderItemStatus.PENDING,
             OrderItemStatus.IN_PROGRESS,
             OrderItemStatus.READY,
-            OrderItemStatus.SERVED,
         ]
     )

@@ -2210,6 +2210,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/Ticket'
           description: ''
+  /api/orders/tickets/stats/:
+    get:
+      operationId: orders_tickets_stats_retrieve
+      tags:
+      - Orders
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketStats'
+          description: ''
   /api/orders/void-reasons/:
     get:
       operationId: orders_void_reasons_list
@@ -5370,6 +5385,18 @@ components:
           type: string
           format: date-time
           nullable: true
+        table_number:
+          type: string
+          readOnly: true
+        server_name:
+          type: string
+          readOnly: true
+        guest_count:
+          type: integer
+          readOnly: true
+        items_count:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -6206,6 +6233,18 @@ components:
           type: string
           format: date-time
           nullable: true
+        table_number:
+          type: string
+          readOnly: true
+        server_name:
+          type: string
+          readOnly: true
+        guest_count:
+          type: integer
+          readOnly: true
+        items_count:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -6216,12 +6255,25 @@ components:
           readOnly: true
       required:
       - created_at
+      - guest_count
       - injected_at
+      - items_count
       - order
       - public_id
       - restaurant
+      - server_name
       - session
+      - table_number
       - updated_at
+    TicketStats:
+      type: object
+      properties:
+        avg_prep_time_seconds:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - avg_prep_time_seconds
     TicketStatusEnum:
       enum:
       - incoming

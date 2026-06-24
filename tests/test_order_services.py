@@ -2,7 +2,7 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from django.urls import reverse
@@ -28,7 +28,7 @@ SESSION_LIST_URL = reverse("session-list")
 ORDER_ITEM_VOID_URL = "order-item-void"
 
 
-def _create_session(client: Any, table: Table, restaurant_id: int) -> Any:
+def _create_session(client: Any, table: Table, restaurant_id: int) -> dict[str, Any]:
     response = client.post(
         SESSION_LIST_URL,
         {
@@ -40,7 +40,8 @@ def _create_session(client: Any, table: Table, restaurant_id: int) -> Any:
         content_type="application/json",
     )
     assert response.status_code == status.HTTP_201_CREATED
-    return response.json()
+    data = cast(dict[str, Any], response.json())
+    return data
 
 
 def _build_session(
@@ -332,10 +333,11 @@ class TestOrderItemStatusPatch:
         table: Table,
         item: MenuItem,
     ) -> None:
-        auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
-        session_data = _create_session(auth.client, table, table.restaurant_id)
+        floor_ctx = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
+        kitchen_ctx = api(role=RoleCode.COOK, restaurant_id=table.restaurant_id)
+        session_data = _create_session(floor_ctx.client, table, table.restaurant_id)
 
-        order_resp = auth.client.post(
+        order_resp = floor_ctx.client.post(
             ORDER_LIST_URL,
             {
                 "session": session_data["public_id"],
@@ -349,7 +351,7 @@ class TestOrderItemStatusPatch:
         assert order_item is not None
 
         url = reverse("order-item-detail", kwargs={"public_id": order_item.public_id})
-        response = auth.client.patch(
+        response = kitchen_ctx.client.patch(
             url,
             {"status": OrderItemStatus.SERVED},
             content_type="application/json",
