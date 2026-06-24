@@ -1,6 +1,7 @@
 # mypy: disable-error-code="no-untyped-call"
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any, cast
 
 import pytest
@@ -8,7 +9,7 @@ from django.urls import reverse
 from rest_framework import status
 
 from apps.authentication.models import RoleCode
-from apps.menu.models import MenuItem
+from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.orders.models import (
     OrderItemStatus,
     Session,
@@ -20,7 +21,7 @@ from apps.orders.selectors import (
     get_kitchen_tickets,
 )
 from apps.orders.services import create_order_with_items, open_session
-from apps.restaurants.models import Table
+from apps.restaurants.models import Restaurant, Table
 
 from .conftest import AuthContext
 
@@ -57,6 +58,29 @@ def _build_session(table: Table, restaurant_id: int, user: Any) -> Session:
         opened_at=datetime.now(UTC).isoformat(),
         actor=user,
     )
+
+
+def _create_foreign_restaurant_stack(name: str = "Foreign Restaurant") -> tuple[Restaurant, Table, MenuItem]:
+    restaurant = Restaurant.objects.create(name=name, address="456 Side St")
+    table = Table.objects.create(
+        restaurant=restaurant,
+        table_number="T-foreign",
+        capacity=4,
+        active=True,
+    )
+    menu = Menu.objects.create(restaurant=restaurant, name=f"{name} Menu", is_active=True)
+    category = MenuCategory.objects.create(menu=menu, name="Foreign Mains", sort_order=1)
+    item = MenuItem.objects.create(
+        restaurant=restaurant,
+        menu=menu,
+        category=category,
+        name="Foreign Dish",
+        description="Prepared elsewhere",
+        price=Decimal("19.9900"),
+        sort_order=1,
+        is_available=True,
+    )
+    return restaurant, table, item
 
 
 @pytest.mark.django_db(databases=["default"])
@@ -338,6 +362,45 @@ class TestTicketKanbanAPI:
         results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
         assert len(results) == 1
 
+    def test_ticket_list_excludes_other_restaurant_tickets(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        waiter = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = waiter.client
+        actor = waiter.user
+
+        session = _build_session(table, restaurant.id, actor)
+        local_order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        )
+        local_ticket = local_order.tickets.first()
+        assert local_ticket is not None
+
+        foreign_restaurant, foreign_table, foreign_item = _create_foreign_restaurant_stack()
+        foreign_waiter = api(role=RoleCode.WAITER, restaurant_id=foreign_restaurant.id).user
+        foreign_session = _build_session(foreign_table, foreign_restaurant.id, foreign_waiter)
+        foreign_order = create_order_with_items(
+            session=foreign_session,
+            items=[{"menu_item": foreign_item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=foreign_waiter,
+        )
+        foreign_ticket = foreign_order.tickets.first()
+        assert foreign_ticket is not None
+
+        resp = client.get(TICKET_LIST_URL)
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.json()
+        results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        public_ids = {row["public_id"] for row in results}
+        assert str(local_ticket.public_id) in public_ids
+        assert str(foreign_ticket.public_id) not in public_ids
+
     def test_waiter_cannot_update_ticket_or_items(
         self,
         api: Callable[..., AuthContext],
@@ -404,6 +467,53 @@ class TestTicketKanbanAPI:
         payload = resp.json()
         results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
         assert len(results) >= 1
+
+    def test_order_item_list_rejects_foreign_session(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        waiter = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = waiter.client
+        actor = waiter.user
+
+        session = _build_session(table, restaurant.id, actor)
+        local_order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        )
+        assert local_order.items.exists()
+
+        foreign_restaurant, foreign_table, foreign_item = _create_foreign_restaurant_stack()
+        foreign_waiter = api(role=RoleCode.WAITER, restaurant_id=foreign_restaurant.id).user
+        foreign_session = _build_session(foreign_table, foreign_restaurant.id, foreign_waiter)
+        foreign_order = create_order_with_items(
+            session=foreign_session,
+            items=[{"menu_item": foreign_item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=foreign_waiter,
+        )
+        assert foreign_order.items.exists()
+
+        resp = client.get(
+            ORDER_ITEM_LIST_URL,
+            {"order__session__public_id": str(session.public_id)},
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.json()
+        local_results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        assert len(local_results) >= 1
+
+        resp = client.get(
+            ORDER_ITEM_LIST_URL,
+            {"order__session__public_id": str(foreign_session.public_id)},
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.json()
+        foreign_results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        assert foreign_results == []
 
     def test_ticket_list_fifo_counts_and_server_name_sanitized(
         self,
