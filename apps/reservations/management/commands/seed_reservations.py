@@ -119,13 +119,13 @@ class Command(BaseCommand):
                     "status": ReservationStatus.PENDING,
                     "notes": None,
                 },
-                # ── Far future pending (outside 15 min window → shows FREE) ──
+                # ── Pending reservation (within 15 min window → shows RESERVED) ──
                 {
                     "table": "T10",
                     "customer": customers[0 % len(customers)],
                     "guest_count": 4,
-                    "start_at": now + timedelta(days=2, hours=1),
-                    "end_at": now + timedelta(days=2, hours=3),
+                    "start_at": now + timedelta(minutes=5),
+                    "end_at": now + timedelta(hours=2),
                     "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.PENDING,
                     "notes": None,
