@@ -250,6 +250,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "menu_item",
             "menu_item_name",
             "guest_slot",
+            "guest_display_name",
             "quantity",
             "comment",
             "modifiers",
