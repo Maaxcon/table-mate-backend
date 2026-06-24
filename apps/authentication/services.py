@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 _GOOGLE_OAUTH_EXCHANGE_URL = "https://oauth2.googleapis.com/token"
 
+# Reused across verifications so id_token cert fetches share one connection pool
+# instead of opening a fresh transport per login.
+_google_auth_request = GoogleAuthRequest()
+
 
 def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
     payload = urllib.parse.urlencode(
@@ -49,7 +53,7 @@ def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
 
 def verify_google_id_token(token: str) -> dict[str, Any]:
     try:
-        claims = verify_oauth2_token(token, GoogleAuthRequest(), settings.GOOGLE_CLIENT_ID)  # type: ignore[no-untyped-call]
+        claims = verify_oauth2_token(token, _google_auth_request, settings.GOOGLE_CLIENT_ID)  # type: ignore[no-untyped-call]
     except ValueError as exc:
         logger.warning("Google id_token verification failed: %s", exc)
         raise ValueError("Google id_token verification failed.") from exc
