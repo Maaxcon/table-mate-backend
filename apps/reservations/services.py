@@ -3,7 +3,7 @@ from typing import Any
 
 from django.db import transaction
 from django.db.models import OuterRef, Subquery
-from django.db.models.functions import Greatest
+from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
@@ -62,7 +62,7 @@ def _check_reservation_conflict(
             table=table,
             status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
         )
-        .annotate(effective_start=Greatest("start_at", Subquery(active_session_subquery)))
+        .annotate(effective_start=Greatest("start_at", Coalesce(Subquery(active_session_subquery), "start_at")))
         .filter(
             effective_start__lt=end_at,
             end_at__gt=start_at,

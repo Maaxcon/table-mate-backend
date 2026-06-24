@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from django.db import models as dm
 from django.db.models import OuterRef, QuerySet, Subquery
-from django.db.models.functions import Greatest
+from django.db.models.functions import Coalesce, Greatest
 
 from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
@@ -80,7 +80,7 @@ def get_available_tables(
     reservations = Reservation.objects.filter(
         restaurant_id=restaurant_id,
         status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-    ).annotate(effective_start=Greatest("start_at", Subquery(active_session_subquery)))
+    ).annotate(effective_start=Greatest("start_at", Coalesce(Subquery(active_session_subquery), "start_at")))
 
     overlapping = reservations.filter(
         effective_start__lt=end_at,
