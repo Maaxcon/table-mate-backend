@@ -89,6 +89,8 @@ class _UpcomingReservation(TypedDict):
     table_id: Any
     start_at: Any
     end_at: Any
+    customer_name: Any
+    guest_count: Any
 
 
 class LayoutData(TypedDict):
@@ -117,7 +119,7 @@ def get_layout_data(restaurant_id: int) -> LayoutData:
         restaurant_id=restaurant_id,
         status=ReservationStatus.PENDING,
         start_at__lte=today_end,
-    ).select_related("table")
+    ).select_related("table", "customer")
 
     upcoming: list[_UpcomingReservation] = [
         {
@@ -125,6 +127,8 @@ def get_layout_data(restaurant_id: int) -> LayoutData:
             "table_id": r.table.public_id,
             "start_at": r.start_at,
             "end_at": r.end_at,
+            "customer_name": r.customer.get_full_name() or r.customer.email,
+            "guest_count": r.guest_count,
         }
         for r in reservations
         if r.table is not None
