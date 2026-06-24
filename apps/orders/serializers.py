@@ -118,7 +118,7 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         queryset=Order.objects.all(),
     )
     table_number = serializers.CharField(
-        source="session.table.table_number",
+        source="session.table.public_number",
         read_only=True,
     )
     server_name = serializers.SerializerMethodField()
