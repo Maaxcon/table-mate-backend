@@ -5,6 +5,7 @@ from common.models import RestaurantScopedModel
 from .cart_item import CartItem as CartItem
 from .cart_session import CartSession as CartSession
 from .cart_session import CartSessionStatus as CartSessionStatus
+from .guest_profile import GuestProfile as GuestProfile
 
 
 class SessionStatus(models.TextChoices):
@@ -241,6 +242,7 @@ class OrderItem(RestaurantScopedModel):
         related_name="order_items",
     )
     guest_slot = models.PositiveIntegerField()
+    guest_display_name = models.CharField(max_length=128, null=True, blank=True)
     quantity = models.PositiveIntegerField()
     comment = models.TextField(null=True, blank=True)
     modifiers = models.JSONField(null=True, blank=True)
