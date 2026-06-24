@@ -6,6 +6,7 @@ import urllib.request
 from typing import Any, cast
 
 from django.conf import settings
+from django.db import IntegrityError, transaction
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.id_token import verify_oauth2_token
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -73,13 +74,20 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
 
     user = get_user_by_email(email)
     if user is None:
-        user = User.objects.create_user(
-            email=email,
-            first_name=claims.get("given_name", ""),
-            last_name=claims.get("family_name", ""),
-            role=RoleCode.CUSTOMER,
-        )
-    elif not user.is_active:
+        try:
+            with transaction.atomic():
+                return User.objects.create_user(
+                    email=email,
+                    first_name=claims.get("given_name", ""),
+                    last_name=claims.get("family_name", ""),
+                    role=RoleCode.CUSTOMER,
+                )
+        except IntegrityError:
+            user = get_user_by_email(email)
+            if user is None:
+                raise
+
+    if not user.is_active:
         raise ValueError("This account has been deactivated.")
     return user
 

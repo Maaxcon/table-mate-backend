@@ -5,6 +5,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.db import IntegrityError
 from rest_framework_simplejwt.tokens import AccessToken, Token
 
 from apps.authentication.models import RoleCode
@@ -162,6 +163,24 @@ class TestGoogleAuthenticate:
             mock_verify.return_value = {"email_verified": True}
             with pytest.raises(ValueError, match="no email"):
                 google_authenticate("code123", "http://localhost:3000")
+
+    def test_reuses_user_created_by_concurrent_login(self) -> None:
+        existing = UserFactory.create(email="race@example.com")
+
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+            patch("apps.authentication.services.get_user_by_email", side_effect=[None, existing]),
+            patch(
+                "apps.authentication.services.User.objects.create_user",
+                side_effect=IntegrityError("duplicate key value violates unique constraint"),
+            ),
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {"email": "race@example.com", "email_verified": True}
+            user = google_authenticate("code123", "http://localhost:3000")
+
+        assert user.pk == existing.pk
 
 
 @pytest.mark.django_db
