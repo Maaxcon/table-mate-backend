@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from apps.authentication.authentication import GuestJWTAuthentication
 from apps.authentication.models import User
 from apps.orders.billing import checkout_cart_session
-from apps.orders.models import CartItem, CartSession
+from apps.orders.models import CartItem, CartSession, GuestProfile
 from apps.orders.permissions import IsActiveTableGuest
 from apps.orders.selectors import get_cart_session, is_cart_participant
 from apps.orders.services import (
@@ -29,6 +29,7 @@ from .serializers import (
     CartItemSerializer,
     CartSessionSerializer,
     CheckoutResponseSerializer,
+    SetGuestNameSerializer,
     UpdateCartItemSerializer,
 )
 
@@ -311,3 +312,38 @@ class CartCheckoutView(GuestFallbackAuthMixin, APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+@extend_schema(tags=["Cart"])
+class SetGuestNameView(GuestFallbackAuthMixin, APIView):
+    permission_classes = [IsActiveTableGuest]
+
+    @extend_schema(
+        request=SetGuestNameSerializer,
+        responses={200: None},
+    )
+    def post(self, request: Request, session_pk: str) -> Response:
+        serializer = SetGuestNameSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        guest_identity = _get_guest_identity_from_request(request)
+        if not guest_identity:
+            return Response(
+                {"detail": "Guest identity required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session = CartSession.objects.filter(public_id=session_pk).first()
+        if session is None:
+            return Response(
+                {"detail": "Cart session not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        GuestProfile.objects.update_or_create(
+            cart_session=session,
+            guest_identity=guest_identity,
+            defaults={"display_name": serializer.validated_data["display_name"]},
+        )
+
+        return Response(status=status.HTTP_200_OK)
