@@ -21,6 +21,7 @@ from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
 
+from .filters import ReservationFilter
 from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
@@ -63,7 +64,7 @@ class ReservationViewSet(
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
-    filterset_fields = ["customer", "table", "status"]
+    filterset_class = ReservationFilter
     ordering_fields = ["created_at", "updated_at", "start_at", "end_at", "guest_count"]
 
     def get_permissions(self) -> Sequence[BasePermission]:
