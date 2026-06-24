@@ -34,13 +34,17 @@ def _http_error(description: str, code: int = 400) -> urllib.error.HTTPError:
 @pytest.mark.django_db
 class TestGoogleAuthenticate:
     def test_creates_new_user(self) -> None:
-        with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
-            mock_open.side_effect = [
-                _urlopen_mock({"access_token": "goog-tok"}),
-                _urlopen_mock(
-                    {"email": "new@example.com", "email_verified": True, "given_name": "John", "family_name": "Doe"}
-                ),
-            ]
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {
+                "email": "new@example.com",
+                "email_verified": True,
+                "given_name": "John",
+                "family_name": "Doe",
+            }
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.email == "new@example.com"
@@ -51,11 +55,12 @@ class TestGoogleAuthenticate:
     def test_returns_existing_user(self) -> None:
         existing = UserFactory.create(email="existing@example.com")
 
-        with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
-            mock_open.side_effect = [
-                _urlopen_mock({"access_token": "goog-tok"}),
-                _urlopen_mock({"email": "existing@example.com", "email_verified": True}),
-            ]
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {"email": "existing@example.com", "email_verified": True}
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.pk == existing.pk
@@ -85,18 +90,31 @@ class TestGoogleAuthenticate:
             with pytest.raises(ValueError, match="Google token exchange failed"):
                 google_authenticate("bad-code", "http://localhost:3000")
 
-    def test_raises_when_no_access_token_in_response(self) -> None:
+    def test_raises_when_no_id_token_in_response(self) -> None:
         with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
             mock_open.return_value = _urlopen_mock({})
-            with pytest.raises(ValueError, match="No access token"):
+            with pytest.raises(ValueError, match="No id_token"):
+                google_authenticate("code123", "http://localhost:3000")
+
+    def test_raises_on_invalid_id_token(self) -> None:
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch(
+                "apps.authentication.services.verify_oauth2_token",
+                side_effect=ValueError("Token expired"),
+            ),
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            with pytest.raises(ValueError, match="id_token verification failed"):
                 google_authenticate("code123", "http://localhost:3000")
 
     def test_creates_user_with_no_given_or_family_name(self) -> None:
-        with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
-            mock_open.side_effect = [
-                _urlopen_mock({"access_token": "goog-tok"}),
-                _urlopen_mock({"email": "x@example.com", "email_verified": True}),
-            ]
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {"email": "x@example.com", "email_verified": True}
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.email == "x@example.com"
@@ -104,40 +122,44 @@ class TestGoogleAuthenticate:
         assert user.last_name == ""
 
     def test_raises_when_email_not_verified(self) -> None:
-        with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
-            mock_open.side_effect = [
-                _urlopen_mock({"access_token": "goog-tok"}),
-                _urlopen_mock({"email": "x@example.com", "email_verified": False}),
-            ]
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {"email": "x@example.com", "email_verified": False}
             with pytest.raises(ValueError, match="not verified"):
                 google_authenticate("code123", "http://localhost:3000")
 
     def test_raises_when_email_verified_missing(self) -> None:
-        with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
-            mock_open.side_effect = [
-                _urlopen_mock({"access_token": "goog-tok"}),
-                _urlopen_mock({}),
-            ]
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {}
             with pytest.raises(ValueError, match="not verified"):
                 google_authenticate("code123", "http://localhost:3000")
 
     def test_raises_for_inactive_account(self) -> None:
         UserFactory.create(email="inactive@example.com", is_active=False)
 
-        with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
-            mock_open.side_effect = [
-                _urlopen_mock({"access_token": "goog-tok"}),
-                _urlopen_mock({"email": "inactive@example.com", "email_verified": True}),
-            ]
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {"email": "inactive@example.com", "email_verified": True}
             with pytest.raises(ValueError, match="deactivated"):
                 google_authenticate("code123", "http://localhost:3000")
 
-    def test_raises_when_no_email_field_in_userinfo(self) -> None:
-        with patch("apps.authentication.services.urllib.request.urlopen") as mock_open:
-            mock_open.side_effect = [
-                _urlopen_mock({"access_token": "goog-tok"}),
-                _urlopen_mock({"email_verified": True}),
-            ]
+    def test_raises_when_no_email_field_in_claims(self) -> None:
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {"email_verified": True}
             with pytest.raises(ValueError, match="no email"):
                 google_authenticate("code123", "http://localhost:3000")
 

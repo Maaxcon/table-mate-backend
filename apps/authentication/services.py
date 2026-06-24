@@ -6,6 +6,8 @@ import urllib.request
 from typing import Any, cast
 
 from django.conf import settings
+from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.oauth2.id_token import verify_oauth2_token
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import RoleCode, User
@@ -14,7 +16,6 @@ from .selectors import get_user_by_email
 logger = logging.getLogger(__name__)
 
 _GOOGLE_OAUTH_EXCHANGE_URL = "https://oauth2.googleapis.com/token"
-_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 
 def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
@@ -45,35 +46,28 @@ def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
         raise ValueError(f"Failed to reach Google: {exc.reason}") from exc
 
 
-def fetch_google_userinfo(access_token: str) -> dict[str, Any]:
-    req = urllib.request.Request(
-        _GOOGLE_USERINFO_URL,
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
+def verify_google_id_token(token: str) -> dict[str, Any]:
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
-            return cast(dict[str, Any], json.loads(resp.read()))
-    except urllib.error.HTTPError as exc:
-        logger.warning("Google userinfo failed (status=%s): %s", exc.code, exc.read()[:1000])
-        raise ValueError("Failed to fetch Google account info.") from exc
-    except urllib.error.URLError as exc:
-        logger.warning("Failed to reach Google userinfo endpoint: %s", exc.reason)
-        raise ValueError(f"Failed to reach Google: {exc.reason}") from exc
+        claims = verify_oauth2_token(token, GoogleAuthRequest(), settings.GOOGLE_CLIENT_ID)
+    except ValueError as exc:
+        logger.warning("Google id_token verification failed: %s", exc)
+        raise ValueError("Google id_token verification failed.") from exc
+    return cast(dict[str, Any], claims)
 
 
 def google_authenticate(code: str, redirect_uri: str) -> User:
     token_data = exchange_google_code(code, redirect_uri)
 
-    google_access_token: str | None = token_data.get("access_token")
-    if not google_access_token:
-        raise ValueError("No access token in Google response.")
+    raw_id_token: str | None = token_data.get("id_token")
+    if not raw_id_token:
+        raise ValueError("No id_token in Google response.")
 
-    userinfo = fetch_google_userinfo(google_access_token)
+    claims = verify_google_id_token(raw_id_token)
 
-    if not userinfo.get("email_verified"):
+    if not claims.get("email_verified"):
         raise ValueError("Google account email is not verified.")
 
-    email: str | None = userinfo.get("email")
+    email: str | None = claims.get("email")
     if not email:
         raise ValueError("Google account has no email.")
 
@@ -81,8 +75,8 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
     if user is None:
         user = User.objects.create_user(
             email=email,
-            first_name=userinfo.get("given_name", ""),
-            last_name=userinfo.get("family_name", ""),
+            first_name=claims.get("given_name", ""),
+            last_name=claims.get("family_name", ""),
             role=RoleCode.CUSTOMER,
         )
     elif not user.is_active:
@@ -109,8 +103,8 @@ def issue_tokens_with_restaurant(user: User, restaurant_id: int) -> tuple[str, s
 
 __all__ = [
     "exchange_google_code",
-    "fetch_google_userinfo",
     "google_authenticate",
     "issue_tokens",
     "issue_tokens_with_restaurant",
+    "verify_google_id_token",
 ]
