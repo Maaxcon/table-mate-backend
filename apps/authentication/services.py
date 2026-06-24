@@ -118,5 +118,4 @@ __all__ = [
     "google_authenticate",
     "issue_tokens",
     "issue_tokens_with_restaurant",
-    "verify_google_id_token",
 ]
