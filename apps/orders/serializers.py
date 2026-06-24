@@ -117,6 +117,39 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
     order: PublicIdRelatedField[Order] = PublicIdRelatedField(
         queryset=Order.objects.all(),
     )
+    table_number = serializers.CharField(
+        source="session.table.table_number",
+        read_only=True,
+    )
+    server_name = serializers.SerializerMethodField()
+    guest_count = serializers.IntegerField(
+        source="session.guest_count",
+        read_only=True,
+    )
+    items_count = serializers.SerializerMethodField()
+
+    def get_server_name(self, obj: Ticket) -> str:
+        annotated_name = getattr(obj, "server_name", None)
+        if isinstance(annotated_name, str):
+            trimmed = annotated_name.strip()
+            if trimmed:
+                return trimmed
+
+        created_by = getattr(obj.order, "created_by", None)
+        if isinstance(created_by, User):
+            full_name = f"{created_by.first_name} {created_by.last_name}".strip()
+            if full_name:
+                return full_name
+        return ""
+
+    def get_items_count(self, obj: Ticket) -> int:
+        annotated_count = getattr(obj, "items_count", None)
+        if annotated_count is not None:
+            try:
+                return int(annotated_count)
+            except (TypeError, ValueError):
+                return 0
+        return obj.items.exclude(status=OrderItemStatus.VOIDED).count()
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -134,16 +167,33 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
             "injected_at",
             "started_at",
             "completed_at",
+            "table_number",
+            "server_name",
+            "guest_count",
+            "items_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "restaurant", "created_at", "updated_at"]
+        read_only_fields = [
+            "public_id",
+            "restaurant",
+            "table_number",
+            "server_name",
+            "guest_count",
+            "items_count",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class TicketStatsSerializer(serializers.Serializer[None]):
+    avg_prep_time_seconds = serializers.FloatField(allow_null=True)
 
 
 _ORDER_ITEM_STATUS_TRANSITIONS: dict[str, set[str]] = {
-    OrderItemStatus.PENDING: {OrderItemStatus.IN_PROGRESS},
+    OrderItemStatus.PENDING: {OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY},
     OrderItemStatus.IN_PROGRESS: {OrderItemStatus.READY},
-    OrderItemStatus.READY: {OrderItemStatus.SERVED},
+    OrderItemStatus.READY: {OrderItemStatus.SERVED, OrderItemStatus.PENDING},
     OrderItemStatus.SERVED: set(),
     OrderItemStatus.VOIDED: set(),
 }
