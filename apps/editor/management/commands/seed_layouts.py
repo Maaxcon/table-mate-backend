@@ -140,10 +140,13 @@ class Command(BaseCommand):
                 for t in Table.objects.filter(restaurant=restaurant, active=True)
             }
 
+            def _zone_id(name: str, *, _zones: dict = zones) -> str:
+                z = _zones.get(name) or next(iter(_zones.values()), None)
+                return str(z.public_id) if z else ""
+
             tables_payload: list[dict[str, Any]] = []
             for td in cfg["tables"]:
                 tbl = tables.get(td["public_number"])
-                zn = zones.get(td["zone_name"])
                 tables_payload.append({
                     "id": str(tbl.public_id) if tbl else None,
                     "public_number": td["public_number"],
@@ -154,14 +157,13 @@ class Command(BaseCommand):
                     "rotation": td["rotation"],
                     "shape": td["shape"],
                     "capacity": td["capacity"],
-                    "zone_id": str(zn.public_id) if zn else None,
+                    "zone_id": _zone_id(td["zone_name"]),
                     "tags": td.get("tags", []),
                 })
 
             portals_payload: list[dict[str, Any]] = []
             for pd in cfg.get("portals", []):
                 tz = zones.get(pd["target_zone_name"])
-                pz = zones.get(pd.get("zone_name", ""))
                 portals_payload.append({
                     "x": pd["x"],
                     "y": pd["y"],
@@ -169,30 +171,28 @@ class Command(BaseCommand):
                     "height": pd["height"],
                     "target_zone_id": str(tz.public_id) if tz else None,
                     "portal_label": pd.get("portal_label", ""),
-                    "zone_id": str(pz.public_id) if pz else None,
+                    "zone_id": _zone_id(pd.get("zone_name", "")),
                 })
 
             obstacles_payload: list[dict[str, Any]] = []
             for od in cfg.get("obstacles", []):
-                oz = zones.get(od.get("zone_name", ""))
                 obstacles_payload.append({
                     "x": od["x"],
                     "y": od["y"],
                     "width": od["width"],
                     "height": od["height"],
                     "rotation": od.get("rotation", 0),
-                    "zone_id": str(oz.public_id) if oz else None,
+                    "zone_id": _zone_id(od.get("zone_name", "")),
                 })
 
             thresholds_payload: list[dict[str, Any]] = []
             for thd in cfg.get("thresholds", []):
-                thz = zones.get(thd.get("zone_name", ""))
                 thresholds_payload.append({
                     "x": thd["x"],
                     "y": thd["y"],
                     "width": thd["width"],
                     "height": thd["height"],
-                    "zone_id": str(thz.public_id) if thz else None,
+                    "zone_id": _zone_id(thd.get("zone_name", "")),
                 })
 
             layout_json = {

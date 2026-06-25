@@ -74,7 +74,7 @@ class TableEntitySerializer(serializers.Serializer[Any]):
     rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
     shape = serializers.ChoiceField(choices=["rectangle", "round", "square", "booth"])
     capacity = serializers.IntegerField(min_value=1, max_value=20)
-    zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    zone_id = serializers.UUIDField()
     tags = serializers.ListField(child=serializers.CharField(), required=False, default=list)
 
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -95,7 +95,7 @@ class ObstacleEntitySerializer(serializers.Serializer[Any]):
     width = serializers.IntegerField(min_value=1, max_value=CANVAS_WIDTH)
     height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
     rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
-    zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    zone_id = serializers.UUIDField()
 
 
 class ThresholdEntitySerializer(serializers.Serializer[Any]):
@@ -106,7 +106,7 @@ class ThresholdEntitySerializer(serializers.Serializer[Any]):
     threshold_label = serializers.CharField(
         max_length=64, required=False, allow_blank=True, default="", source="label"
     )
-    zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    zone_id = serializers.UUIDField()
 
 
 class PortalEntitySerializer(serializers.Serializer[Any]):
@@ -116,7 +116,7 @@ class PortalEntitySerializer(serializers.Serializer[Any]):
     height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
     target_zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     portal_label = serializers.CharField(max_length=64, required=False, allow_blank=True, default="", source="label")
-    zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    zone_id = serializers.UUIDField()
 
 
 class PublishLayoutSerializer(serializers.Serializer[Any]):

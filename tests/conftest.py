@@ -18,7 +18,7 @@ from rest_framework.test import APIClient
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
 from apps.menu.models import Menu, MenuCategory, MenuItem
-from apps.restaurants.models import Restaurant, RestaurantSettings, Table
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table, Zone
 
 if TYPE_CHECKING:
     from apps.authentication.models import User as _User
@@ -73,6 +73,14 @@ class RestaurantSettingsFactory(DjangoModelFactory[RestaurantSettings]):
     eta_min_minutes = 20
     eta_max_minutes = 30
     price_band = 2
+
+
+class ZoneFactory(DjangoModelFactory[Zone]):
+    class Meta:
+        model = Zone
+
+    restaurant = SubFactory(RestaurantFactory)
+    name = Sequence(lambda n: f"Zone {n}")
 
 
 class MenuFactory(DjangoModelFactory[Menu]):
@@ -175,11 +183,17 @@ def empty_restaurant() -> Restaurant:
 
 
 @pytest.fixture
-def table(restaurant: Restaurant) -> Table:
+def zone(restaurant: Restaurant) -> Zone:
+    return cast(Zone, ZoneFactory(restaurant=restaurant, name="Main Hall"))
+
+
+@pytest.fixture
+def table(restaurant: Restaurant, zone: Zone) -> Table:
     return Table.objects.create(
         restaurant=restaurant,
         public_number="T1",
         capacity=4,
+        zone=zone,
         active=True,
     )
 

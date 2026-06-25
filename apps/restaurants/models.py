@@ -114,9 +114,7 @@ class Table(RestaurantScopedModel):
     active = models.BooleanField(default=True)
     zone = models.ForeignKey(
         Zone,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="tables",
     )
 

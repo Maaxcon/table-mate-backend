@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
-from apps.restaurants.models import Table
+from apps.restaurants.models import Table, Zone
 from tests.conftest import UserFactory
 
 ENDPOINTS: list[str] = [
@@ -112,6 +112,7 @@ def test_editor_table_patch_role_enforcement(role: str, api: Callable[..., Any],
         restaurant=restaurant,
         public_number="T-EDIT",
         capacity=4,
+        zone=Zone.objects.create(restaurant=restaurant, name="Test Zone"),
         active=True,
     )
     ctx = api(role=role, restaurant_id=restaurant.id)

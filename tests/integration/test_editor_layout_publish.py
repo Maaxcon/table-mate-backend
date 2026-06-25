@@ -47,6 +47,8 @@ def _table(
     capacity: int = 4,
     rotation: int = 0,
     public_number: str = "",
+    *,
+    zone_id: str | None = None,
 ) -> dict[str, Any]:
     return {
         "id": None,
@@ -57,32 +59,35 @@ def _table(
         "rotation": rotation,
         "shape": shape,
         "capacity": capacity,
-        "zone_id": None,
+        "zone_id": zone_id,
         "public_number": public_number,
         "tags": [],
     }
 
 
-TABLE_LAYOUT_A = {
-    "tables": [_table(x=10, y=20)],
-}
+def _layout_a(zone_id: str) -> dict[str, Any]:
+    return {"tables": [_table(x=10, y=20, zone_id=zone_id)]}
 
-TABLE_LAYOUT_B = {
-    "tables": [
-        _table(x=10, y=20),
-        _table(x=50, y=60, width=600, height=600, shape="round", capacity=6, rotation=90),
-    ]
-}
 
-TABLE_LAYOUT_C = {
-    "tables": [
-        _table(x=15, y=25),
-        _table(
-            x=100, y=200, width=800, height=400,
-            shape="rectangle", capacity=8, rotation=180,
-        ),
-    ]
-}
+def _layout_b(zone_id: str) -> dict[str, Any]:
+    return {
+        "tables": [
+            _table(x=10, y=20, zone_id=zone_id),
+            _table(x=50, y=60, width=600, height=600, shape="round", capacity=6, rotation=90, zone_id=zone_id),
+        ]
+    }
+
+
+def _layout_c(zone_id: str) -> dict[str, Any]:
+    return {
+        "tables": [
+            _table(x=15, y=25, zone_id=zone_id),
+            _table(
+                x=100, y=200, width=800, height=400,
+                shape="rectangle", capacity=8, rotation=180, zone_id=zone_id,
+            ),
+        ]
+    }
 
 
 @pytest.mark.django_db
@@ -183,13 +188,13 @@ class TestEmitHallLayoutPublished:
 
 @pytest.mark.django_db(databases=["default"], transaction=True)
 class TestPublishEndpoint:
-    def test_admin_can_publish(self, restaurant: Any) -> None:
+    def test_admin_can_publish(self, restaurant: Any, zone: Any) -> None:
         client = _admin_api(restaurant.id)
 
         with patch("apps.editor.services.emit_hall_layout_published") as mock_emit:
             response = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_A,
+                _layout_a(str(zone.public_id)),
                 format="json",
             )
 
@@ -210,7 +215,7 @@ class TestPublishEndpoint:
 
         response = client.post(
             "/api/editor/layouts/publish/",
-            TABLE_LAYOUT_A,
+            _layout_a(""),
             format="json",
         )
 
@@ -221,29 +226,30 @@ class TestPublishEndpoint:
 
         response = client.post(
             "/api/editor/layouts/publish/",
-            TABLE_LAYOUT_A,
+            _layout_a(""),
             format="json",
         )
 
         assert response.status_code == 401
 
-    def test_three_publishes_produce_three_rows(self, restaurant: Any) -> None:
+    def test_three_publishes_produce_three_rows(self, restaurant: Any, zone: Any) -> None:
+        zid = str(zone.public_id)
         client = _admin_api(restaurant.id)
 
         with patch("apps.editor.services.emit_hall_layout_published"):
             resp1 = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_A,
+                _layout_a(zid),
                 format="json",
             )
             resp2 = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_B,
+                _layout_b(zid),
                 format="json",
             )
             resp3 = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_C,
+                _layout_c(zid),
                 format="json",
             )
 
@@ -253,31 +259,32 @@ class TestPublishEndpoint:
 
         assert LayoutVersion.objects.count() == 3
 
-    def test_older_rows_remain_unchanged(self, restaurant: Any) -> None:
+    def test_older_rows_remain_unchanged(self, restaurant: Any, zone: Any) -> None:
+        zid = str(zone.public_id)
         client = _admin_api(restaurant.id)
 
         with patch("apps.editor.services.emit_hall_layout_published"):
             resp1 = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_A,
+                _layout_a(zid),
                 format="json",
             )
             client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_B,
+                _layout_b(zid),
                 format="json",
             )
             client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_C,
+                _layout_c(zid),
                 format="json",
             )
 
         version_1 = LayoutVersion.objects.get(public_id=resp1.json()["public_id"])
         assert "tables" in version_1.layout_json
-        assert len(version_1.layout_json["tables"]) == len(TABLE_LAYOUT_A["tables"])
+        assert len(version_1.layout_json["tables"]) == len(_layout_a(zid)["tables"])
 
-    def test_active_sessions_unaffected(self, restaurant: Any, table: Any) -> None:
+    def test_active_sessions_unaffected(self, restaurant: Any, table: Any, zone: Any) -> None:
         from django.utils import timezone
 
         from apps.orders.models import Session, SessionStatus
@@ -312,11 +319,12 @@ class TestPublishEndpoint:
         existing_table_entry = _table(
             x=200, y=300, width=400, height=400,
             public_number=table.public_number,
+            zone_id=str(zone.public_id),
         )
         existing_table_entry["id"] = str(table.public_id)
         layout_with_existing = {
             "tables": [
-                {**TABLE_LAYOUT_A["tables"][0]},
+                {**_layout_a(str(zone.public_id))["tables"][0]},
                 existing_table_entry,
             ]
         }
@@ -365,7 +373,7 @@ class TestPublishEndpoint:
         """Moving a table (same id, new position) must never trigger the in-use 400."""
         reservation = self._make_reservation(restaurant, table)
 
-        moved = _table(x=900, y=900, public_number=table.public_number)
+        moved = _table(x=900, y=900, public_number=table.public_number, zone_id=str(table.zone.public_id))
         moved["id"] = str(table.public_id)
 
         client = _admin_api(restaurant.id)
@@ -392,7 +400,7 @@ class TestPublishEndpoint:
         with patch("apps.editor.services.emit_hall_layout_published"):
             response = client.post(
                 "/api/editor/layouts/publish/",
-                {"tables": [_table(x=10, y=20)], "deleted_table_ids": []},
+                {"tables": [_table(x=10, y=20, zone_id=str(table.zone.public_id))], "deleted_table_ids": []},
                 format="json",
             )
 
@@ -447,18 +455,19 @@ class TestPublishEndpoint:
         version = LayoutVersion.objects.get(public_id=response.json()["public_id"])
         assert "deleted_table_ids" not in version.layout_json
 
-    def test_parent_version_linked_on_second_publish(self, restaurant: Any) -> None:
+    def test_parent_version_linked_on_second_publish(self, restaurant: Any, zone: Any) -> None:
+        zid = str(zone.public_id)
         client = _admin_api(restaurant.id)
 
         with patch("apps.editor.services.emit_hall_layout_published"):
             resp1 = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_A,
+                _layout_a(zid),
                 format="json",
             )
             resp2 = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_B,
+                _layout_b(zid),
                 format="json",
             )
 
@@ -466,7 +475,8 @@ class TestPublishEndpoint:
         v2 = LayoutVersion.objects.get(public_id=resp2.json()["public_id"])
         assert v2.parent_version_id == v1_pk
 
-    def test_each_publish_emits_hall_event(self, restaurant: Any) -> None:
+    def test_each_publish_emits_hall_event(self, restaurant: Any, zone: Any) -> None:
+        zid = str(zone.public_id)
         client = _admin_api(restaurant.id)
 
         with patch("common.hall_events.get_channel_layer") as mock_get_layer:
@@ -475,17 +485,17 @@ class TestPublishEndpoint:
 
             resp1 = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_A,
+                _layout_a(zid),
                 format="json",
             )
             resp2 = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_B,
+                _layout_b(zid),
                 format="json",
             )
             resp3 = client.post(
                 "/api/editor/layouts/publish/",
-                TABLE_LAYOUT_C,
+                _layout_c(zid),
                 format="json",
             )
 
@@ -504,12 +514,16 @@ class TestPublishEndpoint:
     # Cross-tenant isolation
     # ------------------------------------------------------------------
 
-    def test_cross_tenant_delete_isolation(self, restaurant: Any) -> None:
+    def test_cross_tenant_delete_isolation(self, restaurant: Any, zone: Any) -> None:
+        from apps.restaurants.models import Zone
+
         other_restaurant = RestaurantFactory()
+        other_zone = Zone.objects.create(restaurant=other_restaurant, name="Main Hall")
         other_table = Table.objects.create(
             restaurant=other_restaurant,
             public_number="X001",
             capacity=4,
+            zone=other_zone,
         )
 
         client = _admin_api(restaurant.id)
@@ -517,7 +531,7 @@ class TestPublishEndpoint:
             response = client.post(
                 "/api/editor/layouts/publish/",
                 {
-                    "tables": [_table(x=10, y=20)],
+                    "tables": [_table(x=10, y=20, zone_id=str(zone.public_id))],
                     "deleted_table_ids": [str(other_table.public_id)],
                 },
                 format="json",
@@ -531,9 +545,10 @@ class TestPublishEndpoint:
     # Validation rejection
     # ------------------------------------------------------------------
 
-    def test_rejects_out_of_bounds_table(self, restaurant: Any) -> None:
+    def test_rejects_out_of_bounds_table(self, restaurant: Any, zone: Any) -> None:
+        zid = str(zone.public_id)
         client = _admin_api(restaurant.id)
-        payload = {"tables": [_table(x=2500, y=2500)]}
+        payload = {"tables": [_table(x=2500, y=2500, zone_id=zid)]}
         response = client.post(
             "/api/editor/layouts/publish/",
             payload,
@@ -541,10 +556,11 @@ class TestPublishEndpoint:
         )
         assert response.status_code == 400
 
-    def test_rejects_round_table_mismatched_dimensions(self, restaurant: Any) -> None:
+    def test_rejects_round_table_mismatched_dimensions(self, restaurant: Any, zone: Any) -> None:
+        zid = str(zone.public_id)
         client = _admin_api(restaurant.id)
         payload = {
-            "tables": [_table(width=400, height=200, shape="round")]
+            "tables": [_table(width=400, height=200, shape="round", zone_id=zid)]
         }
         response = client.post(
             "/api/editor/layouts/publish/",
@@ -553,9 +569,10 @@ class TestPublishEndpoint:
         )
         assert response.status_code == 400
 
-    def test_rejects_zero_capacity(self, restaurant: Any) -> None:
+    def test_rejects_zero_capacity(self, restaurant: Any, zone: Any) -> None:
+        zid = str(zone.public_id)
         client = _admin_api(restaurant.id)
-        payload = {"tables": [_table(capacity=0)]}
+        payload = {"tables": [_table(capacity=0, zone_id=zid)]}
         response = client.post(
             "/api/editor/layouts/publish/",
             payload,
@@ -563,9 +580,10 @@ class TestPublishEndpoint:
         )
         assert response.status_code == 400
 
-    def test_rejects_invalid_shape(self, restaurant: Any) -> None:
+    def test_rejects_invalid_shape(self, restaurant: Any, zone: Any) -> None:
+        zid = str(zone.public_id)
         client = _admin_api(restaurant.id)
-        payload = {"tables": [_table(shape="triangle")]}
+        payload = {"tables": [_table(shape="triangle", zone_id=zid)]}
         response = client.post(
             "/api/editor/layouts/publish/",
             payload,

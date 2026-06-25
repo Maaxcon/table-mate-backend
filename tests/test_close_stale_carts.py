@@ -9,11 +9,12 @@ from django.utils import timezone
 from apps.orders.models import CartSession, CartSessionStatus
 from apps.orders.services import close_stale_cart_sessions
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, Table, Zone
 
 
 def _table(restaurant: Restaurant, number: str) -> Table:
-    return Table.objects.create(restaurant=restaurant, public_number=number, capacity=4, active=True)
+    zone, _ = Zone.objects.get_or_create(restaurant=restaurant, defaults={"name": "Main Hall"})
+    return Table.objects.create(restaurant=restaurant, public_number=number, capacity=4, zone=zone, active=True)
 
 
 def _reservation(

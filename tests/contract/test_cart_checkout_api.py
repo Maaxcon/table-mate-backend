@@ -12,7 +12,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 from apps.orders.models import CartItem, CartSessionStatus, Order
 from apps.orders.services import add_item_to_cart, ensure_active_cart_for_table
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, Table, Zone
 
 
 def _active_reservation(restaurant: Restaurant, table: Table) -> Reservation:
@@ -121,7 +121,13 @@ def test_guest_token_cannot_checkout_other_session(
     _active_reservation(restaurant, table)
     cart_a = ensure_active_cart_for_table(table=table)
 
-    table_b = Table.objects.create(restaurant=restaurant, public_number="TB", capacity=4, active=True)
+    table_b = Table.objects.create(
+        restaurant=restaurant,
+        public_number="TB",
+        capacity=4,
+        zone=Zone.objects.filter(restaurant=restaurant).first(),
+        active=True,
+    )
     _active_reservation(restaurant, table_b)
     cart_b = ensure_active_cart_for_table(table=table_b)
     add_item_to_cart(session=cart_b, menu_item_id=str(item.public_id), quantity=1)

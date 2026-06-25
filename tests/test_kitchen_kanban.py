@@ -21,7 +21,7 @@ from apps.orders.selectors import (
     get_kitchen_tickets,
 )
 from apps.orders.services import create_order_with_items, open_session
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, Table, Zone
 
 from .conftest import AuthContext
 
@@ -62,10 +62,12 @@ def _build_session(table: Table, restaurant_id: int, user: Any) -> Session:
 
 def _create_foreign_restaurant_stack(name: str = "Foreign Restaurant") -> tuple[Restaurant, Table, MenuItem]:
     restaurant = Restaurant.objects.create(name=name, address="456 Side St")
+    zone = Zone.objects.create(restaurant=restaurant, name="Main Hall")
     table = Table.objects.create(
         restaurant=restaurant,
         public_number="T-foreign",
         capacity=4,
+        zone=zone,
         active=True,
     )
     menu = Menu.objects.create(restaurant=restaurant, name=f"{name} Menu", is_active=True)
