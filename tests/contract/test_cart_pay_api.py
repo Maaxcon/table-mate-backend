@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from django.urls import reverse
@@ -11,7 +12,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.menu.models import MenuItem
 from apps.orders.billing import checkout_cart_session
-from apps.orders.models import Order, OrderItem, OrderPaymentStatus
+from apps.orders.models import Order, OrderItem, OrderItemStatus, OrderPaymentStatus
 from apps.orders.services import add_item_to_cart, ensure_active_cart_for_table
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
@@ -110,3 +111,81 @@ def test_guest_token_cannot_pay_other_table_bill(
     assert resp.status_code == status.HTTP_401_UNAUTHORIZED
     order_item_b.refresh_from_db()
     assert order_item_b.is_paid is False
+
+
+@pytest.mark.django_db
+def test_guest_token_cannot_view_other_table_bill(
+    restaurant: Restaurant, table: Table, item: MenuItem, restaurant_settings: Any
+) -> None:
+    _active_reservation(restaurant, table)
+    cart_a = ensure_active_cart_for_table(table=table)
+
+    table_b = Table.objects.create(restaurant=restaurant, table_number="TB", capacity=4, active=True)
+    cart_b, _order_b = _ordered_visit(restaurant, table_b, item)
+
+    client = _guest_client(cart_a.public_id)  # token scoped to table A's cart
+    url = reverse("cart-bill", kwargs={"session_pk": cart_b.public_id})
+    resp = client.get(url)
+
+    assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+def test_pay_is_idempotent(
+    restaurant: Restaurant, table: Table, item: MenuItem, restaurant_settings: Any
+) -> None:
+    cart, order = _ordered_visit(restaurant, table, item)
+    order_item = OrderItem.objects.get(order=order)
+
+    client = _guest_client(cart.public_id)
+    url = reverse("cart-pay", kwargs={"session_pk": cart.public_id})
+    payload = {"order_item_ids": [str(order_item.public_id)]}
+
+    first = client.post(url, payload, format="json")
+    second = client.post(url, payload, format="json")
+
+    # Paying an already-paid item is a no-op, not an error.
+    assert first.status_code == status.HTTP_200_OK
+    assert second.status_code == status.HTTP_200_OK
+    order_item.refresh_from_db()
+    order.refresh_from_db()
+    assert order_item.is_paid is True
+    assert order.payment_status == OrderPaymentStatus.PAID
+
+
+@pytest.mark.django_db
+def test_pay_ignores_unknown_item_ids(
+    restaurant: Restaurant, table: Table, item: MenuItem, restaurant_settings: Any
+) -> None:
+    cart, order = _ordered_visit(restaurant, table, item)
+    order_item = OrderItem.objects.get(order=order)
+
+    client = _guest_client(cart.public_id)
+    url = reverse("cart-pay", kwargs={"session_pk": cart.public_id})
+    resp = client.post(url, {"order_item_ids": [str(uuid4())]}, format="json")
+
+    # An id that belongs to no item on this visit touches nothing.
+    assert resp.status_code == status.HTTP_200_OK
+    order_item.refresh_from_db()
+    order.refresh_from_db()
+    assert order_item.is_paid is False
+    assert order.payment_status == OrderPaymentStatus.UNPAID
+
+
+@pytest.mark.django_db
+def test_pay_excludes_voided_item(
+    restaurant: Restaurant, table: Table, item: MenuItem, restaurant_settings: Any
+) -> None:
+    cart, order = _ordered_visit(restaurant, table, item)
+    order_item = OrderItem.objects.get(order=order)
+    order_item.status = OrderItemStatus.VOIDED
+    order_item.save(update_fields=["status"])
+
+    client = _guest_client(cart.public_id)
+    url = reverse("cart-pay", kwargs={"session_pk": cart.public_id})
+    resp = client.post(url, {"order_item_ids": [str(order_item.public_id)]}, format="json")
+
+    # A voided item is not payable, so it stays unpaid.
+    assert resp.status_code == status.HTTP_200_OK
+    order_item.refresh_from_db()
+    assert order_item.is_paid is False
