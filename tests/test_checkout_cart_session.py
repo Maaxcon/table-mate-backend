@@ -84,6 +84,52 @@ def test_checkout_creates_order_and_closes_cart(
 
 
 @pytest.mark.django_db
+def test_checkout_distributes_service_charge_so_bill_reconciles(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = _open_cart_with_item(table, item, quantity=2)
+
+    order = checkout_cart_session(cart_session=cart)
+
+    items = list(OrderItem.objects.filter(order=order))
+    # The single item absorbs the whole service charge, and what the guest pays
+    # across the bill equals what the order owes.
+    assert sum((i.service_charge_amount for i in items), Decimal("0")) == order.service_charge
+    assert sum((i.payable for i in items), Decimal("0")) == order.total_amount
+
+
+@pytest.mark.django_db
+def test_service_charge_distribution_sums_exactly_across_items(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = ensure_active_cart_for_table(table=table)
+    # Prices chosen so the proportional shares have sub-cent parts that must be
+    # rounded; the remainder has to land on the last item for the sum to be exact.
+    for index, price in enumerate((Decimal("3.3300"), Decimal("3.3300"), Decimal("3.3400"))):
+        menu_item = MenuItem.objects.create(
+            restaurant=restaurant, menu=item.menu, name=f"Dish {index}", price=price
+        )
+        add_item_to_cart(session=cart, menu_item_id=str(menu_item.public_id), quantity=1)
+
+    order = checkout_cart_session(cart_session=cart)
+    items = list(OrderItem.objects.filter(order=order))
+
+    assert len(items) == 3
+    # Per-item shares sum exactly to the order service charge (no sub-cent drift)...
+    assert sum((i.service_charge_amount for i in items), Decimal("0")) == order.service_charge
+    # ...and the whole bill reconciles with the order total.
+    assert sum((i.payable for i in items), Decimal("0")) == order.total_amount
+
+
+@pytest.mark.django_db
 def test_two_rounds_accumulate_on_one_session(
     restaurant: Restaurant,
     table: Table,

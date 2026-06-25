@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 
 from common.models import RestaurantScopedModel
@@ -253,6 +255,9 @@ class OrderItem(RestaurantScopedModel):
     total_price = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     tax_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0)
     tax_amount = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    # The order-level service charge, distributed across its items so the bill
+    # reconciles: sum(item.payable) == Order.total_amount.
+    service_charge_amount = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     voided_at = models.DateTimeField(null=True, blank=True)
     voided_by = models.ForeignKey(
         "authentication.User",
@@ -286,6 +291,11 @@ class OrderItem(RestaurantScopedModel):
                 name="orders_orderitem_status_valid",
             ),
         ]
+
+    @property
+    def payable(self) -> Decimal:
+        """Full amount owed for this line: goods + its tax + its service share."""
+        return self.total_price + self.tax_amount + self.service_charge_amount
 
     def __str__(self) -> str:
         return f"Order item {self.public_id}"

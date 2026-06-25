@@ -125,10 +125,24 @@ class PayOrderItemsSerializer(serializers.Serializer[None]):
 class BillItemSerializer(serializers.ModelSerializer[OrderItem]):
     id = serializers.UUIDField(source="public_id", read_only=True)
     name = serializers.CharField(source="menu_item.name", read_only=True)
+    # Full amount owed for this line (goods + tax + service share). The sum of
+    # payable across a visit's items equals Order.total_amount, so the bill the
+    # guest pays matches the checkout receipt.
+    payable = serializers.DecimalField(max_digits=14, decimal_places=4, read_only=True)
 
     class Meta:
         model = OrderItem
-        fields = ["id", "name", "guest_slot", "quantity", "total_price", "is_paid"]
+        fields = [
+            "id",
+            "name",
+            "guest_slot",
+            "quantity",
+            "total_price",
+            "tax_amount",
+            "service_charge_amount",
+            "payable",
+            "is_paid",
+        ]
 
 
 class CheckoutResponseSerializer(serializers.Serializer[None]):

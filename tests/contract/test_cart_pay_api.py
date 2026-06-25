@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -66,6 +67,10 @@ def test_bill_lists_ordered_items(
     assert len(body) == 1
     assert body[0]["name"] == item.name
     assert body[0]["is_paid"] is False
+    # The bill the guest pays reconciles with what the order owes (goods + tax +
+    # service), not just the goods subtotal.
+    total_payable = sum((Decimal(row["payable"]) for row in body), Decimal("0"))
+    assert total_payable == Order.objects.get().total_amount
 
 
 @pytest.mark.django_db
