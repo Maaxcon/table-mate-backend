@@ -194,6 +194,7 @@ class ZoneViewSet(
     PublicLookupMixin,
     _PublicRestaurantScopedViewSetMixin,
     mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
     viewsets.ReadOnlyModelViewSet[Zone],
 ):
     permission_classes = [AllowAny]
