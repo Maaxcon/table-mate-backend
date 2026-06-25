@@ -5260,6 +5260,13 @@ components:
           type: string
           format: uuid
           readOnly: true
+        label:
+          type: string
+          readOnly: true
+        daily_number:
+          type: integer
+          readOnly: true
+          nullable: true
         restaurant:
           type: string
           format: uuid
@@ -5989,6 +5996,13 @@ components:
           type: string
           format: uuid
           readOnly: true
+        label:
+          type: string
+          readOnly: true
+        daily_number:
+          type: integer
+          readOnly: true
+          nullable: true
         restaurant:
           type: string
           format: uuid
@@ -6034,9 +6048,11 @@ components:
           readOnly: true
       required:
       - created_at
+      - daily_number
       - guest_count
       - injected_at
       - items_count
+      - label
       - order
       - public_id
       - restaurant
