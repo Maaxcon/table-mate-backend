@@ -8,6 +8,10 @@ from common.api import PublicIdRelatedField
 
 from .models import Layout, LayoutVersion
 
+CANVAS_WIDTH = 2000
+CANVAS_HEIGHT = 2000
+GRID = 100
+
 
 class LayoutSerializer(serializers.ModelSerializer[Layout]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
@@ -63,10 +67,10 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
 class TableEntitySerializer(serializers.Serializer[Any]):
     id = serializers.UUIDField(required=False, allow_null=True, default=None)
     public_number = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
-    x = serializers.IntegerField(min_value=-100)
-    y = serializers.IntegerField(min_value=-100)
-    width = serializers.IntegerField(min_value=1)
-    height = serializers.IntegerField(min_value=1)
+    x = serializers.IntegerField(min_value=-100, max_value=CANVAS_WIDTH - 2 * GRID)
+    y = serializers.IntegerField(min_value=-100, max_value=CANVAS_HEIGHT - 2 * GRID)
+    width = serializers.IntegerField(min_value=1, max_value=CANVAS_WIDTH)
+    height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
     rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
     shape = serializers.ChoiceField(choices=["rectangle", "round", "square", "booth"])
     capacity = serializers.IntegerField(min_value=1, max_value=20)
@@ -86,19 +90,19 @@ class TableEntitySerializer(serializers.Serializer[Any]):
 
 
 class ObstacleEntitySerializer(serializers.Serializer[Any]):
-    x = serializers.IntegerField(min_value=-100)
-    y = serializers.IntegerField(min_value=-100)
-    width = serializers.IntegerField(min_value=1)
-    height = serializers.IntegerField(min_value=1)
+    x = serializers.IntegerField(min_value=-100, max_value=CANVAS_WIDTH - 2 * GRID)
+    y = serializers.IntegerField(min_value=-100, max_value=CANVAS_HEIGHT - GRID)
+    width = serializers.IntegerField(min_value=1, max_value=CANVAS_WIDTH)
+    height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
     rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
     zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
 class ThresholdEntitySerializer(serializers.Serializer[Any]):
-    x = serializers.IntegerField(min_value=-100)
-    y = serializers.IntegerField(min_value=-100)
-    width = serializers.IntegerField(min_value=1)
-    height = serializers.IntegerField(min_value=1)
+    x = serializers.IntegerField(min_value=-100, max_value=CANVAS_WIDTH)
+    y = serializers.IntegerField(min_value=-100, max_value=CANVAS_HEIGHT)
+    width = serializers.IntegerField(min_value=1, max_value=CANVAS_WIDTH)
+    height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
     threshold_label = serializers.CharField(
         max_length=64, required=False, allow_blank=True, default="", source="label"
     )
@@ -106,10 +110,10 @@ class ThresholdEntitySerializer(serializers.Serializer[Any]):
 
 
 class PortalEntitySerializer(serializers.Serializer[Any]):
-    x = serializers.IntegerField(min_value=-100)
-    y = serializers.IntegerField(min_value=-100)
-    width = serializers.IntegerField(min_value=1)
-    height = serializers.IntegerField(min_value=1)
+    x = serializers.IntegerField(min_value=-100, max_value=CANVAS_WIDTH)
+    y = serializers.IntegerField(min_value=-100, max_value=CANVAS_HEIGHT)
+    width = serializers.IntegerField(min_value=1, max_value=CANVAS_WIDTH)
+    height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
     target_zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     portal_label = serializers.CharField(max_length=64, required=False, allow_blank=True, default="", source="label")
     zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
