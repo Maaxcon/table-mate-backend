@@ -157,11 +157,17 @@ def add_item_to_cart(
             )
             created = False
         if not created:
-            CartItem.objects.filter(pk=item.pk).update(
-                quantity=F("quantity") + quantity,
-                updated_at=timezone.now(),
-            )
-            item.refresh_from_db(fields=["quantity", "updated_at"])
+            update_fields: dict[str, object] = {
+                "quantity": F("quantity") + quantity,
+                "updated_at": timezone.now(),
+            }
+            # The cart holds one row per menu item, so a re-add with a new comment
+            # must overwrite the stored note. A blank/absent comment leaves the
+            # existing one in place (e.g. tapping + on a card has no comment).
+            if comment is not None:
+                update_fields["comment"] = comment
+            CartItem.objects.filter(pk=item.pk).update(**update_fields)
+            item.refresh_from_db(fields=["quantity", "comment", "updated_at"])
 
         item.menu_item = menu_item
         item.cart_session = session
@@ -267,7 +273,7 @@ def update_cart_item_quantity(
         _broadcast_cart_updated(session, client_id)
         return item
 
-1
+
 def _visit_session_for_cart(cart_session: CartSession) -> Session | None:
     """The dining Session that holds this cart's orders (shared via reservation)."""
     if cart_session.reservation_id is None:
