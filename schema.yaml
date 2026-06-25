@@ -3560,7 +3560,7 @@ components:
           readOnly: true
         menu_item_detail:
           allOf:
-          - $ref: '#/components/schemas/CartMenuItemSnapshot'
+          - $ref: '#/components/schemas/CartMenuItem'
           readOnly: true
         quantity:
           type: integer
@@ -3578,9 +3578,6 @@ components:
           readOnly: true
           nullable: true
         is_mine:
-          type: boolean
-          readOnly: true
-        is_paid:
           type: boolean
           readOnly: true
         cart_session:
@@ -3605,18 +3602,21 @@ components:
       - created_at
       - guest_slot
       - is_mine
-      - is_paid
       - menu_item
       - menu_item_detail
       - public_id
       - quantity
       - restaurant
       - updated_at
-    CartMenuItemSnapshot:
+    CartMenuItem:
       type: object
       description: |-
         Just enough of the menu item to render a cart line on its own, so the
         cart never depends on which menu page/sort the client is currently showing.
+
+        These are LIVE reads of the current MenuItem (name/price/image/availability),
+        not an order-time snapshot — a later rename or price change is reflected here.
+        The amount a guest owes is frozen separately on OrderItem.total_price.
       properties:
         id:
           type: string
