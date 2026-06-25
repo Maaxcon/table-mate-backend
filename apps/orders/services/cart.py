@@ -301,10 +301,15 @@ def get_bill_order_items(*, cart_session: CartSession) -> list[OrderItem]:
 def _recompute_order_payment_status(order_ids: set[int]) -> None:
     for order_id in order_ids:
         items = OrderItem.objects.filter(order_id=order_id).exclude(status=OrderItemStatus.VOIDED)
-        fully_paid = items.exists() and not items.filter(is_paid=False).exists()
-        Order.objects.filter(pk=order_id).update(
-            payment_status=OrderPaymentStatus.PAID if fully_paid else OrderPaymentStatus.UNPAID
-        )
+        if not items.exists():
+            # Every item is voided: nothing is owed and nothing was paid, so the
+            # order is cancelled rather than an outstanding unpaid debt.
+            new_status = OrderPaymentStatus.CANCELLED
+        elif items.filter(is_paid=False).exists():
+            new_status = OrderPaymentStatus.UNPAID
+        else:
+            new_status = OrderPaymentStatus.PAID
+        Order.objects.filter(pk=order_id).update(payment_status=new_status)
 
 
 def pay_order_items(

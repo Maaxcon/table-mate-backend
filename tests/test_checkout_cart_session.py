@@ -165,6 +165,28 @@ def test_voiding_last_unpaid_item_marks_order_paid(
 
 
 @pytest.mark.django_db
+def test_voiding_all_items_cancels_order_payment_status(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+    user_factory: Callable[..., Any],
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = _open_cart_with_item(table, item)
+    order = checkout_cart_session(cart_session=cart)
+    order_item = OrderItem.objects.get(order=order)
+
+    actor = user_factory()
+    actor.save()
+    void_order_item(order_item, actor=actor, void_reason_code="mispick")
+
+    # All items voided: nothing owed, nothing paid -> cancelled, not UNPAID.
+    order.refresh_from_db()
+    assert order.payment_status == OrderPaymentStatus.CANCELLED
+
+
+@pytest.mark.django_db
 def test_pay_rejected_on_closed_visit(
     restaurant: Restaurant,
     table: Table,
