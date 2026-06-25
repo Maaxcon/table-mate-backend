@@ -81,7 +81,6 @@ def publish_layout(
     }
     incoming_table_uuids: set[str] = set()
     table_id_map: dict[str, str] = {}
-    warnings: list[dict[str, Any]] = []
 
     for table_data in layout_data.get("tables", []):
         table_uuid = table_data.get("id")
@@ -193,5 +192,4 @@ def publish_layout(
     return {
         "version": version,
         "table_id_map": table_id_map,
-        "warnings": warnings,
     }

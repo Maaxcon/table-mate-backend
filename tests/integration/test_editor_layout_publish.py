@@ -11,9 +11,10 @@ from rest_framework.test import APIClient
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
 from apps.editor.models import LayoutVersion
+from apps.restaurants.models import Table
 from common.channels import hall_group_name
 from common.hall_events import emit_hall_layout_published
-from tests.conftest import UserFactory
+from tests.conftest import RestaurantFactory, UserFactory
 
 
 def _admin_api(restaurant_id: int) -> APIClient:

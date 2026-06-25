@@ -68,7 +68,6 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
             {
                 **output.data,
                 "table_id_map": result["table_id_map"],
-                "warnings": result["warnings"],
             },
             status=status.HTTP_201_CREATED,
         )
