@@ -121,6 +121,13 @@ class Table(RestaurantScopedModel):
 
     class Meta:
         ordering = ["restaurant_id", "public_number", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["restaurant", "public_number"],
+                condition=models.Q(active=True),
+                name="restaurants_table_restaurant_public_number_active_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.restaurant.name} / {self.public_number}"
