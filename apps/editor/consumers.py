@@ -105,7 +105,7 @@ def _resolve_restaurant_from_uuid(public_id: str) -> int | None:
 
     try:
         return Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
-    except Restaurant.DoesNotExist:
+    except (Restaurant.DoesNotExist, ValueError):
         return None
 
 
