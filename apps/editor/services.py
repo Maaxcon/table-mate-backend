@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 from apps.restaurants.models import Table, Zone
 from common.hall_events import emit_hall_layout_published
@@ -86,10 +87,15 @@ def publish_layout(
         table_uuid = table_data.get("id")
         public_number = table_data.get("public_number") or ""
         capacity = table_data["capacity"]
-        zone = None
         zone_id = table_data.get("zone_id")
-        if zone_id:
-            zone = Zone.objects.filter(public_id=zone_id, restaurant_id=restaurant_id).first()
+        zone = (
+            Zone.objects.filter(public_id=zone_id, restaurant_id=restaurant_id).first()
+            if zone_id
+            else None
+        )
+        # Table.zone is non-nullable; a missing/stale zone_id is bad input, not a 500.
+        if zone is None:
+            raise ValidationError(f"Table references unknown zone_id {zone_id!r}.")
 
         existing = None
         client_id = None

@@ -140,7 +140,7 @@ class Command(BaseCommand):
                 for t in Table.objects.filter(restaurant=restaurant, active=True)
             }
 
-            def _zone_id(name: str, *, _zones: dict = zones) -> str:
+            def _zone_id(name: str, *, _zones: dict[str, Zone] = zones) -> str:
                 z = _zones.get(name) or next(iter(_zones.values()), None)
                 return str(z.public_id) if z else ""
 

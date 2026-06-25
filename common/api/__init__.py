@@ -45,7 +45,8 @@ def require_restaurant_id_from_auth(request: Request) -> int:
 def get_restaurant_public_id_from_auth(request: Request) -> str | None:
     auth = getattr(request, "auth", None)
     if auth is not None and hasattr(auth, "get"):
-        return auth.get("restaurant_public_id")
+        value = auth.get("restaurant_public_id")
+        return value if isinstance(value, str) else None
     return None
 
 

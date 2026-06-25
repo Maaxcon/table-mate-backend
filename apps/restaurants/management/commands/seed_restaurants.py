@@ -1,6 +1,6 @@
 from typing import Any, TypedDict
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table, Zone
@@ -145,13 +145,19 @@ class Command(BaseCommand):
 
             canonical_numbers = {t["public_number"] for t in data["tables"]}
             for table_data in data["tables"]:
+                zone = zone_map.get(str(table_data["zone_name"]))
+                if zone is None:
+                    raise CommandError(
+                        f"Table {table_data['public_number']!r} references unknown zone "
+                        f"{table_data['zone_name']!r}."
+                    )
                 _, was_created_table = Table.objects.update_or_create(
                     restaurant=restaurant,
                     public_number=table_data["public_number"],
                     defaults={
                         "capacity": table_data["capacity"],
                         "active": True,
-                        "zone": zone_map.get(str(table_data["zone_name"])),
+                        "zone": zone,
                     },
                 )
                 if was_created_table:

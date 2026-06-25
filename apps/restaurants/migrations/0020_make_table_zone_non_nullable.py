@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django.db import migrations, models
+from django.db.migrations.state import StateApps
 
 
-def assign_null_zone_tables(apps, schema_editor):
+def assign_null_zone_tables(apps: StateApps, schema_editor: Any) -> None:
     Table = apps.get_model("restaurants", "Table")
     Zone = apps.get_model("restaurants", "Zone")
     for table in Table.objects.filter(zone__isnull=True).select_related("restaurant").iterator():
