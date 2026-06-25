@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.editor.models import Layout, LayoutVersion
+from apps.editor.models import LayoutVersion
 from apps.restaurants.models import Restaurant, Table, Zone
 
 # All coordinates are in pixels, aligned to a 100px grid.
@@ -212,19 +212,6 @@ class Command(BaseCommand):
                 restaurant=restaurant,
                 parent_version=parent,
                 layout_json=layout_json,
-                published_at=timezone.now(),
-            )
-
-            last_layout = (
-                Layout.objects.filter(restaurant=restaurant)
-                .order_by("-version")
-                .first()
-            )
-            next_version = (last_layout.version + 1) if last_layout else 1
-            Layout.objects.create(
-                restaurant=restaurant,
-                version=next_version,
-                payload=layout_json,
                 published_at=timezone.now(),
             )
 

@@ -62,13 +62,14 @@ def _generate_public_number(restaurant_id: int) -> str:
 def publish_layout(
     *,
     restaurant_id: int,
+    restaurant_public_id: str,
     layout_data: dict[str, Any],
     published_by: User,
 ) -> dict[str, Any]:
     from apps.orders.models import Session, SessionStatus
     from apps.reservations.models import Reservation, ReservationStatus
 
-    from .models import Layout, LayoutVersion
+    from .models import LayoutVersion
 
     # ``deleted_table_ids`` is a publish-time instruction, not part of the persisted
     # layout geometry — pull it out so it never lands in the stored payload.
@@ -180,24 +181,12 @@ def publish_layout(
         published_by=published_by,
     )
 
-    last_layout = (
-        Layout.objects.filter(restaurant_id=restaurant_id)
-        .order_by("-version")
-        .first()
-    )
-    next_version = (last_layout.version + 1) if last_layout else 1
-    Layout.objects.create(
-        restaurant_id=restaurant_id,
-        version=next_version,
-        payload=layout_json,
-        published_at=timezone.now(),
-        published_by=published_by,
-    )
-
     transaction.on_commit(
         lambda: emit_hall_layout_published(
             restaurant_id=restaurant_id,
             layout_version_id=version.pk,
+            layout_version_public_id=str(version.public_id),
+            restaurant_public_id=restaurant_public_id,
         )
     )
 

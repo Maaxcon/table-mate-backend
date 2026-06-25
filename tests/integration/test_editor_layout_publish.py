@@ -95,6 +95,8 @@ class TestEmitHallLayoutPublished:
             emit_hall_layout_published(
                 restaurant_id=restaurant.id,
                 layout_version_id=1,
+                layout_version_public_id="a1b2c3d4-0001-0000-0000-000000000001",
+                restaurant_public_id=str(restaurant.public_id),
             )
 
             mock_layer.group_send.assert_called_once()
@@ -103,8 +105,8 @@ class TestEmitHallLayoutPublished:
             event = call_args[0][1]["event"]
             assert event["event_name"] == "LAYOUT_PUBLISHED"
             assert event["schema_version"] == "1"
-            assert event["layout_version_id"] == 1
-            assert event["restaurant_id"] == restaurant.id
+            assert event["layout_version_public_id"] == "a1b2c3d4-0001-0000-0000-000000000001"
+            assert event["restaurant_public_id"] == str(restaurant.public_id)
             assert "event_id" in event
             assert "occurred_at" in event
 
@@ -114,10 +116,20 @@ class TestEmitHallLayoutPublished:
             mock_layer = AsyncMock()
             mock_get_layer.return_value = mock_layer
 
-            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=1)
+            emit_hall_layout_published(
+                restaurant_id=restaurant.id,
+                layout_version_id=1,
+                layout_version_public_id="a1b2c3d4-0001-0000-0000-000000000001",
+                restaurant_public_id=str(restaurant.public_id),
+            )
             event_id_1 = mock_layer.group_send.call_args[0][1]["event"]["event_id"]
 
-            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=2)
+            emit_hall_layout_published(
+                restaurant_id=restaurant.id,
+                layout_version_id=2,
+                layout_version_public_id="a1b2c3d4-0002-0000-0000-000000000002",
+                restaurant_public_id=str(restaurant.public_id),
+            )
             event_id_2 = mock_layer.group_send.call_args[0][1]["event"]["event_id"]
 
             assert event_id_1 != event_id_2
@@ -128,10 +140,20 @@ class TestEmitHallLayoutPublished:
             mock_layer = AsyncMock()
             mock_get_layer.return_value = mock_layer
 
-            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=1)
+            emit_hall_layout_published(
+                restaurant_id=restaurant.id,
+                layout_version_id=1,
+                layout_version_public_id="a1b2c3d4-0001-0000-0000-000000000001",
+                restaurant_public_id=str(restaurant.public_id),
+            )
             event_id_1 = mock_layer.group_send.call_args[0][1]["event"]["event_id"]
 
-            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=1)
+            emit_hall_layout_published(
+                restaurant_id=restaurant.id,
+                layout_version_id=1,
+                layout_version_public_id="a1b2c3d4-0001-0000-0000-000000000001",
+                restaurant_public_id=str(restaurant.public_id),
+            )
             event_id_2 = mock_layer.group_send.call_args[0][1]["event"]["event_id"]
 
             assert event_id_1 == event_id_2
@@ -142,8 +164,18 @@ class TestEmitHallLayoutPublished:
             mock_layer = AsyncMock()
             mock_get_layer.return_value = mock_layer
 
-            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=1)
-            emit_hall_layout_published(restaurant_id=restaurant.id, layout_version_id=1)
+            emit_hall_layout_published(
+                restaurant_id=restaurant.id,
+                layout_version_id=1,
+                layout_version_public_id="a1b2c3d4-0001-0000-0000-000000000001",
+                restaurant_public_id=str(restaurant.public_id),
+            )
+            emit_hall_layout_published(
+                restaurant_id=restaurant.id,
+                layout_version_id=1,
+                layout_version_public_id="a1b2c3d4-0001-0000-0000-000000000001",
+                restaurant_public_id=str(restaurant.public_id),
+            )
 
             assert mock_layer.group_send.call_count == 1
 
