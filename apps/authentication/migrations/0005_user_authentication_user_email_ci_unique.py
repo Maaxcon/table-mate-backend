@@ -4,8 +4,25 @@ from typing import Any
 
 import django.db.models.functions.text
 from django.db import migrations, models
+from django.db.models import Count
 from django.db.migrations.state import StateApps
 from django.db.models.functions import Lower
+
+
+def assert_no_email_collisions(apps: StateApps, schema_editor: Any) -> None:
+    User = apps.get_model("authentication", "User")
+    collisions = list(
+        User.objects.annotate(lower_email=Lower("email"))
+        .values("lower_email")
+        .annotate(count=Count("id"))
+        .filter(count__gt=1)
+        .values_list("lower_email", flat=True)
+    )
+    if collisions:
+        raise RuntimeError(
+            "Cannot add case-insensitive email constraint: these emails differ "
+            f"only by case and must be resolved first: {collisions}"
+        )
 
 
 def lowercase_emails(apps: StateApps, schema_editor: Any) -> None:
@@ -21,6 +38,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(assert_no_email_collisions, migrations.RunPython.noop),
         migrations.RunPython(lowercase_emails, migrations.RunPython.noop),
         migrations.AddConstraint(
             model_name="user",
