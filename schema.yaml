@@ -3482,18 +3482,6 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
-        total_price:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
-        tax_amount:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
-        service_charge_amount:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
         payable:
           type: string
           format: decimal

@@ -129,9 +129,11 @@ class BillItemSerializer(serializers.ModelSerializer[OrderItem]):
     # Live read of the current menu item; if it is later renamed, a past bill
     # displays the new name. Only the amount is frozen (see total_price/payable).
     name = serializers.CharField(source="menu_item.name", read_only=True)
-    # Full amount owed for this line (goods + tax + service share). The sum of
-    # payable across a visit's items equals Order.total_amount, so the bill the
-    # guest pays matches the checkout receipt.
+    # The single authoritative amount owed for this line: goods + tax + its
+    # service share. Summing payable across a visit's items equals
+    # Order.total_amount, so the bill the guest pays matches the checkout receipt.
+    # The goods-only total_price is deliberately NOT exposed here — a consumer
+    # summing it would under-charge (tax + service missing).
     payable = serializers.DecimalField(max_digits=14, decimal_places=4, read_only=True)
 
     class Meta:
@@ -141,9 +143,6 @@ class BillItemSerializer(serializers.ModelSerializer[OrderItem]):
             "name",
             "guest_slot",
             "quantity",
-            "total_price",
-            "tax_amount",
-            "service_charge_amount",
             "payable",
             "is_paid",
         ]
