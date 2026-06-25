@@ -4,7 +4,9 @@ __all__ = [
     "add_item_to_cart",
     "create_order_with_items",
     "emit_hall_table_status_changed",
+    "get_bill_order_items",
     "open_session",
+    "pay_order_items",
     "remove_item_from_cart",
     "update_cart_item_quantity",
     "update_session_status",
@@ -44,6 +46,7 @@ from ..models import (
     Order,
     OrderItem,
     OrderItemStatus,
+    OrderPaymentStatus,
     OrderSource,
     OrderStatus,
     Session,
@@ -263,6 +266,72 @@ def update_cart_item_quantity(
         item.refresh_from_db()
         _broadcast_cart_updated(session, client_id)
         return item
+
+1
+def _visit_session_for_cart(cart_session: CartSession) -> Session | None:
+    """The dining Session that holds this cart's orders (shared via reservation)."""
+    if cart_session.reservation_id is None:
+        return None
+    return Session.objects.filter(reservation_id=cart_session.reservation_id).first()
+
+
+def get_bill_order_items(*, cart_session: CartSession) -> list[OrderItem]:
+    """Ordered (already-submitted) items for this table's visit — the bill.
+
+    Pulls every non-voided OrderItem across the visit Session's orders, grouped
+    later by ``guest_slot``. This is what the guest pays for, not the cart.
+    """
+    session = _visit_session_for_cart(cart_session)
+    if session is None:
+        return []
+    return list(
+        OrderItem.objects.filter(order__session=session)
+        .exclude(status=OrderItemStatus.VOIDED)
+        .select_related("menu_item")
+        .order_by("guest_slot", "id")
+    )
+
+
+def _recompute_order_payment_status(order_ids: set[int]) -> None:
+    for order_id in order_ids:
+        items = OrderItem.objects.filter(order_id=order_id).exclude(status=OrderItemStatus.VOIDED)
+        fully_paid = items.exists() and not items.filter(is_paid=False).exists()
+        Order.objects.filter(pk=order_id).update(
+            payment_status=OrderPaymentStatus.PAID if fully_paid else OrderPaymentStatus.UNPAID
+        )
+
+
+def pay_order_items(
+    *,
+    cart_session: CartSession,
+    order_item_ids: list[str],
+    client_id: str | None = None,
+) -> list[OrderItem]:
+    """Mark the given ordered items as paid (simulated — no money moves).
+
+    Only non-voided, currently-unpaid items belonging to this table's visit are
+    touched; unknown/already-paid ids are ignored (idempotent). An order flips to
+    PAID once all its non-voided items are paid. Returns the full updated bill.
+    """
+    with transaction.atomic():
+        session = _visit_session_for_cart(cart_session)
+        if session is None:
+            return []
+
+        to_pay = list(
+            OrderItem.objects.select_for_update()
+            .filter(order__session=session, public_id__in=order_item_ids, is_paid=False)
+            .exclude(status=OrderItemStatus.VOIDED)
+        )
+        if to_pay:
+            OrderItem.objects.filter(pk__in=[i.pk for i in to_pay]).update(
+                is_paid=True,
+                updated_at=timezone.now(),
+            )
+            _recompute_order_payment_status({i.order_id for i in to_pay})
+            _broadcast_cart_updated(cart_session, client_id)
+
+        return get_bill_order_items(cart_session=cart_session)
 
 
 _SESSION_STATUS_TRANSITIONS: dict[str, set[str]] = {

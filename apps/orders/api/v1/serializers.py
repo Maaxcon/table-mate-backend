@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from apps.authentication.models import User
 from apps.menu.models import MenuItem
-from apps.orders.models import CartItem, CartSession
+from apps.orders.models import CartItem, CartSession, OrderItem
 from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
@@ -100,6 +100,22 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
             "created_at",
             "updated_at",
         ]
+
+
+class PayOrderItemsSerializer(serializers.Serializer[None]):
+    order_item_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        allow_empty=False,
+    )
+
+
+class BillItemSerializer(serializers.ModelSerializer[OrderItem]):
+    id = serializers.UUIDField(source="public_id", read_only=True)
+    name = serializers.CharField(source="menu_item.name", read_only=True)
+
+    class Meta:
+        model = OrderItem
+        fields = ["id", "name", "guest_slot", "quantity", "total_price", "is_paid"]
 
 
 class CheckoutResponseSerializer(serializers.Serializer[None]):

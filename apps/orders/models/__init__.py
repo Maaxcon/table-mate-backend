@@ -270,6 +270,7 @@ class OrderItem(RestaurantScopedModel):
     )
     void_reason_note = models.TextField(null=True, blank=True)
     is_wasted = models.BooleanField(default=False)
+    is_paid = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["order_id", "guest_slot", "id"]
