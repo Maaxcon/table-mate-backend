@@ -17,6 +17,7 @@ from apps.orders.models import (
     OrderPaymentStatus,
     OrderStatus,
     Session,
+    SessionStatus,
 )
 from apps.orders.services import (
     add_item_to_cart,
@@ -29,6 +30,7 @@ from apps.restaurants.models import Restaurant, Table
 from common.exceptions import (
     CartChangedError,
     CartSessionClosedError,
+    DomainError,
     EmptyCartError,
     RestaurantClosedError,
 )
@@ -160,6 +162,30 @@ def test_voiding_last_unpaid_item_marks_order_paid(
     # Every remaining non-voided item is paid, so the order flips to PAID.
     order.refresh_from_db()
     assert order.payment_status == OrderPaymentStatus.PAID
+
+
+@pytest.mark.django_db
+def test_pay_rejected_on_closed_visit(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = _open_cart_with_item(table, item)
+    order = checkout_cart_session(cart_session=cart)
+    order_item = OrderItem.objects.get(order=order)
+
+    session = order.session
+    session.status = SessionStatus.CLOSED
+    session.save(update_fields=["status"])
+
+    next_cart = ensure_active_cart_for_table(table=table)
+    with pytest.raises(DomainError):
+        pay_order_items(cart_session=next_cart, order_item_ids=[str(order_item.public_id)])
+
+    order_item.refresh_from_db()
+    assert order_item.is_paid is False
 
 
 @pytest.mark.django_db

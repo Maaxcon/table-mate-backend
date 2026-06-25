@@ -323,6 +323,11 @@ def pay_order_items(
         session = _visit_session_for_cart(cart_session)
         if session is None:
             return []
+        # A closed/voided visit is settled; paying against it would mutate a
+        # finalised bill. The API can't reach this (it 401s on a closed cart),
+        # but guard the service so any other caller fails loudly.
+        if session.status != SessionStatus.OPEN:
+            raise DomainError("Cannot pay items on a closed or voided visit.")
 
         to_pay = list(
             OrderItem.objects.select_for_update()
