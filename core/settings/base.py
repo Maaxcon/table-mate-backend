@@ -103,6 +103,12 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "authentication.User"
 
+# auth.E003 demands a plain unique on the USERNAME_FIELD; we enforce uniqueness
+# case-insensitively via a functional UniqueConstraint(Lower("email")) instead,
+# which Django's check does not recognise. That constraint is strictly stronger
+# than a raw unique column, so silence the false positive.
+SILENCED_SYSTEM_CHECKS = ["auth.E003"]
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "apps.authentication.authentication.TokenVersionJWTAuthentication",

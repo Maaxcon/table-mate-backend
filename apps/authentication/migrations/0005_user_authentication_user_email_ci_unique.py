@@ -4,8 +4,8 @@ from typing import Any
 
 import django.db.models.functions.text
 from django.db import migrations, models
-from django.db.models import Count
 from django.db.migrations.state import StateApps
+from django.db.models import Count
 from django.db.models.functions import Lower
 
 
