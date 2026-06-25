@@ -303,6 +303,27 @@ class TestMenuItemSearch:
         assert "Pepperoni" in names
         assert "Caesar Salad" not in names
 
+    def test_search_matches_category_name(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            name="Ribeye Steak",
+            description="Grilled to order",
+            is_available=True,
+        )
+
+        url = reverse("menu-item-search")
+        response: Any = api_client.get(
+            url, {"restaurant": str(restaurant.public_id), "q": category.name}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        names = [r["name"] for r in response.json()["results"]]
+        assert "Ribeye Steak" in names
+
     def test_search_empty_q_returns_empty_paginated_response(
         self, api_client: Client, restaurant: Restaurant, item: MenuItem
     ) -> None:
