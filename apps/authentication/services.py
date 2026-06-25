@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.id_token import verify_oauth2_token
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -54,7 +55,7 @@ def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
 def verify_google_id_token(token: str) -> dict[str, Any]:
     try:
         claims = verify_oauth2_token(token, _google_auth_request, settings.GOOGLE_CLIENT_ID)  # type: ignore[no-untyped-call]
-    except ValueError as exc:
+    except (ValueError, GoogleAuthError) as exc:
         logger.warning("Google id_token verification failed: %s", exc)
         raise ValueError("Google id_token verification failed.") from exc
     return cast(dict[str, Any], claims)
