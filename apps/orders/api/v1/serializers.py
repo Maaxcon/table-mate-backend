@@ -55,10 +55,22 @@ class CartSessionSerializer(serializers.ModelSerializer[CartSession]):
         ]
 
 
+class CartMenuItemSnapshotSerializer(serializers.ModelSerializer[MenuItem]):
+    """Just enough of the menu item to render a cart line on its own, so the
+    cart never depends on which menu page/sort the client is currently showing."""
+
+    id = serializers.UUIDField(source="public_id", read_only=True)
+
+    class Meta:
+        model = MenuItem
+        fields = ["id", "name", "price", "image", "is_available"]
+
+
 class CartItemSerializer(serializers.ModelSerializer[CartItem]):
     restaurant = PublicIdRelatedField[Restaurant](read_only=True)
     cart_session = PublicIdRelatedField[CartSession](read_only=True)
     menu_item = PublicIdRelatedField[MenuItem](read_only=True)
+    menu_item_detail = CartMenuItemSnapshotSerializer(source="menu_item", read_only=True)
     added_by = PublicIdRelatedField[User](read_only=True)
     is_mine = serializers.SerializerMethodField()
 
@@ -78,6 +90,7 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
         fields = [
             "public_id",
             "menu_item",
+            "menu_item_detail",
             "quantity",
             "comment",
             "added_by",
