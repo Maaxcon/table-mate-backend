@@ -324,6 +324,39 @@ class TestMenuItemSearch:
         names = [r["name"] for r in response.json()["results"]]
         assert "Ribeye Steak" in names
 
+    def test_search_orders_by_price(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        for name, price in [("Pizza Cheap", 80), ("Pizza Mid", 150), ("Pizza Pricey", 300)]:
+            MenuItemFactory(
+                restaurant=restaurant,
+                menu=menu,
+                category=category,
+                name=name,
+                price=price,
+                is_available=True,
+            )
+
+        url = reverse("menu-item-search")
+        asc: Any = api_client.get(
+            url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "price"}
+        )
+        desc: Any = api_client.get(
+            url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "-price"}
+        )
+
+        assert asc.status_code == status.HTTP_200_OK
+        assert [r["name"] for r in asc.json()["results"]] == [
+            "Pizza Cheap",
+            "Pizza Mid",
+            "Pizza Pricey",
+        ]
+        assert [r["name"] for r in desc.json()["results"]] == [
+            "Pizza Pricey",
+            "Pizza Mid",
+            "Pizza Cheap",
+        ]
+
     def test_search_empty_q_returns_empty_paginated_response(
         self, api_client: Client, restaurant: Restaurant, item: MenuItem
     ) -> None:
