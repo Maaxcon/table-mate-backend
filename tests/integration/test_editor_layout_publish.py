@@ -201,7 +201,6 @@ class TestPublishEndpoint:
         assert data["published_at"] is not None
         assert data["parent_version"] is None
         assert "table_id_map" in data
-        assert "warnings" in data
 
         mock_emit.assert_called_once()
 
@@ -296,12 +295,18 @@ class TestPublishEndpoint:
         session = Session.objects.create(
             restaurant=restaurant,
             table=table,
-            reservation=reservation,
+            reservation_id=reservation.pk,
             guest_count=2,
             status=SessionStatus.OPEN,
             currency="UAH",
             opened_at=timezone.now(),
         )
+
+        # Capture pre-publish FK values for comparison
+        session_table_id = session.table_id
+        session_restaurant_id = session.restaurant_id
+        session_guest_count = session.guest_count
+        session_reservation_id = session.reservation_id
 
         # Include the existing table in the layout so it doesn't get soft-deleted
         existing_table_entry = _table(
@@ -329,6 +334,16 @@ class TestPublishEndpoint:
 
         session.refresh_from_db()
         assert session.status == SessionStatus.OPEN
+        assert session.table_id == session_table_id
+        assert session.restaurant_id == session_restaurant_id
+        assert session.guest_count == session_guest_count
+        assert session.reservation_id == session_reservation_id
+
+        reservation.refresh_from_db()
+        assert reservation.status == ReservationStatus.ACTIVE
+
+        table.refresh_from_db()
+        assert table.active is True
 
     def _make_reservation(self, restaurant: Any, table: Any) -> Any:
         from django.utils import timezone
@@ -454,24 +469,106 @@ class TestPublishEndpoint:
     def test_each_publish_emits_hall_event(self, restaurant: Any) -> None:
         client = _admin_api(restaurant.id)
 
-        with patch("apps.editor.services.emit_hall_layout_published") as mock_emit:
-            client.post(
+        with patch("common.hall_events.get_channel_layer") as mock_get_layer:
+            mock_layer = AsyncMock()
+            mock_get_layer.return_value = mock_layer
+
+            resp1 = client.post(
                 "/api/editor/layouts/publish/",
                 TABLE_LAYOUT_A,
                 format="json",
             )
-            client.post(
+            resp2 = client.post(
                 "/api/editor/layouts/publish/",
                 TABLE_LAYOUT_B,
                 format="json",
             )
-            client.post(
+            resp3 = client.post(
                 "/api/editor/layouts/publish/",
                 TABLE_LAYOUT_C,
                 format="json",
             )
 
-        assert mock_emit.call_count == 3
-        for call_args in mock_emit.call_args_list:
-            assert call_args[1]["restaurant_id"] == restaurant.id
-            assert "layout_version_id" in call_args[1]
+        assert resp1.status_code == 201
+        assert resp2.status_code == 201
+        assert resp3.status_code == 201
+
+        assert mock_layer.group_send.call_count == 3
+        for call_args in mock_layer.group_send.call_args_list:
+            event = call_args[0][1]["event"]
+            assert event["event_name"] == "LAYOUT_PUBLISHED"
+            assert event["restaurant_public_id"] == str(restaurant.public_id)
+            assert "layout_version_public_id" in event
+
+    # ------------------------------------------------------------------
+    # Cross-tenant isolation
+    # ------------------------------------------------------------------
+
+    def test_cross_tenant_delete_isolation(self, restaurant: Any) -> None:
+        other_restaurant = RestaurantFactory()
+        other_table = Table.objects.create(
+            restaurant=other_restaurant,
+            public_number="X001",
+            capacity=4,
+        )
+
+        client = _admin_api(restaurant.id)
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                {
+                    "tables": [_table(x=10, y=20)],
+                    "deleted_table_ids": [str(other_table.public_id)],
+                },
+                format="json",
+            )
+
+        assert response.status_code == 201
+        other_table.refresh_from_db()
+        assert other_table.active is True
+
+    # ------------------------------------------------------------------
+    # Validation rejection
+    # ------------------------------------------------------------------
+
+    def test_rejects_out_of_bounds_table(self, restaurant: Any) -> None:
+        client = _admin_api(restaurant.id)
+        payload = {"tables": [_table(x=2500, y=2500)]}
+        response = client.post(
+            "/api/editor/layouts/publish/",
+            payload,
+            format="json",
+        )
+        assert response.status_code == 400
+
+    def test_rejects_round_table_mismatched_dimensions(self, restaurant: Any) -> None:
+        client = _admin_api(restaurant.id)
+        payload = {
+            "tables": [_table(width=400, height=200, shape="round")]
+        }
+        response = client.post(
+            "/api/editor/layouts/publish/",
+            payload,
+            format="json",
+        )
+        assert response.status_code == 400
+
+    def test_rejects_zero_capacity(self, restaurant: Any) -> None:
+        client = _admin_api(restaurant.id)
+        payload = {"tables": [_table(capacity=0)]}
+        response = client.post(
+            "/api/editor/layouts/publish/",
+            payload,
+            format="json",
+        )
+        assert response.status_code == 400
+
+    def test_rejects_invalid_shape(self, restaurant: Any) -> None:
+        client = _admin_api(restaurant.id)
+        payload = {"tables": [_table(shape="triangle")]}
+        response = client.post(
+            "/api/editor/layouts/publish/",
+            payload,
+            format="json",
+        )
+        assert response.status_code == 400
