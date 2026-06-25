@@ -7,6 +7,8 @@ from typing import Any, cast
 from django.conf import settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from common.api import resolve_restaurant_public_id
+
 from .models import RoleCode, User
 from .selectors import get_user_by_email
 
@@ -79,20 +81,26 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
     return user
 
 
-def issue_tokens(user: User) -> tuple[str, str]:
+def issue_tokens(user: User, restaurant_public_id: str | None = None) -> tuple[str, str]:
     refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role
     refresh["token_version"] = user.token_version
     if user.restaurant_id is not None:
         refresh["restaurant_id"] = user.restaurant_id
+        refresh["restaurant_public_id"] = restaurant_public_id or resolve_restaurant_public_id(user.restaurant_id)
     return str(refresh.access_token), str(refresh)
 
 
-def issue_tokens_with_restaurant(user: User, restaurant_id: int) -> tuple[str, str]:
+def issue_tokens_with_restaurant(
+    user: User,
+    restaurant_id: int,
+    restaurant_public_id: str | None = None,
+) -> tuple[str, str]:
     refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role
     refresh["token_version"] = user.token_version
     refresh["restaurant_id"] = restaurant_id
+    refresh["restaurant_public_id"] = restaurant_public_id or resolve_restaurant_public_id(restaurant_id)
     return str(refresh.access_token), str(refresh)
 
 

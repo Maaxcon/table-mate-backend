@@ -166,13 +166,22 @@ class TestIssueTokens:
 @pytest.mark.django_db
 class TestIssueTokensWithRestaurant:
     def test_access_token_contains_restaurant_id(self) -> None:
+        from apps.restaurants.models import Restaurant
+
+        restaurant = Restaurant.objects.create(name="Test")
         user = UserFactory.create(role=RoleCode.WAITER)
-        access, _ = issue_tokens_with_restaurant(user, 42)
-        assert AccessToken(cast(Token, access)).payload["restaurant_id"] == 42
+        access, _ = issue_tokens_with_restaurant(user, restaurant.id)
+        payload = AccessToken(cast(Token, access)).payload
+        assert payload["restaurant_id"] == restaurant.id
+        assert payload["restaurant_public_id"] == str(restaurant.public_id)
 
     def test_access_token_contains_role_and_token_version(self) -> None:
+        from apps.restaurants.models import Restaurant
+
+        restaurant = Restaurant.objects.create(name="Test")
         user = UserFactory.create(role=RoleCode.COOK)
-        access, _ = issue_tokens_with_restaurant(user, 7)
+        access, _ = issue_tokens_with_restaurant(user, restaurant.id)
         payload = AccessToken(cast(Token, access)).payload
         assert payload["role"] == RoleCode.COOK
         assert "token_version" in payload
+        assert "restaurant_public_id" in payload
