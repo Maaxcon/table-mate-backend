@@ -14,12 +14,15 @@ from apps.orders.models import (
     CartSessionStatus,
     Order,
     OrderItem,
+    OrderPaymentStatus,
     OrderStatus,
     Session,
 )
 from apps.orders.services import (
     add_item_to_cart,
     ensure_active_cart_for_table,
+    pay_order_items,
+    void_order_item,
 )
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
@@ -127,6 +130,36 @@ def test_service_charge_distribution_sums_exactly_across_items(
     assert sum((i.service_charge_amount for i in items), Decimal("0")) == order.service_charge
     # ...and the whole bill reconciles with the order total.
     assert sum((i.payable for i in items), Decimal("0")) == order.total_amount
+
+
+@pytest.mark.django_db
+def test_voiding_last_unpaid_item_marks_order_paid(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+    user_factory: Callable[..., Any],
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = ensure_active_cart_for_table(table=table)
+    side = MenuItem.objects.create(restaurant=restaurant, menu=item.menu, name="Side", price=Decimal("5.0000"))
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1)
+    add_item_to_cart(session=cart, menu_item_id=str(side.public_id), quantity=1)
+    order = checkout_cart_session(cart_session=cart)
+
+    paid_item, unpaid_item = list(OrderItem.objects.filter(order=order).order_by("id"))
+    next_cart = ensure_active_cart_for_table(table=table)
+    pay_order_items(cart_session=next_cart, order_item_ids=[str(paid_item.public_id)])
+    order.refresh_from_db()
+    assert order.payment_status == OrderPaymentStatus.UNPAID
+
+    actor = user_factory()
+    actor.save()
+    void_order_item(unpaid_item, actor=actor, void_reason_code="mispick")
+
+    # Every remaining non-voided item is paid, so the order flips to PAID.
+    order.refresh_from_db()
+    assert order.payment_status == OrderPaymentStatus.PAID
 
 
 @pytest.mark.django_db

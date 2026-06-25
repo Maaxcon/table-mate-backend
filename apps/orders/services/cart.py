@@ -539,6 +539,8 @@ def void_order_item(
     order.total_amount = remaining if remaining is not None else Decimal(0)
     order.save(update_fields=["total_amount"])
 
+    _recompute_order_payment_status({order.id})
+
     session = order.session
     agg = (
         OrderItem.objects.filter(
