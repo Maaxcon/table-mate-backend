@@ -3291,6 +3291,73 @@ paths:
               schema:
                 $ref: '#/components/schemas/Zone'
           description: ''
+    put:
+      operationId: restaurants_zones_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Zone'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Zone'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Zone'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
+    patch:
+      operationId: restaurants_zones_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedZone'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedZone'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedZone'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
 components:
   schemas:
     ActionEnum:
@@ -3722,6 +3789,7 @@ components:
           readOnly: true
         active:
           type: boolean
+          default: true
         created_at:
           type: string
           format: date-time
@@ -4121,15 +4189,19 @@ components:
       properties:
         x:
           type: integer
+          maximum: 1800
           minimum: -100
         y:
           type: integer
+          maximum: 1900
           minimum: -100
         width:
           type: integer
+          maximum: 2000
           minimum: 1
         height:
           type: integer
+          maximum: 2000
           minimum: 1
         rotation:
           type: integer
@@ -4139,12 +4211,12 @@ components:
         zone_id:
           type: string
           format: uuid
-          nullable: true
       required:
       - height
       - width
       - x
       - y
+      - zone_id
     Order:
       type: object
       properties:
@@ -4986,6 +5058,7 @@ components:
           readOnly: true
         active:
           type: boolean
+          default: true
         created_at:
           type: string
           format: date-time
@@ -5461,6 +5534,21 @@ components:
           type: integer
           minimum: 1
           nullable: true
+    PatchedZone:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        edge_styles: {}
     Payment:
       type: object
       properties:
@@ -5538,15 +5626,19 @@ components:
       properties:
         x:
           type: integer
+          maximum: 2000
           minimum: -100
         y:
           type: integer
+          maximum: 2000
           minimum: -100
         width:
           type: integer
+          maximum: 2000
           minimum: 1
         height:
           type: integer
+          maximum: 2000
           minimum: 1
         target_zone_id:
           type: string
@@ -5559,12 +5651,12 @@ components:
         zone_id:
           type: string
           format: uuid
-          nullable: true
       required:
       - height
       - width
       - x
       - y
+      - zone_id
     PublicRestaurant:
       type: object
       properties:
@@ -6137,6 +6229,7 @@ components:
           readOnly: true
         active:
           type: boolean
+          default: true
         zone:
           allOf:
           - $ref: '#/components/schemas/Zone'
@@ -6172,15 +6265,19 @@ components:
           maxLength: 64
         x:
           type: integer
+          maximum: 1800
           minimum: -100
         y:
           type: integer
+          maximum: 1800
           minimum: -100
         width:
           type: integer
+          maximum: 2000
           minimum: 1
         height:
           type: integer
+          maximum: 2000
           minimum: 1
         rotation:
           type: integer
@@ -6196,7 +6293,6 @@ components:
         zone_id:
           type: string
           format: uuid
-          nullable: true
         tags:
           type: array
           items:
@@ -6208,6 +6304,7 @@ components:
       - width
       - x
       - y
+      - zone_id
     TableInfo:
       type: object
       properties:
@@ -6231,15 +6328,19 @@ components:
       properties:
         x:
           type: integer
+          maximum: 2000
           minimum: -100
         y:
           type: integer
+          maximum: 2000
           minimum: -100
         width:
           type: integer
+          maximum: 2000
           minimum: 1
         height:
           type: integer
+          maximum: 2000
           minimum: 1
         threshold_label:
           type: string
@@ -6248,12 +6349,12 @@ components:
         zone_id:
           type: string
           format: uuid
-          nullable: true
       required:
       - height
       - width
       - x
       - y
+      - zone_id
     Ticket:
       type: object
       properties:
@@ -6509,6 +6610,7 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        edge_styles: {}
       required:
       - name
       - public_id
