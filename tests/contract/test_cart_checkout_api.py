@@ -1,6 +1,7 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import timedelta
 from typing import Any
+from unittest import mock
 
 import pytest
 from django.urls import reverse
@@ -13,6 +14,17 @@ from apps.orders.models import CartItem, CartSessionStatus, Order
 from apps.orders.services import add_item_to_cart, ensure_active_cart_for_table
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
+
+
+@pytest.fixture(autouse=True)
+def _restaurant_open() -> Iterator[None]:
+    # The working-hours fixture is keyed on real wall-clock time; pin the
+    # restaurant open so these tests don't fail outside the configured hours.
+    with (
+        mock.patch("apps.orders.services.cart.is_restaurant_open", return_value=True),
+        mock.patch("apps.orders.billing.is_restaurant_open", return_value=True),
+    ):
+        yield
 
 
 def _active_reservation(restaurant: Restaurant, table: Table) -> Reservation:
