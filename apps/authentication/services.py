@@ -13,7 +13,7 @@ from google.oauth2.id_token import verify_oauth2_token
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import RoleCode, User
-from .selectors import get_user_by_email
+from .selectors import get_user_by_email, get_user_by_google_sub
 
 logger = logging.getLogger(__name__)
 
@@ -77,20 +77,33 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
     if not email:
         raise ValueError("Google account has no email.")
 
-    user = get_user_by_email(email)
+    google_sub: str | None = claims.get("sub")
+    if not google_sub:
+        raise ValueError("Google account has no subject identifier.")
+
+    # Match on the immutable Google sub first so an email change does not orphan
+    # the account. Fall back to email only to link a pre-existing account on its
+    # first Google login, then backfill the sub onto that row.
+    user = get_user_by_google_sub(google_sub)
     if user is None:
-        try:
-            with transaction.atomic():
-                return User.objects.create_user(
-                    email=email,
-                    first_name=claims.get("given_name", ""),
-                    last_name=claims.get("family_name", ""),
-                    role=RoleCode.CUSTOMER,
-                )
-        except IntegrityError:
-            user = get_user_by_email(email)
-            if user is None:
-                raise
+        user = get_user_by_email(email)
+        if user is not None:
+            user.google_sub = google_sub
+            user.save(update_fields=["google_sub"])
+        else:
+            try:
+                with transaction.atomic():
+                    return User.objects.create_user(
+                        email=email,
+                        google_sub=google_sub,
+                        first_name=claims.get("given_name", ""),
+                        last_name=claims.get("family_name", ""),
+                        role=RoleCode.CUSTOMER,
+                    )
+            except IntegrityError:
+                user = get_user_by_google_sub(google_sub) or get_user_by_email(email)
+                if user is None:
+                    raise
 
     if not user.is_active:
         raise ValueError("This account has been deactivated.")

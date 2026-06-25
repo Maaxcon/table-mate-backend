@@ -41,6 +41,7 @@ class TestGoogleAuthenticate:
         ):
             mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
             mock_verify.return_value = {
+                "sub": "google-sub-new",
                 "email": "new@example.com",
                 "email_verified": True,
                 "given_name": "John",
@@ -49,22 +50,73 @@ class TestGoogleAuthenticate:
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.email == "new@example.com"
+        assert user.google_sub == "google-sub-new"
         assert user.first_name == "John"
         assert user.last_name == "Doe"
         assert user.role == RoleCode.CUSTOMER
 
     def test_returns_existing_user(self) -> None:
-        existing = UserFactory.create(email="existing@example.com")
+        existing = UserFactory.create(email="existing@example.com", google_sub="google-sub-1")
 
         with (
             patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
             patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
         ):
             mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
-            mock_verify.return_value = {"email": "existing@example.com", "email_verified": True}
+            mock_verify.return_value = {
+                "sub": "google-sub-1",
+                "email": "existing@example.com",
+                "email_verified": True,
+            }
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.pk == existing.pk
+
+    def test_matches_by_sub_when_google_email_changed(self) -> None:
+        existing = UserFactory.create(email="old@example.com", google_sub="stable-sub")
+
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {
+                "sub": "stable-sub",
+                "email": "new@example.com",
+                "email_verified": True,
+            }
+            user = google_authenticate("code123", "http://localhost:3000")
+
+        assert user.pk == existing.pk
+
+    def test_links_and_backfills_sub_for_preexisting_email_account(self) -> None:
+        existing = UserFactory.create(email="legacy@example.com", google_sub=None)
+
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {
+                "sub": "freshly-linked-sub",
+                "email": "legacy@example.com",
+                "email_verified": True,
+            }
+            user = google_authenticate("code123", "http://localhost:3000")
+
+        existing.refresh_from_db()
+        assert user.pk == existing.pk
+        assert existing.google_sub == "freshly-linked-sub"
+
+    def test_raises_when_no_sub_in_claims(self) -> None:
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            mock_verify.return_value = {"email": "x@example.com", "email_verified": True}
+            with pytest.raises(ValueError, match="subject identifier"):
+                google_authenticate("code123", "http://localhost:3000")
 
     def test_raises_on_google_exchange_error(self) -> None:
         with patch(
@@ -115,7 +167,7 @@ class TestGoogleAuthenticate:
             patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
         ):
             mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
-            mock_verify.return_value = {"email": "x@example.com", "email_verified": True}
+            mock_verify.return_value = {"sub": "sub-noname", "email": "x@example.com", "email_verified": True}
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.email == "x@example.com"
@@ -150,7 +202,7 @@ class TestGoogleAuthenticate:
             patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
         ):
             mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
-            mock_verify.return_value = {"email": "inactive@example.com", "email_verified": True}
+            mock_verify.return_value = {"sub": "sub-inactive", "email": "inactive@example.com", "email_verified": True}
             with pytest.raises(ValueError, match="deactivated"):
                 google_authenticate("code123", "http://localhost:3000")
 
@@ -172,7 +224,7 @@ class TestGoogleAuthenticate:
             patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
         ):
             mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
-            mock_verify.return_value = {"email": "Mixed@Example.com", "email_verified": True}
+            mock_verify.return_value = {"sub": "sub-mixed", "email": "Mixed@Example.com", "email_verified": True}
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.pk == existing.pk
@@ -183,7 +235,7 @@ class TestGoogleAuthenticate:
             patch("apps.authentication.services.verify_oauth2_token") as mock_verify,
         ):
             mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
-            mock_verify.return_value = {"email": "New.User@Example.com", "email_verified": True}
+            mock_verify.return_value = {"sub": "sub-newuser", "email": "New.User@Example.com", "email_verified": True}
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.email == "new.user@example.com"
@@ -201,7 +253,7 @@ class TestGoogleAuthenticate:
             ),
         ):
             mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
-            mock_verify.return_value = {"email": "race@example.com", "email_verified": True}
+            mock_verify.return_value = {"sub": "sub-race", "email": "race@example.com", "email_verified": True}
             user = google_authenticate("code123", "http://localhost:3000")
 
         assert user.pk == existing.pk
