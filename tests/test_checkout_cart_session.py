@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
@@ -14,6 +14,7 @@ from apps.orders.models import (
     CartSessionStatus,
     Order,
     OrderItem,
+    OrderItemStatus,
     OrderPaymentStatus,
     OrderStatus,
     Session,
@@ -36,6 +37,18 @@ from common.exceptions import (
 )
 
 UNIT_PRICE = Decimal("29.99")
+
+
+@pytest.fixture(autouse=True)
+def _restaurant_open() -> Iterator[None]:
+    # The working-hours fixture is keyed on real wall-clock time, so every
+    # checkout test would fail outside the configured hours. Pin the restaurant
+    # open; the closed path has its own test that patches this to False.
+    with (
+        mock.patch("apps.orders.services.cart.is_restaurant_open", return_value=True),
+        mock.patch("apps.orders.billing.is_restaurant_open", return_value=True),
+    ):
+        yield
 
 
 def _active_reservation(restaurant: Restaurant, table: Table) -> Reservation:
@@ -162,6 +175,41 @@ def test_voiding_last_unpaid_item_marks_order_paid(
     # Every remaining non-voided item is paid, so the order flips to PAID.
     order.refresh_from_db()
     assert order.payment_status == OrderPaymentStatus.PAID
+
+
+@pytest.mark.django_db
+def test_voiding_item_keeps_bill_reconciled(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+    user_factory: Callable[..., Any],
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = ensure_active_cart_for_table(table=table)
+    side = MenuItem.objects.create(restaurant=restaurant, menu=item.menu, name="Side", price=Decimal("10.0000"))
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1)
+    add_item_to_cart(session=cart, menu_item_id=str(side.public_id), quantity=1)
+    order = checkout_cart_session(cart_session=cart)
+
+    to_void = OrderItem.objects.filter(order=order).order_by("id").first()
+    assert to_void is not None
+    actor = user_factory()
+    actor.save()
+    void_order_item(to_void, actor=actor, void_reason_code="mispick")
+
+    order.refresh_from_db()
+    remaining = list(OrderItem.objects.filter(order=order).exclude(status=OrderItemStatus.VOIDED))
+    # total_amount still equals the surviving items' full payable (goods+tax+service)...
+    assert order.total_amount == sum((i.payable for i in remaining), Decimal("0"))
+    # ...and its tax/service parts reconcile, not left stale at pre-void values.
+    subtotal = sum((i.total_price for i in remaining), Decimal("0"))
+    assert order.total_amount == subtotal + order.tax_total + order.service_charge
+
+    # The visit Session total reconciles too (service charge included).
+    session = Session.objects.get(reservation__table=table)
+    assert session.total == session.subtotal + session.tax + session.service_charge
+    assert session.total == order.total_amount
 
 
 @pytest.mark.django_db

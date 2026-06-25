@@ -542,32 +542,40 @@ def void_order_item(
         ]
     )
 
+    # Re-derive the order totals from the surviving items so the bill stays
+    # reconciled (total_amount == sum(item.payable)). Voiding a line just drops
+    # its goods, tax and service share; the rest keep their frozen amounts.
     order = order_item.order
-    remaining = (
-        OrderItem.objects.filter(order=order).exclude(status=OrderItemStatus.VOIDED).aggregate(total=Sum("total_price"))
-    )["total"]
-    order.total_amount = remaining if remaining is not None else Decimal(0)
-    order.save(update_fields=["total_amount"])
+    order_agg = (
+        OrderItem.objects.filter(order=order)
+        .exclude(status=OrderItemStatus.VOIDED)
+        .aggregate(
+            subtotal=Sum("total_price"),
+            tax=Sum("tax_amount"),
+            service=Sum("service_charge_amount"),
+        )
+    )
+    order.tax_total = order_agg["tax"] or Decimal(0)
+    order.service_charge = order_agg["service"] or Decimal(0)
+    order.total_amount = (order_agg["subtotal"] or Decimal(0)) + order.tax_total + order.service_charge
+    order.save(update_fields=["tax_total", "service_charge", "total_amount"])
 
     _recompute_order_payment_status({order.id})
 
     session = order.session
-    agg = (
-        OrderItem.objects.filter(
-            order__session=session,
-        )
-        .exclude(
-            status=OrderItemStatus.VOIDED,
-        )
+    session_agg = (
+        OrderItem.objects.filter(order__session=session)
+        .exclude(status=OrderItemStatus.VOIDED)
         .aggregate(
             subtotal=Sum("total_price"),
             tax=Sum("tax_amount"),
+            service=Sum("service_charge_amount"),
         )
     )
-
-    session.subtotal = agg["subtotal"] or 0
-    session.tax = agg["tax"] or 0
-    session.total = session.subtotal + session.tax
-    session.save(update_fields=["subtotal", "tax", "total"])
+    session.subtotal = session_agg["subtotal"] or Decimal(0)
+    session.tax = session_agg["tax"] or Decimal(0)
+    session.service_charge = session_agg["service"] or Decimal(0)
+    session.total = session.subtotal + session.tax + session.service_charge
+    session.save(update_fields=["subtotal", "tax", "service_charge", "total"])
 
     return order_item
