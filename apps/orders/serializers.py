@@ -117,6 +117,9 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
     order: PublicIdRelatedField[Order] = PublicIdRelatedField(
         queryset=Order.objects.all(),
     )
+    # `label` shadows Field.label in the stubs, but DRF resolves it from the
+    # model property at runtime; the ignore is purely a typing concern.
+    label = serializers.CharField(read_only=True)  # type: ignore[assignment]
     table_number = serializers.CharField(
         source="session.table.table_number",
         read_only=True,
@@ -160,6 +163,8 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         model = Ticket
         fields = [
             "public_id",
+            "label",
+            "daily_number",
             "restaurant",
             "session",
             "order",
@@ -176,6 +181,8 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         ]
         read_only_fields = [
             "public_id",
+            "label",
+            "daily_number",
             "restaurant",
             "table_number",
             "server_name",

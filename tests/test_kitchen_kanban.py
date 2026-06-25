@@ -13,6 +13,7 @@ from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.orders.models import (
     OrderItemStatus,
     Session,
+    Ticket,
     TicketStatus,
 )
 from apps.orders.selectors import (
@@ -709,6 +710,119 @@ class TestTicketKanbanAPI:
         )
         assert resp.status_code == status.HTTP_200_OK
         assert resp.json()["status"] == OrderItemStatus.READY
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestTicketDailyLabel:
+    def test_sequential_labels_within_restaurant(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        actor = auth.user
+        session = _build_session(table, restaurant.id, actor)
+
+        first = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        ).tickets.first()
+        second = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        ).tickets.first()
+
+        assert first is not None and second is not None
+        assert (first.daily_number, first.label) == (1, "T1")
+        assert (second.daily_number, second.label) == (2, "T2")
+
+    def test_labels_isolated_per_restaurant(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        waiter = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        local_session = _build_session(table, restaurant.id, waiter.user)
+        local_ticket = create_order_with_items(
+            session=local_session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=waiter.user,
+        ).tickets.first()
+
+        foreign_restaurant, foreign_table, foreign_item = _create_foreign_restaurant_stack()
+        foreign_waiter = api(role=RoleCode.WAITER, restaurant_id=foreign_restaurant.id).user
+        foreign_session = _build_session(foreign_table, foreign_restaurant.id, foreign_waiter)
+        foreign_ticket = create_order_with_items(
+            session=foreign_session,
+            items=[{"menu_item": foreign_item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=foreign_waiter,
+        ).tickets.first()
+
+        assert local_ticket is not None and foreign_ticket is not None
+        # Each restaurant's first ticket of the day is T1, independently.
+        assert local_ticket.label == "T1"
+        assert foreign_ticket.label == "T1"
+
+    def test_numbering_resets_each_day(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        actor = auth.user
+        session = _build_session(table, restaurant.id, actor)
+        order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        )
+
+        yesterday = datetime.now(UTC) - timedelta(days=1)
+        prior_day_ticket = Ticket.objects.create(
+            restaurant=restaurant,
+            session=session,
+            order=order,
+            status=TicketStatus.INCOMING,
+            injected_at=yesterday,
+        )
+
+        today_ticket = order.tickets.order_by("injected_at").first()
+        assert today_ticket is not None
+        # A ticket injected on a different day starts its own T1 sequence.
+        assert prior_day_ticket.label == "T1"
+        assert today_ticket.label == "T1"
+
+    def test_label_present_in_api_response(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.COOK, restaurant_id=restaurant.id)
+        actor = auth.user
+        session = _build_session(table, restaurant.id, actor)
+        ticket = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        ).tickets.first()
+        assert ticket is not None
+
+        ticket_url = reverse("ticket-detail", kwargs={"public_id": str(ticket.public_id)})
+        resp = auth.client.get(ticket_url)
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        assert data["label"] == "T1"
+        assert data["daily_number"] == 1
 
 
 @pytest.mark.django_db(databases=["default"])

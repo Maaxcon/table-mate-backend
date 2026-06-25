@@ -1,4 +1,7 @@
-from django.db import models
+from typing import Any
+
+from django.db import models, transaction
+from django.utils import timezone
 
 from common.models import RestaurantScopedModel
 
@@ -202,6 +205,10 @@ class Ticket(RestaurantScopedModel):
     injected_at = models.DateTimeField()
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # Human-friendly per-restaurant sequence that resets each day (rendered as
+    # "T1", "T2", ... on the kitchen kanban instead of the opaque public_id).
+    daily_number = models.PositiveIntegerField(null=True, blank=True)
+    daily_seq_date = models.DateField(null=True, blank=True)
 
     class Meta:
         ordering = ["injected_at", "id"]
@@ -216,7 +223,36 @@ class Ticket(RestaurantScopedModel):
                 condition=models.Q(status__in=TicketStatus.values),
                 name="orders_ticket_status_valid",
             ),
+            models.UniqueConstraint(
+                fields=["restaurant", "daily_seq_date", "daily_number"],
+                name="orders_ticket_daily_number_uniq",
+            ),
         ]
+
+    @property
+    def label(self) -> str:
+        """Display label for the kitchen kanban, e.g. "T1" (empty until numbered)."""
+        if self.daily_number is None:
+            return ""
+        return f"T{self.daily_number}"
+
+    def _assign_daily_number(self) -> None:
+        """Allocate the next per-restaurant, per-day sequence number."""
+        injected = self.injected_at or timezone.now()
+        seq_date = timezone.localdate(injected)
+        self.daily_seq_date = seq_date
+        with transaction.atomic():
+            last = (
+                Ticket.objects.select_for_update()
+                .filter(restaurant_id=self.restaurant_id, daily_seq_date=seq_date)
+                .aggregate(max_number=models.Max("daily_number"))["max_number"]
+            )
+            self.daily_number = (last or 0) + 1
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if self._state.adding and self.daily_number is None:
+            self._assign_daily_number()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"Ticket {self.public_id}"
