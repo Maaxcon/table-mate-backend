@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.db import IntegrityError, transaction
+from google.auth.exceptions import GoogleAuthError
 from rest_framework_simplejwt.tokens import AccessToken, Token
 
 from apps.authentication.models import RoleCode, User
@@ -155,6 +156,18 @@ class TestGoogleAuthenticate:
             patch(
                 "apps.authentication.services.verify_oauth2_token",
                 side_effect=ValueError("Token expired"),
+            ),
+        ):
+            mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
+            with pytest.raises(ValueError, match="id_token verification failed"):
+                google_authenticate("code123", "http://localhost:3000")
+
+    def test_raises_on_wrong_issuer_id_token(self) -> None:
+        with (
+            patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
+            patch(
+                "apps.authentication.services.verify_oauth2_token",
+                side_effect=GoogleAuthError("Wrong issuer."),
             ),
         ):
             mock_open.return_value = _urlopen_mock({"id_token": "jwt"})
