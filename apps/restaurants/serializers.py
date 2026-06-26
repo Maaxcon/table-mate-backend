@@ -192,6 +192,8 @@ class ZoneSerializer(serializers.ModelSerializer[Zone]):
             "name",
             "sort_order",
             "edge_styles",
+            "canvas_cols",
+            "canvas_rows",
         ]
         read_only_fields = ["public_id"]
 

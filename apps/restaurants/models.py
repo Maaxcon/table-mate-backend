@@ -94,6 +94,8 @@ class Zone(BaseModel):
     name = models.CharField(max_length=128)
     sort_order = models.PositiveIntegerField(default=0)
     edge_styles = models.JSONField(default=dict, blank=True)
+    canvas_cols = models.PositiveIntegerField(default=20)
+    canvas_rows = models.PositiveIntegerField(default=20)
 
     class Meta:
         ordering = ["restaurant_id", "sort_order", "id"]
