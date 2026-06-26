@@ -212,8 +212,12 @@ class ReservationViewSet(
 
         now_utc = timezone.now()
 
+        # working_hours uses 3-letter keys (mon–sun); index by weekday() (0=Mon)
+        # to stay locale-independent rather than relying on strftime names.
+        weekday_keys = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
         def day_slots(d: date_type) -> list[str]:
-            day_name = d.strftime("%A").lower()
+            day_name = weekday_keys[d.weekday()]
             day_config = working_hours.get(day_name)
             if not day_config:
                 return []
