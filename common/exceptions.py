@@ -12,6 +12,10 @@ class ReservationConflictError(DomainError):
     default_code = "reservation_conflict"
     default_status_code = HTTPStatus.CONFLICT
 
+    def __init__(self, *args: object, conflicting_reservation_id: str | None = None) -> None:
+        super().__init__(*args)
+        self.conflicting_reservation_id = conflicting_reservation_id
+
 
 class ReservationCancelError(DomainError):
     default_detail = "Only pending or active reservations can be cancelled."
