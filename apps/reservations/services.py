@@ -10,8 +10,9 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from apps.authentication.models import RoleCode, User
 from apps.orders.billing import ensure_visit_session
 from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
-from apps.restaurants.models import Table
-from common.exceptions import ReservationCancelError, ReservationConflictError
+from apps.restaurants.models import RestaurantSettings, Table
+from apps.restaurants.selectors import _DAY_KEYS, _hhmm_to_minutes
+from common.exceptions import ReservationCancelError, ReservationConflictError, RestaurantClosedError
 from common.hall_events import (
     emit_hall_new_reservation,
     emit_hall_reservation_cancelled,
@@ -549,3 +550,110 @@ def close_session(
     )
 
     return session
+
+
+@transaction.atomic
+def batch_update_reservations(
+    *,
+    restaurant_id: int,
+    changes: list[dict[str, Any]],
+) -> None:
+    """Apply a batch of reservation moves/resizes atomically.
+
+    Validates internal consistency, operating hours, and DB-level overlaps
+    before applying any changes. Rolls back entirely on any failure.
+    """
+    from datetime import date as _date
+
+    # 1. Lock all affected reservations
+    res_public_ids = [c["reservation_id"] for c in changes]
+    reservations = Reservation.objects.select_for_update().filter(
+        restaurant_id=restaurant_id,
+        public_id__in=res_public_ids,
+        status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+    )
+    res_map = {str(r.public_id): r for r in reservations}
+
+    for c in changes:
+        rid = str(c["reservation_id"])
+        if rid not in res_map:
+            raise NotFound(f"Reservation {rid} not found or not editable.")
+
+    # 2. Validation 1: Internal consistency — no two payload items overlap same table+time
+    occupied: dict[tuple[str, _date, int], str] = {}
+    for c in changes:
+        table_id = str(c["new_table_id"])
+        d = c["new_date"]
+        start_min = c["new_start_time"].hour * 60 + c["new_start_time"].minute
+        end_min = c["new_end_time"].hour * 60 + c["new_end_time"].minute
+        for slot in range(start_min, end_min, 30):
+            key = (table_id, d, slot)
+            if key in occupied:
+                raise ReservationConflictError(
+                    "Overlapping reservations in payload.",
+                    conflicting_reservation_id=c["reservation_id"],
+                )
+            occupied[key] = str(c["reservation_id"])
+
+    # 3. Validation 2: Operating hours
+    settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
+    working_hours = settings.working_hours if settings else {}
+
+    for c in changes:
+        d = c["new_date"]
+        day_key = _DAY_KEYS[d.weekday()]
+        day_hours = working_hours.get(day_key)
+        if not day_hours:
+            raise RestaurantClosedError(f"Restaurant closed on {day_key}.")
+
+        open_min = _hhmm_to_minutes(day_hours.get("open"))
+        close_min = _hhmm_to_minutes(day_hours.get("close"))
+        if open_min is None or close_min is None:
+            raise RestaurantClosedError(f"Invalid operating hours for {day_key}.")
+
+        start_min = c["new_start_time"].hour * 60 + c["new_start_time"].minute
+        end_min = c["new_end_time"].hour * 60 + c["new_end_time"].minute
+
+        if close_min > open_min:
+            if start_min < open_min or end_min > close_min:
+                raise RestaurantClosedError("Reservation falls outside operating hours.")
+        else:  # overnight window
+            if start_min < open_min and end_min > close_min and end_min > open_min:
+                raise RestaurantClosedError("Reservation falls outside operating hours.")
+
+    # 4. Validation 3: Spatial/temporal overlap with existing DB reservations
+    for c in changes:
+        rid = str(c["reservation_id"])
+        res = res_map[rid]
+        table = Table.objects.filter(
+            public_id=c["new_table_id"],
+            restaurant_id=restaurant_id,
+            active=True,
+        ).first()
+        if table is None:
+            raise NotFound(f"Table {c['new_table_id']} not found or inactive.")
+
+        start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
+        end_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
+
+        _check_reservation_conflict(
+            restaurant_id=restaurant_id,
+            table=table,
+            start_at=start_at,
+            end_at=end_at,
+            current_reservation_id=res.id,
+        )
+
+    # 5. Apply all changes
+    for c in changes:
+        rid = str(c["reservation_id"])
+        res = res_map[rid]
+        table = Table.objects.get(
+            public_id=c["new_table_id"],
+            restaurant_id=restaurant_id,
+            active=True,
+        )
+        res.table = table
+        res.start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
+        res.end_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
+        res.save(update_fields=["table", "start_at", "end_at", "updated_at"])
