@@ -468,6 +468,42 @@ class TestTicketKanbanAPI:
         payload = resp.json()
         results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
         assert len(results) >= 1
+        row = results[0]
+        assert row["menu_item_category_name"] == "Mains"
+        assert row["menu_item_category_id"] is not None
+
+    def test_order_item_list_handles_uncategorized_dish(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = auth.client
+        actor = auth.user
+
+        item.category = None
+        item.save(update_fields=["category"])
+
+        session = _build_session(table, restaurant.id, actor)
+        create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        )
+
+        resp = client.get(
+            ORDER_ITEM_LIST_URL,
+            {"order__session__public_id": str(session.public_id)},
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.json()
+        results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        assert len(results) >= 1
+        row = results[0]
+        assert row["menu_item_category_name"] is None
+        assert row["menu_item_category_id"] is None
 
     def test_order_item_list_rejects_foreign_session(
         self,

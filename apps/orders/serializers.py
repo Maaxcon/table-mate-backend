@@ -226,6 +226,16 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         allow_null=True,
     )
     menu_item_name = serializers.CharField(source="menu_item.name", read_only=True)
+    menu_item_category_id = serializers.UUIDField(
+        source="menu_item.category.public_id",
+        read_only=True,
+        allow_null=True,
+    )
+    menu_item_category_name = serializers.CharField(
+        source="menu_item.category.name",
+        read_only=True,
+        allow_null=True,
+    )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -256,6 +266,8 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "ticket",
             "menu_item",
             "menu_item_name",
+            "menu_item_category_id",
+            "menu_item_category_name",
             "guest_slot",
             "quantity",
             "comment",

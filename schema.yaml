@@ -4093,6 +4093,15 @@ components:
         menu_item_name:
           type: string
           readOnly: true
+        menu_item_category_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        menu_item_category_name:
+          type: string
+          readOnly: true
+          nullable: true
         guest_slot:
           type: integer
           maximum: 2147483647
@@ -4153,6 +4162,8 @@ components:
       - created_at
       - guest_slot
       - menu_item
+      - menu_item_category_id
+      - menu_item_category_name
       - menu_item_name
       - order
       - public_id
@@ -4982,6 +4993,15 @@ components:
         menu_item_name:
           type: string
           readOnly: true
+        menu_item_category_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        menu_item_category_name:
+          type: string
+          readOnly: true
+          nullable: true
         guest_slot:
           type: integer
           maximum: 2147483647

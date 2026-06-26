@@ -79,6 +79,22 @@ class Command(BaseCommand):
             if not menu_items:
                 self.stdout.write(self.style.WARNING(f"No menu items for {restaurant.name}. Skipping."))
 
+            # Build a category-diverse pool (one dish per distinct category) so the
+            # kanban shows dishes spanning multiple categories — the kitchen board
+            # colour-codes tickets by MenuItem.category. Fall back to all items when
+            # there aren't enough categories to fill a ticket.
+            items_pool: list[MenuItem] = []
+            seen_categories: set[int | None] = set()
+            for mi in menu_items:
+                if mi.category_id not in seen_categories:
+                    seen_categories.add(mi.category_id)
+                    items_pool.append(mi)
+            if len(items_pool) < 3:
+                items_pool = menu_items
+
+            # Rotates the starting category per session so adjacent tickets differ.
+            session_seq = 0
+
             active_reservations = list(
                 Reservation.objects.filter(
                     restaurant=restaurant,
@@ -110,6 +126,8 @@ class Command(BaseCommand):
 
                 sessions_from_res += 1
                 profile = next(profiles)
+                offset = session_seq
+                session_seq += 1
 
                 items_data = (
                     [
@@ -117,14 +135,14 @@ class Command(BaseCommand):
                         {"slot": 1, "menu": 1, "qty": 1},
                         {"slot": 2, "menu": 2, "qty": 1},
                     ]
-                    if len(menu_items) >= 3
+                    if len(items_pool) >= 3
                     else [
                         {"slot": 1, "menu": 0, "qty": 1},
                     ]
                 )
 
                 for idx, data in enumerate(items_data):
-                    mi = menu_items[data["menu"] % len(menu_items)]
+                    mi = items_pool[(data["menu"] + offset) % len(items_pool)]
                     unit_price = mi.price
                     total_price = unit_price * data["qty"]
 
@@ -234,7 +252,8 @@ class Command(BaseCommand):
 
                 if menu_items:
                     profile = next(profiles)
-                    mi = menu_items[0]
+                    mi = items_pool[session_seq % len(items_pool)]
+                    session_seq += 1
                     order = get_or_create_order(
                         restaurant,
                         session,
