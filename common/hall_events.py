@@ -135,3 +135,58 @@ def emit_hall_new_reservation(
             "occurred_at": timezone.now().isoformat(),
         },
     )
+
+
+def emit_hall_zone_created(
+    restaurant_id: int,
+    *,
+    zone_public_id: str,
+    zone_name: str,
+) -> None:
+    _broadcast_hall_event(
+        restaurant_id,
+        {
+            "event_name": "ZONE_CREATED",
+            "schema_version": "1",
+            "event_id": _stable_event_id("ZONE_CREATED", zone_public_id),
+            "zone_public_id": zone_public_id,
+            "zone_name": zone_name,
+            "occurred_at": timezone.now().isoformat(),
+        },
+    )
+
+
+def emit_hall_zone_updated(
+    restaurant_id: int,
+    *,
+    zone_public_id: str,
+    zone_name: str,
+) -> None:
+    _broadcast_hall_event(
+        restaurant_id,
+        {
+            "event_name": "ZONE_UPDATED",
+            "schema_version": "1",
+            "event_id": _stable_event_id("ZONE_UPDATED", zone_public_id),
+            "zone_public_id": zone_public_id,
+            "zone_name": zone_name,
+            "occurred_at": timezone.now().isoformat(),
+        },
+    )
+
+
+def emit_hall_zone_deleted(
+    restaurant_id: int,
+    *,
+    zone_public_id: str,
+) -> None:
+    _broadcast_hall_event(
+        restaurant_id,
+        {
+            "event_name": "ZONE_DELETED",
+            "schema_version": "1",
+            "event_id": _stable_event_id("ZONE_DELETED", zone_public_id),
+            "zone_public_id": zone_public_id,
+            "occurred_at": timezone.now().isoformat(),
+        },
+    )

@@ -90,6 +90,9 @@ _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {
     "HALL_NEW_RESERVATION": {"event_name", "table_id", "reservation_id", "start_at", "end_at", "occurred_at"},
     "HALL_RESERVATION_CANCELLED": {"event_name", "table_id", "reservation_id", "occurred_at"},
     "LAYOUT_PUBLISHED": {"event_name", "layout_version_public_id", "restaurant_public_id", "occurred_at"},
+    "ZONE_CREATED": {"event_name", "zone_public_id", "zone_name", "occurred_at"},
+    "ZONE_UPDATED": {"event_name", "zone_public_id", "zone_name", "occurred_at"},
+    "ZONE_DELETED": {"event_name", "zone_public_id", "occurred_at"},
 }
 
 

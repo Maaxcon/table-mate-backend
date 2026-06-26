@@ -24,6 +24,11 @@ from common.api import (
     get_restaurant_id_from_auth,
     require_restaurant_id_from_auth,
 )
+from common.hall_events import (
+    emit_hall_zone_created,
+    emit_hall_zone_deleted,
+    emit_hall_zone_updated,
+)
 
 from . import selectors, services
 from .models import Restaurant, RestaurantSettings, Table, Zone
@@ -213,7 +218,35 @@ class ZoneViewSet(
         restaurant_id = self.get_restaurant_id()
         if restaurant_id is None:
             raise ValidationError("Restaurant is required to create a zone")
-        serializer.save(restaurant_id=restaurant_id)
+        zone = serializer.save(restaurant_id=restaurant_id)
+        transaction.on_commit(
+            lambda: emit_hall_zone_created(
+                restaurant_id=restaurant_id,
+                zone_public_id=str(zone.public_id),
+                zone_name=zone.name,
+            )
+        )
+
+    def perform_update(self, serializer: BaseSerializer[Zone]) -> None:
+        zone = serializer.save()
+        transaction.on_commit(
+            lambda: emit_hall_zone_updated(
+                restaurant_id=zone.restaurant_id,
+                zone_public_id=str(zone.public_id),
+                zone_name=zone.name,
+            )
+        )
+
+    def perform_destroy(self, instance: Zone) -> None:
+        public_id = str(instance.public_id)
+        restaurant_id = instance.restaurant_id
+        instance.delete()
+        transaction.on_commit(
+            lambda: emit_hall_zone_deleted(
+                restaurant_id=restaurant_id,
+                zone_public_id=public_id,
+            )
+        )
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         try:
