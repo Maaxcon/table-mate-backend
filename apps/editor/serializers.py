@@ -181,7 +181,8 @@ class PublishLayoutSerializer(serializers.Serializer[Any]):
         canvas_cols = max(8, min(50, canvas_cols))
         canvas_rows = max(8, min(50, canvas_rows))
         self._apply_canvas_limits(canvas_cols, canvas_rows)
-        return super().to_internal_value(data)
+        result: dict[str, Any] = super().to_internal_value(data)
+        return result
 
 
 class LayoutVersionSerializer(serializers.ModelSerializer[LayoutVersion]):
