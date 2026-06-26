@@ -1,9 +1,9 @@
 from typing import Any, cast
 
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import ProtectedError, QuerySet
 from drf_spectacular.utils import extend_schema
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -195,6 +195,7 @@ class ZoneViewSet(
     _PublicRestaurantScopedViewSetMixin,
     mixins.CreateModelMixin,
     mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.ReadOnlyModelViewSet[Zone],
 ):
     permission_classes = [AllowAny]
@@ -211,9 +212,17 @@ class ZoneViewSet(
     def perform_create(self, serializer: BaseSerializer[Zone]) -> None:
         restaurant_id = self.get_restaurant_id()
         if restaurant_id is None:
-            from rest_framework.exceptions import ValidationError
             raise ValidationError("Restaurant is required to create a zone")
         serializer.save(restaurant_id=restaurant_id)
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "This zone still has tables. Reassign or remove them before deleting."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 @extend_schema(tags=["Restaurants"])
