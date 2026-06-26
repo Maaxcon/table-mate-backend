@@ -103,6 +103,12 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "authentication.User"
 
+# auth.E003 demands a plain unique on the USERNAME_FIELD; we enforce uniqueness
+# case-insensitively via a functional UniqueConstraint(Lower("email")) instead,
+# which Django's check does not recognise. That constraint is strictly stronger
+# than a raw unique column, so silence the false positive.
+SILENCED_SYSTEM_CHECKS = ["auth.E003"]
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "apps.authentication.authentication.TokenVersionJWTAuthentication",
@@ -134,11 +140,15 @@ SIMPLE_JWT = {
 
 GOOGLE_CLIENT_ID = env.str("GOOGLE_CLIENT_ID", default="")
 GOOGLE_CLIENT_SECRET = env.str("GOOGLE_CLIENT_SECRET", default="")
+GOOGLE_ALLOWED_REDIRECT_URIS = env.list(
+    "GOOGLE_ALLOWED_REDIRECT_URIS",
+    default=["http://localhost:5173", "http://127.0.0.1:5173"],
+)
 
 CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:3000", "http://127.0.0.1:3000"],
+    default=["http://localhost:5173", "http://127.0.0.1:5173"],
 )
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = (*default_headers, "x-client-id")
