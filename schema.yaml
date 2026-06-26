@@ -290,6 +290,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/Layout'
           description: ''
+  /api/editor/layouts/latest/:
+    get:
+      operationId: editor_layouts_latest_retrieve
+      description: Returns the layout_json from the most recent LayoutVersion for
+        the admin editor.
+      summary: Latest published layout JSON
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
   /api/editor/layouts/publish/:
     post:
       operationId: editor_layouts_publish_create
@@ -6424,6 +6443,10 @@ components:
           type: string
           format: uuid
           nullable: true
+        _client_id:
+          type: string
+          nullable: true
+          title: ' client id'
         public_number:
           type: string
           default: ''
