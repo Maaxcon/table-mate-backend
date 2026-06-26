@@ -52,9 +52,19 @@ def exchange_google_code(code: str, redirect_uri: str) -> dict[str, Any]:
         raise ValueError(f"Failed to reach Google: {exc.reason}") from exc
 
 
+# Small clock skew between Google and the local/container clock can make a fresh
+# token look "used too early", so we allow a few seconds of tolerance.
+_CLOCK_SKEW_SECONDS = 10
+
+
 def verify_google_id_token(token: str) -> dict[str, Any]:
     try:
-        claims = verify_oauth2_token(token, _google_auth_request, settings.GOOGLE_CLIENT_ID)  # type: ignore[no-untyped-call]
+        claims = verify_oauth2_token(  # type: ignore[no-untyped-call]
+            token,
+            _google_auth_request,
+            settings.GOOGLE_CLIENT_ID,
+            clock_skew_in_seconds=_CLOCK_SKEW_SECONDS,
+        )
     except (ValueError, GoogleAuthError) as exc:
         logger.warning("Google id_token verification failed: %s", exc)
         raise ValueError("Google id_token verification failed.") from exc
