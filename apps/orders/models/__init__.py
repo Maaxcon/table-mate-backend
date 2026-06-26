@@ -1,9 +1,8 @@
-from typing import Any
 from decimal import Decimal
+from typing import Any
 
 from django.db import models, transaction
 from django.utils import timezone
-
 
 from common.models import RestaurantScopedModel
 
