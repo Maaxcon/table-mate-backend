@@ -1,5 +1,6 @@
 from typing import Any
 
+from django.core.validators import MaxValueValidator
 from rest_framework import serializers
 
 from apps.authentication.models import User
@@ -8,9 +9,9 @@ from common.api import PublicIdRelatedField
 
 from .models import Layout, LayoutVersion
 
-CANVAS_WIDTH = 2000
-CANVAS_HEIGHT = 2000
 GRID = 100
+DEFAULT_CANVAS_COLS = 20
+DEFAULT_CANVAS_ROWS = 20
 
 
 class LayoutSerializer(serializers.ModelSerializer[Layout]):
@@ -67,10 +68,10 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
 class TableEntitySerializer(serializers.Serializer[Any]):
     id = serializers.UUIDField(required=False, allow_null=True, default=None)
     public_number = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
-    x = serializers.IntegerField(min_value=-100, max_value=CANVAS_WIDTH - 2 * GRID)
-    y = serializers.IntegerField(min_value=-100, max_value=CANVAS_HEIGHT - 2 * GRID)
-    width = serializers.IntegerField(min_value=1, max_value=CANVAS_WIDTH)
-    height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
+    x = serializers.IntegerField(min_value=-100)
+    y = serializers.IntegerField(min_value=-100)
+    width = serializers.IntegerField(min_value=1)
+    height = serializers.IntegerField(min_value=1)
     rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
     shape = serializers.ChoiceField(choices=["rectangle", "round", "square", "booth"])
     capacity = serializers.IntegerField(min_value=1, max_value=20)
@@ -90,19 +91,19 @@ class TableEntitySerializer(serializers.Serializer[Any]):
 
 
 class ObstacleEntitySerializer(serializers.Serializer[Any]):
-    x = serializers.IntegerField(min_value=-100, max_value=CANVAS_WIDTH - 2 * GRID)
-    y = serializers.IntegerField(min_value=-100, max_value=CANVAS_HEIGHT - GRID)
-    width = serializers.IntegerField(min_value=1, max_value=CANVAS_WIDTH)
-    height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
+    x = serializers.IntegerField(min_value=-100)
+    y = serializers.IntegerField(min_value=-100)
+    width = serializers.IntegerField(min_value=1)
+    height = serializers.IntegerField(min_value=1)
     rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
     zone_id = serializers.UUIDField()
 
 
 class ThresholdEntitySerializer(serializers.Serializer[Any]):
-    x = serializers.IntegerField(min_value=-100, max_value=CANVAS_WIDTH)
-    y = serializers.IntegerField(min_value=-100, max_value=CANVAS_HEIGHT)
-    width = serializers.IntegerField(min_value=1, max_value=CANVAS_WIDTH)
-    height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
+    x = serializers.IntegerField(min_value=-100)
+    y = serializers.IntegerField(min_value=-100)
+    width = serializers.IntegerField(min_value=1)
+    height = serializers.IntegerField(min_value=1)
     threshold_label = serializers.CharField(
         max_length=64, required=False, allow_blank=True, default="", source="label"
     )
@@ -110,16 +111,22 @@ class ThresholdEntitySerializer(serializers.Serializer[Any]):
 
 
 class PortalEntitySerializer(serializers.Serializer[Any]):
-    x = serializers.IntegerField(min_value=-100, max_value=CANVAS_WIDTH)
-    y = serializers.IntegerField(min_value=-100, max_value=CANVAS_HEIGHT)
-    width = serializers.IntegerField(min_value=1, max_value=CANVAS_WIDTH)
-    height = serializers.IntegerField(min_value=1, max_value=CANVAS_HEIGHT)
+    x = serializers.IntegerField(min_value=-100)
+    y = serializers.IntegerField(min_value=-100)
+    width = serializers.IntegerField(min_value=1)
+    height = serializers.IntegerField(min_value=1)
     target_zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     portal_label = serializers.CharField(max_length=64, required=False, allow_blank=True, default="", source="label")
     zone_id = serializers.UUIDField()
 
 
 class PublishLayoutSerializer(serializers.Serializer[Any]):
+    canvas_cols = serializers.IntegerField(
+        min_value=8, max_value=50, required=False, default=DEFAULT_CANVAS_COLS
+    )
+    canvas_rows = serializers.IntegerField(
+        min_value=8, max_value=50, required=False, default=DEFAULT_CANVAS_ROWS
+    )
     tables = TableEntitySerializer(many=True, required=False, default=list)
     obstacles = ObstacleEntitySerializer(many=True, required=False, default=list)
     thresholds = ThresholdEntitySerializer(many=True, required=False, default=list)
@@ -127,6 +134,54 @@ class PublishLayoutSerializer(serializers.Serializer[Any]):
     deleted_table_ids = serializers.ListField(
         child=serializers.UUIDField(), required=False, default=list
     )
+
+    def _apply_canvas_limits(self, canvas_cols: int, canvas_rows: int) -> None:
+        """Inject MaxValueValidator limits derived from canvas dimensions into child entity fields."""
+        cw = canvas_cols * GRID
+        ch = canvas_rows * GRID
+
+        # Per-entity-type field limits: (field_name, x_max, y_max, w_max, h_max)
+        limits: dict[str, dict[str, int]] = {
+            "tables": {"x": cw - 2 * GRID, "y": ch - 2 * GRID, "width": cw, "height": ch},
+            "obstacles": {"x": cw - 2 * GRID, "y": ch - GRID, "width": cw, "height": ch},
+            "thresholds": {"x": cw, "y": ch, "width": cw, "height": ch},
+            "portals": {"x": cw, "y": ch, "width": cw, "height": ch},
+        }
+
+        for field_name, field_limits in limits.items():
+            list_field = self.fields.get(field_name)
+            if not list_field:
+                continue
+            child = getattr(list_field, "child", None)
+            if not child:
+                continue
+            for fname, max_val in field_limits.items():
+                f = child.fields.get(fname)
+                if not f:
+                    continue
+                # Replace existing MaxValueValidator or append a new one
+                for v in f.validators:
+                    if isinstance(v, MaxValueValidator):
+                        v.limit_value = max_val
+                        break
+                else:
+                    f.validators.append(MaxValueValidator(max_val))
+
+    def to_internal_value(self, data: dict[str, Any]) -> dict[str, Any]:
+        canvas_cols = data.get("canvas_cols", DEFAULT_CANVAS_COLS)
+        canvas_rows = data.get("canvas_rows", DEFAULT_CANVAS_ROWS)
+        try:
+            canvas_cols = int(canvas_cols)
+        except (TypeError, ValueError):
+            canvas_cols = DEFAULT_CANVAS_COLS
+        try:
+            canvas_rows = int(canvas_rows)
+        except (TypeError, ValueError):
+            canvas_rows = DEFAULT_CANVAS_ROWS
+        canvas_cols = max(8, min(50, canvas_cols))
+        canvas_rows = max(8, min(50, canvas_rows))
+        self._apply_canvas_limits(canvas_cols, canvas_rows)
+        return super().to_internal_value(data)
 
 
 class LayoutVersionSerializer(serializers.ModelSerializer[LayoutVersion]):
