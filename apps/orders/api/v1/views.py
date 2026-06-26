@@ -18,6 +18,8 @@ from apps.orders.selectors import get_cart_session, is_cart_participant
 from apps.orders.services import (
     add_item_to_cart,
     create_cart_session,
+    get_bill_order_items,
+    pay_order_items,
     remove_item_from_cart,
     update_cart_item_quantity,
 )
@@ -26,9 +28,11 @@ from common.exceptions import CartChangedError, CartSessionNotFoundError, Domain
 
 from .serializers import (
     AddCartItemSerializer,
+    BillItemSerializer,
     CartItemSerializer,
     CartSessionSerializer,
     CheckoutResponseSerializer,
+    PayOrderItemsSerializer,
     SetGuestNameSerializer,
     UpdateCartItemSerializer,
 )
@@ -315,6 +319,7 @@ class CartCheckoutView(GuestFallbackAuthMixin, APIView):
 
 
 @extend_schema(tags=["Cart"])
+@extend_schema(tags=["Cart"])
 class SetGuestNameView(GuestFallbackAuthMixin, APIView):
     permission_classes = [IsActiveTableGuest]
 
@@ -347,3 +352,40 @@ class SetGuestNameView(GuestFallbackAuthMixin, APIView):
         )
 
         return Response(status=status.HTTP_200_OK)
+
+
+@extend_schema(tags=["Cart"])
+class CartBillView(GuestFallbackAuthMixin, APIView):
+    """Ordered (already-submitted) items for this table's visit — the bill."""
+
+    permission_classes = [IsActiveTableGuest]
+    serializer_class = BillItemSerializer
+
+    @extend_schema(responses={200: BillItemSerializer(many=True)})
+    def get(self, request: Request, session_pk: str) -> Response:
+        session = _resolve_checkout_session(request, session_pk)
+        items = get_bill_order_items(cart_session=session)
+        return Response(BillItemSerializer(items, many=True).data, status=status.HTTP_200_OK)
+
+
+@extend_schema(tags=["Cart"])
+class CartPayView(GuestFallbackAuthMixin, APIView):
+    """Mark selected ordered items as paid (simulated). Returns the updated bill."""
+
+    permission_classes = [IsActiveTableGuest]
+    serializer_class = PayOrderItemsSerializer
+
+    @extend_schema(
+        request=PayOrderItemsSerializer,
+        responses={200: BillItemSerializer(many=True)},
+    )
+    def post(self, request: Request, session_pk: str) -> Response:
+        serializer = PayOrderItemsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        session = _resolve_checkout_session(request, session_pk)
+        items = pay_order_items(
+            cart_session=session,
+            order_item_ids=[str(i) for i in serializer.validated_data["order_item_ids"]],
+            client_id=_get_client_id_from_request(request),
+        )
+        return Response(BillItemSerializer(items, many=True).data, status=status.HTTP_200_OK)

@@ -43,6 +43,31 @@ from .models import (
 from .services.cart import _broadcast_cart_updated
 
 
+def _distribute_service_charge(
+    order_items: list[OrderItem],
+    order_subtotal: Decimal,
+    order_service_charge: Decimal,
+) -> None:
+    """Spread the order-level service charge over its items, proportional to goods.
+
+    Each item gets its rounded share; the last item absorbs the rounding remainder
+    so the per-item shares sum exactly to ``order_service_charge`` (and the bill
+    reconciles with ``Order.total_amount``). Persists ``service_charge_amount``.
+    """
+    if not order_items or order_service_charge <= 0 or order_subtotal <= 0:
+        return
+    allocated = Decimal("0")
+    last_index = len(order_items) - 1
+    for index, item in enumerate(order_items):
+        if index == last_index:
+            item.service_charge_amount = order_service_charge - allocated
+        else:
+            share = quantize_money(order_service_charge * item.total_price / order_subtotal)
+            item.service_charge_amount = share
+            allocated += share
+    OrderItem.objects.bulk_update(order_items, ["service_charge_amount"])
+
+
 def _restaurant_billing(restaurant_id: int) -> tuple[str, Decimal, Decimal]:
     settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
     if settings is None:
@@ -207,6 +232,7 @@ def checkout_cart_session(
             injected_at=timezone.now(),
         )
 
+        order_items: list[OrderItem] = []
         order_subtotal = Decimal("0")
         order_tax = Decimal("0")
         # Build a map of guest_identity → display_name for this session.
@@ -218,27 +244,30 @@ def checkout_cart_session(
             unit_price = cart_item.menu_item.price
             line_total = quantize_money(unit_price * cart_item.quantity)
             line_tax = quantize_money(line_total * tax_rate)
-            OrderItem.objects.create(
-                restaurant_id=cart_session.restaurant_id,
-                order=order,
-                ticket=ticket,
-                menu_item=cart_item.menu_item,
-                guest_slot=cart_item.guest_slot or 0,
-                guest_display_name=(
-                    guest_names.get(cart_item.guest_identity) if cart_item.guest_identity else None
-                ),
-                quantity=cart_item.quantity,
-                comment=cart_item.comment,
-                unit_price=unit_price,
-                total_price=line_total,
-                tax_rate=tax_rate,
-                tax_amount=line_tax,
+            order_items.append(
+                OrderItem.objects.create(
+                    restaurant_id=cart_session.restaurant_id,
+                    order=order,
+                    ticket=ticket,
+                    menu_item=cart_item.menu_item,
+                    guest_slot=cart_item.guest_slot or 0,
+                    guest_display_name=(
+                        guest_names.get(cart_item.guest_identity) if cart_item.guest_identity else None
+                    ),
+                    quantity=cart_item.quantity,
+                    comment=cart_item.comment,
+                    unit_price=unit_price,
+                    total_price=line_total,
+                    tax_rate=tax_rate,
+                    tax_amount=line_tax,
+                )
             )
             order_subtotal += line_total
             order_tax += line_tax
 
         # Service charge applies to the goods subtotal and is not itself taxed.
         order_service_charge = quantize_money(order_subtotal * service_charge_rate)
+        _distribute_service_charge(order_items, order_subtotal, order_service_charge)
         order.tax_total = order_tax
         order.service_charge = order_service_charge
         order.total_amount = order_subtotal + order_tax + order_service_charge

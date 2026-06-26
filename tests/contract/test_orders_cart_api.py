@@ -232,6 +232,68 @@ class TestCartItemCreate:
         assert data["quantity"] == 2
         assert data["added_by"] == str(auth.user.public_id)
 
+    def test_re_add_with_comment_updates_stored_comment(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
+        session.participants.add(auth.user)
+        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+
+        auth.client.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        # Same item again, now with a note: it must merge quantity AND store the note.
+        response = auth.client.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1, "comment": "no onions"},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        body = response.json()
+        assert body["quantity"] == 2
+        assert body["comment"] == "no onions"
+
+        # A later add without a comment must not wipe the existing note.
+        auth.client.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        list_resp = auth.client.get(url)
+        results = list_resp.json()["results"]
+        line = next(i for i in results if i["menu_item"] == str(cart_item.public_id))
+        assert line["comment"] == "no onions"
+
+    def test_response_includes_menu_item_snapshot(
+        self,
+        api: Callable[..., AuthContext],
+        reservation: Reservation,
+        restaurant: Restaurant,
+        cart_item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.CUSTOMER, restaurant_id=restaurant.id)
+        session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=auth.user)
+        session.participants.add(auth.user)
+
+        url = reverse("cart-item-list", kwargs={"session_pk": session.public_id})
+        response = auth.client.post(
+            url,
+            {"menu_item": str(cart_item.public_id), "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        snapshot = response.json()["menu_item_detail"]
+        assert snapshot["id"] == str(cart_item.public_id)
+        assert snapshot["name"] == cart_item.name
+        assert "price" in snapshot
+
     def test_add_item_as_non_participant_returns_403(
         self,
         api: Callable[..., AuthContext],

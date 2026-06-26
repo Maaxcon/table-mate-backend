@@ -13,6 +13,6 @@ class TestGetUserByEmail:
     def test_returns_none_when_not_found(self) -> None:
         assert get_user_by_email("nobody@example.com") is None
 
-    def test_case_sensitive(self) -> None:
-        UserFactory.create(email="lower@example.com")
-        assert get_user_by_email("LOWER@example.com") is None
+    def test_case_insensitive(self) -> None:
+        user = UserFactory.create(email="lower@example.com")
+        assert get_user_by_email("LOWER@example.com") == user

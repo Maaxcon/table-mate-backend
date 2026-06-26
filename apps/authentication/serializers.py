@@ -1,5 +1,6 @@
 from typing import Any, cast
 
+from django.conf import settings
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -24,6 +25,11 @@ class GuestInitSerializer(serializers.Serializer[None]):
 class GoogleAuthSerializer(serializers.Serializer[None]):
     code = serializers.CharField()
     redirect_uri = serializers.CharField()
+
+    def validate_redirect_uri(self, value: str) -> str:
+        if value not in settings.GOOGLE_ALLOWED_REDIRECT_URIS:
+            raise serializers.ValidationError("redirect_uri is not allowed.")
+        return value
 
 
 class GoogleAuthResponseSerializer(serializers.Serializer[None]):

@@ -4,7 +4,9 @@ __all__ = [
     "add_item_to_cart",
     "create_order_with_items",
     "emit_hall_table_status_changed",
+    "get_bill_order_items",
     "open_session",
+    "pay_order_items",
     "remove_item_from_cart",
     "update_cart_item_quantity",
     "update_session_status",
@@ -44,6 +46,7 @@ from ..models import (
     Order,
     OrderItem,
     OrderItemStatus,
+    OrderPaymentStatus,
     OrderSource,
     OrderStatus,
     Session,
@@ -154,11 +157,17 @@ def add_item_to_cart(
             )
             created = False
         if not created:
-            CartItem.objects.filter(pk=item.pk).update(
-                quantity=F("quantity") + quantity,
-                updated_at=timezone.now(),
-            )
-            item.refresh_from_db(fields=["quantity", "updated_at"])
+            update_fields: dict[str, object] = {
+                "quantity": F("quantity") + quantity,
+                "updated_at": timezone.now(),
+            }
+            # The cart holds one row per menu item, so a re-add with a new comment
+            # must overwrite the stored note. A blank/absent comment leaves the
+            # existing one in place (e.g. tapping + on a card has no comment).
+            if comment is not None:
+                update_fields["comment"] = comment
+            CartItem.objects.filter(pk=item.pk).update(**update_fields)
+            item.refresh_from_db(fields=["quantity", "comment", "updated_at"])
 
         item.menu_item = menu_item
         item.cart_session = session
@@ -263,6 +272,82 @@ def update_cart_item_quantity(
         item.refresh_from_db()
         _broadcast_cart_updated(session, client_id)
         return item
+
+
+def _visit_session_for_cart(cart_session: CartSession) -> Session | None:
+    """The dining Session that holds this cart's orders (shared via reservation)."""
+    if cart_session.reservation_id is None:
+        return None
+    return Session.objects.filter(reservation_id=cart_session.reservation_id).first()
+
+
+def get_bill_order_items(*, cart_session: CartSession) -> list[OrderItem]:
+    """Ordered (already-submitted) items for this table's visit — the bill.
+
+    Pulls every non-voided OrderItem across the visit Session's orders, grouped
+    later by ``guest_slot``. This is what the guest pays for, not the cart.
+    """
+    session = _visit_session_for_cart(cart_session)
+    if session is None:
+        return []
+    return list(
+        OrderItem.objects.filter(order__session=session)
+        .exclude(status=OrderItemStatus.VOIDED)
+        .select_related("menu_item")
+        .order_by("guest_slot", "id")
+    )
+
+
+def _recompute_order_payment_status(order_ids: set[int]) -> None:
+    for order_id in order_ids:
+        items = OrderItem.objects.filter(order_id=order_id).exclude(status=OrderItemStatus.VOIDED)
+        if not items.exists():
+            # Every item is voided: nothing is owed and nothing was paid, so the
+            # order is cancelled rather than an outstanding unpaid debt.
+            new_status = OrderPaymentStatus.CANCELLED
+        elif items.filter(is_paid=False).exists():
+            new_status = OrderPaymentStatus.UNPAID
+        else:
+            new_status = OrderPaymentStatus.PAID
+        Order.objects.filter(pk=order_id).update(payment_status=new_status)
+
+
+def pay_order_items(
+    *,
+    cart_session: CartSession,
+    order_item_ids: list[str],
+    client_id: str | None = None,
+) -> list[OrderItem]:
+    """Mark the given ordered items as paid (simulated — no money moves).
+
+    Only non-voided, currently-unpaid items belonging to this table's visit are
+    touched; unknown/already-paid ids are ignored (idempotent). An order flips to
+    PAID once all its non-voided items are paid. Returns the full updated bill.
+    """
+    with transaction.atomic():
+        session = _visit_session_for_cart(cart_session)
+        if session is None:
+            return []
+        # A closed/voided visit is settled; paying against it would mutate a
+        # finalised bill. The API can't reach this (it 401s on a closed cart),
+        # but guard the service so any other caller fails loudly.
+        if session.status != SessionStatus.OPEN:
+            raise DomainError("Cannot pay items on a closed or voided visit.")
+
+        to_pay = list(
+            OrderItem.objects.select_for_update()
+            .filter(order__session=session, public_id__in=order_item_ids, is_paid=False)
+            .exclude(status=OrderItemStatus.VOIDED)
+        )
+        if to_pay:
+            OrderItem.objects.filter(pk__in=[i.pk for i in to_pay]).update(
+                is_paid=True,
+                updated_at=timezone.now(),
+            )
+            _recompute_order_payment_status({i.order_id for i in to_pay})
+            _broadcast_cart_updated(cart_session, client_id)
+
+        return get_bill_order_items(cart_session=cart_session)
 
 
 _SESSION_STATUS_TRANSITIONS: dict[str, set[str]] = {
@@ -457,30 +542,40 @@ def void_order_item(
         ]
     )
 
+    # Re-derive the order totals from the surviving items so the bill stays
+    # reconciled (total_amount == sum(item.payable)). Voiding a line just drops
+    # its goods, tax and service share; the rest keep their frozen amounts.
     order = order_item.order
-    remaining = (
-        OrderItem.objects.filter(order=order).exclude(status=OrderItemStatus.VOIDED).aggregate(total=Sum("total_price"))
-    )["total"]
-    order.total_amount = remaining if remaining is not None else Decimal(0)
-    order.save(update_fields=["total_amount"])
-
-    session = order.session
-    agg = (
-        OrderItem.objects.filter(
-            order__session=session,
-        )
-        .exclude(
-            status=OrderItemStatus.VOIDED,
-        )
+    order_agg = (
+        OrderItem.objects.filter(order=order)
+        .exclude(status=OrderItemStatus.VOIDED)
         .aggregate(
             subtotal=Sum("total_price"),
             tax=Sum("tax_amount"),
+            service=Sum("service_charge_amount"),
         )
     )
+    order.tax_total = order_agg["tax"] or Decimal(0)
+    order.service_charge = order_agg["service"] or Decimal(0)
+    order.total_amount = (order_agg["subtotal"] or Decimal(0)) + order.tax_total + order.service_charge
+    order.save(update_fields=["tax_total", "service_charge", "total_amount"])
 
-    session.subtotal = agg["subtotal"] or 0
-    session.tax = agg["tax"] or 0
-    session.total = session.subtotal + session.tax
-    session.save(update_fields=["subtotal", "tax", "total"])
+    _recompute_order_payment_status({order.id})
+
+    session = order.session
+    session_agg = (
+        OrderItem.objects.filter(order__session=session)
+        .exclude(status=OrderItemStatus.VOIDED)
+        .aggregate(
+            subtotal=Sum("total_price"),
+            tax=Sum("tax_amount"),
+            service=Sum("service_charge_amount"),
+        )
+    )
+    session.subtotal = session_agg["subtotal"] or Decimal(0)
+    session.tax = session_agg["tax"] or Decimal(0)
+    session.service_charge = session_agg["service"] or Decimal(0)
+    session.total = session.subtotal + session.tax + session.service_charge
+    session.save(update_fields=["subtotal", "tax", "service_charge", "total"])
 
     return order_item

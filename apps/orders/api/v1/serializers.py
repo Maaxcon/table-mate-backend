@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from apps.authentication.models import User
 from apps.menu.models import MenuItem
-from apps.orders.models import CartItem, CartSession, GuestProfile
+from apps.orders.models import CartItem, CartSession, GuestProfile, OrderItem
 from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
@@ -55,10 +55,26 @@ class CartSessionSerializer(serializers.ModelSerializer[CartSession]):
         ]
 
 
+class CartMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
+    """Just enough of the menu item to render a cart line on its own, so the
+    cart never depends on which menu page/sort the client is currently showing.
+
+    These are LIVE reads of the current MenuItem (name/price/image/availability),
+    not an order-time snapshot — a later rename or price change is reflected here.
+    The amount a guest owes is frozen separately on OrderItem.total_price."""
+
+    id = serializers.UUIDField(source="public_id", read_only=True)
+
+    class Meta:
+        model = MenuItem
+        fields = ["id", "name", "price", "image", "is_available"]
+
+
 class CartItemSerializer(serializers.ModelSerializer[CartItem]):
     restaurant = PublicIdRelatedField[Restaurant](read_only=True)
     cart_session = PublicIdRelatedField[CartSession](read_only=True)
     menu_item = PublicIdRelatedField[MenuItem](read_only=True)
+    menu_item_detail = CartMenuItemSerializer(source="menu_item", read_only=True)
     added_by = PublicIdRelatedField[User](read_only=True)
     is_mine = serializers.SerializerMethodField()
     display_name = serializers.SerializerMethodField()
@@ -88,12 +104,12 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
         fields = [
             "public_id",
             "menu_item",
+            "menu_item_detail",
             "quantity",
             "comment",
             "added_by",
             "guest_slot",
             "is_mine",
-            "is_paid",
             "display_name",
             "cart_session",
             "restaurant",
@@ -107,9 +123,39 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
             "menu_item",
             "added_by",
             "guest_slot",
-            "is_paid",
             "created_at",
             "updated_at",
+        ]
+
+
+class PayOrderItemsSerializer(serializers.Serializer[None]):
+    order_item_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        allow_empty=False,
+    )
+
+
+class BillItemSerializer(serializers.ModelSerializer[OrderItem]):
+    id = serializers.UUIDField(source="public_id", read_only=True)
+    # Live read of the current menu item; if it is later renamed, a past bill
+    # displays the new name. Only the amount is frozen (see total_price/payable).
+    name = serializers.CharField(source="menu_item.name", read_only=True)
+    # The single authoritative amount owed for this line: goods + tax + its
+    # service share. Summing payable across a visit's items equals
+    # Order.total_amount, so the bill the guest pays matches the checkout receipt.
+    # The goods-only total_price is deliberately NOT exposed here — a consumer
+    # summing it would under-charge (tax + service missing).
+    payable = serializers.DecimalField(max_digits=14, decimal_places=4, read_only=True)
+
+    class Meta:
+        model = OrderItem
+        fields = [
+            "id",
+            "name",
+            "guest_slot",
+            "quantity",
+            "payable",
+            "is_paid",
         ]
 
 

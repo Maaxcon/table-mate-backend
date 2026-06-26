@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('orders', '0016_session_service_charge'),
+        ('orders', '0019_remove_cartitem_is_paid'),
         ('restaurants', '0017_remove_shape_from_table'),
     ]
 

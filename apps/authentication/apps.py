@@ -7,5 +7,6 @@ class AuthenticationConfig(AppConfig):
     label = "authentication"
 
     def ready(self) -> None:
+        import apps.authentication.checks  # noqa: F401
         import apps.authentication.schema  # noqa: F401
         import apps.authentication.signals  # noqa: F401
