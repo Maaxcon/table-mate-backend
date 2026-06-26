@@ -13,7 +13,7 @@ from apps.authentication.services import issue_tokens_with_restaurant
 from apps.editor.models import LayoutVersion
 from apps.restaurants.models import Table
 from common.channels import hall_group_name
-from common.hall_events import emit_hall_layout_published
+from common.hall_events import emit_hall_layout_published, emit_hall_zone_updated
 from tests.conftest import RestaurantFactory, UserFactory
 
 
@@ -182,6 +182,53 @@ class TestEmitHallLayoutPublished:
                 layout_version_public_id="a1b2c3d4-0001-0000-0000-000000000001",
                 restaurant_public_id=str(restaurant.public_id),
             )
+
+            assert mock_layer.group_send.call_count == 1
+
+
+@pytest.mark.django_db
+class TestEmitHallZoneUpdated:
+    def test_distinct_saves_produce_distinct_event_ids(self, restaurant: Any) -> None:
+        # Repeated renames of the SAME zone must each broadcast. The event_id varies by
+        # updated_at, so the dedup gate does not collapse separate saves into one.
+        cache.clear()
+        with patch("common.hall_events.get_channel_layer") as mock_get_layer:
+            mock_layer = AsyncMock()
+            mock_get_layer.return_value = mock_layer
+
+            zone_public_id = "a1b2c3d4-0001-0000-0000-000000000001"
+            emit_hall_zone_updated(
+                restaurant_id=restaurant.id,
+                zone_public_id=zone_public_id,
+                zone_name="Patio",
+                zone_updated_at="2026-06-26T10:00:00+00:00",
+            )
+            emit_hall_zone_updated(
+                restaurant_id=restaurant.id,
+                zone_public_id=zone_public_id,
+                zone_name="Terrace",
+                zone_updated_at="2026-06-26T10:00:05+00:00",
+            )
+
+            assert mock_layer.group_send.call_count == 2
+            ids = [c[0][1]["event"]["event_id"] for c in mock_layer.group_send.call_args_list]
+            assert ids[0] != ids[1]
+
+    def test_same_save_dedups(self, restaurant: Any) -> None:
+        # Re-sending the identical save (same updated_at) is still idempotent.
+        cache.clear()
+        with patch("common.hall_events.get_channel_layer") as mock_get_layer:
+            mock_layer = AsyncMock()
+            mock_get_layer.return_value = mock_layer
+
+            kwargs = {
+                "restaurant_id": restaurant.id,
+                "zone_public_id": "a1b2c3d4-0001-0000-0000-000000000001",
+                "zone_name": "Patio",
+                "zone_updated_at": "2026-06-26T10:00:00+00:00",
+            }
+            emit_hall_zone_updated(**kwargs)
+            emit_hall_zone_updated(**kwargs)
 
             assert mock_layer.group_send.call_count == 1
 

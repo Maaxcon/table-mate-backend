@@ -161,13 +161,18 @@ def emit_hall_zone_updated(
     *,
     zone_public_id: str,
     zone_name: str,
+    zone_updated_at: str,
 ) -> None:
+    # ``zone_updated_at`` (the zone's auto_now timestamp) is part of the event_id so each distinct
+    # save produces a distinct id. Without it, every update to the same zone collides on the dedup
+    # key and repeated renames within the dedup TTL would be silently dropped. Re-sends of the same
+    # save still dedup, which is the intended idempotency.
     _broadcast_hall_event(
         restaurant_id,
         {
             "event_name": "ZONE_UPDATED",
             "schema_version": "1",
-            "event_id": _stable_event_id("ZONE_UPDATED", zone_public_id),
+            "event_id": _stable_event_id("ZONE_UPDATED", zone_public_id, zone_updated_at),
             "zone_public_id": zone_public_id,
             "zone_name": zone_name,
             "occurred_at": timezone.now().isoformat(),

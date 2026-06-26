@@ -234,6 +234,7 @@ class ZoneViewSet(
                 restaurant_id=zone.restaurant_id,
                 zone_public_id=str(zone.public_id),
                 zone_name=zone.name,
+                zone_updated_at=zone.updated_at.isoformat(),
             )
         )
 
