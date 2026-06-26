@@ -106,3 +106,22 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         if isinstance(start_at, datetime) and isinstance(end_at, datetime) and start_at >= end_at:
             raise serializers.ValidationError({"end_at": "end_at must be after start_at."})
         return attrs
+
+
+class BatchUpdateItemSerializer(serializers.Serializer):
+    reservation_id = serializers.UUIDField()
+    new_table_id = serializers.UUIDField()
+    new_date = serializers.DateField()
+    new_start_time = serializers.TimeField()
+    new_end_time = serializers.TimeField()
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        start = attrs["new_start_time"]
+        end = attrs["new_end_time"]
+        if start >= end:
+            raise serializers.ValidationError("new_end_time must be after new_start_time.")
+        return attrs
+
+
+class BatchUpdateSerializer(serializers.Serializer):
+    changes = BatchUpdateItemSerializer(many=True, min_length=1)
