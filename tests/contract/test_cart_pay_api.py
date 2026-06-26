@@ -113,7 +113,7 @@ def test_guest_token_cannot_pay_other_table_bill(
     _active_reservation(restaurant, table)
     cart_a = ensure_active_cart_for_table(table=table)
 
-    table_b = Table.objects.create(restaurant=restaurant, table_number="TB", capacity=4, active=True)
+    table_b = Table.objects.create(restaurant=restaurant, zone=table.zone, public_number="TB", capacity=4, active=True)
     cart_b, order_b = _ordered_visit(restaurant, table_b, item)
     order_item_b = OrderItem.objects.get(order=order_b)
 
@@ -133,7 +133,7 @@ def test_guest_token_cannot_view_other_table_bill(
     _active_reservation(restaurant, table)
     cart_a = ensure_active_cart_for_table(table=table)
 
-    table_b = Table.objects.create(restaurant=restaurant, table_number="TB", capacity=4, active=True)
+    table_b = Table.objects.create(restaurant=restaurant, zone=table.zone, public_number="TB", capacity=4, active=True)
     cart_b, _order_b = _ordered_visit(restaurant, table_b, item)
 
     client = _guest_client(cart_a.public_id)  # token scoped to table A's cart
