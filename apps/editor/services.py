@@ -82,9 +82,11 @@ def publish_layout(
     }
     incoming_table_uuids: set[str] = set()
     table_id_map: dict[str, str] = {}
+    public_number_map: dict[str, str] = {}
 
     for table_data in layout_data.get("tables", []):
         table_uuid = table_data.get("id")
+        client_uuid = table_data.get("_client_id")
         public_number = table_data.get("public_number") or ""
         capacity = table_data["capacity"]
         zone_id = table_data.get("zone_id")
@@ -124,6 +126,10 @@ def publish_layout(
             if client_id:
                 table_id_map[client_id] = str(existing.public_id)
             table_data["id"] = str(existing.public_id)
+            table_data["public_number"] = existing.public_number
+            pn_key = str(client_uuid) if client_uuid else (str(table_uuid) if table_uuid else None)
+            if pn_key:
+                public_number_map[pn_key] = existing.public_number
         else:
             if not public_number:
                 public_number = _generate_public_number(restaurant_id)
@@ -137,6 +143,10 @@ def publish_layout(
             incoming_table_uuids.add(str(table.public_id))
             table_id_map[client_id] = str(table.public_id)
             table_data["id"] = str(table.public_id)
+            table_data["public_number"] = table.public_number
+            pn_key = str(client_uuid) if client_uuid else (str(table_uuid) if table_uuid else None)
+            if pn_key:
+                public_number_map[pn_key] = table.public_number
 
     # Deletions are explicit: only tables the admin actually removed (sent in
     # ``deleted_table_ids``) are deactivated. Moving/resizing/editing a table is an
@@ -198,4 +208,5 @@ def publish_layout(
     return {
         "version": version,
         "table_id_map": table_id_map,
+        "public_number_map": public_number_map,
     }

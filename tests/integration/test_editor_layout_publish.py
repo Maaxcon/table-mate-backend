@@ -188,6 +188,27 @@ class TestEmitHallLayoutPublished:
 
 @pytest.mark.django_db(databases=["default"], transaction=True)
 class TestPublishEndpoint:
+    def test_new_table_with_non_uuid_client_id_publishes(self, restaurant: Any, zone: Any) -> None:
+        # A brand-new table carries the editor's throwaway local id (not a UUID) in _client_id.
+        # Publish must succeed and create the table, echoing the client handle back for the
+        # frontend to reconcile its row with the server-assigned public_id.
+        client = _admin_api(restaurant.id)
+        client_id = "1723456789123-abc1d2"
+        table = _table(x=10, y=20, zone_id=str(zone.public_id))
+        table["_client_id"] = client_id
+
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                {"tables": [table]},
+                format="json",
+            )
+
+        assert response.status_code == 201, response.json()
+        data = response.json()
+        assert Table.objects.filter(restaurant_id=restaurant.id, active=True).count() == 1
+        assert client_id in data["public_number_map"]
+
     def test_admin_can_publish(self, restaurant: Any, zone: Any) -> None:
         client = _admin_api(restaurant.id)
 

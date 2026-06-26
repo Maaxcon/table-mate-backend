@@ -67,6 +67,13 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
 
 class TableEntitySerializer(serializers.Serializer[Any]):
     id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    # Opaque client-side correlation handle for newly-added entities (not yet persisted).
+    # The frontend mints a throwaway local id; the backend never parses it as a UUID, it only
+    # echoes it back in table_id_map / public_number_map so the client can reconcile after publish.
+    # Hence a free-form string, not a UUIDField.
+    _client_id = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=None
+    )
     public_number = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
     x = serializers.IntegerField(min_value=-100)
     y = serializers.IntegerField(min_value=-100)
