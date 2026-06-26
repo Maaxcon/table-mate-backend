@@ -236,6 +236,11 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         read_only=True,
         allow_null=True,
     )
+    menu_item_category_color = serializers.CharField(
+        source="menu_item.category.color",
+        read_only=True,
+        allow_null=True,
+    )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -268,6 +273,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "menu_item_name",
             "menu_item_category_id",
             "menu_item_category_name",
+            "menu_item_category_color",
             "guest_slot",
             "quantity",
             "comment",

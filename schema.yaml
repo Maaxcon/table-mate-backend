@@ -3291,6 +3291,12 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        color:
+          type: string
+          nullable: true
+          description: Hex color used for category theming.
+          pattern: ^#[0-9a-fA-F]{6}$
+          maxLength: 7
         created_at:
           type: string
           format: date-time
@@ -3905,6 +3911,12 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        color:
+          type: string
+          nullable: true
+          description: Hex color used for category theming.
+          pattern: ^#[0-9a-fA-F]{6}$
+          maxLength: 7
         created_at:
           type: string
           format: date-time
@@ -4102,6 +4114,10 @@ components:
           type: string
           readOnly: true
           nullable: true
+        menu_item_category_color:
+          type: string
+          readOnly: true
+          nullable: true
         guest_slot:
           type: integer
           maximum: 2147483647
@@ -4162,6 +4178,7 @@ components:
       - created_at
       - guest_slot
       - menu_item
+      - menu_item_category_color
       - menu_item_category_id
       - menu_item_category_name
       - menu_item_name
@@ -4756,6 +4773,12 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        color:
+          type: string
+          nullable: true
+          description: Hex color used for category theming.
+          pattern: ^#[0-9a-fA-F]{6}$
+          maxLength: 7
         created_at:
           type: string
           format: date-time
@@ -4999,6 +5022,10 @@ components:
           readOnly: true
           nullable: true
         menu_item_category_name:
+          type: string
+          readOnly: true
+          nullable: true
+        menu_item_category_color:
           type: string
           readOnly: true
           nullable: true

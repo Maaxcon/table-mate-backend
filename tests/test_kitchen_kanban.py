@@ -471,6 +471,7 @@ class TestTicketKanbanAPI:
         row = results[0]
         assert row["menu_item_category_name"] == "Mains"
         assert row["menu_item_category_id"] is not None
+        assert row["menu_item_category_color"] == "#F97316"
 
     def test_order_item_list_handles_uncategorized_dish(
         self,
@@ -504,6 +505,7 @@ class TestTicketKanbanAPI:
         row = results[0]
         assert row["menu_item_category_name"] is None
         assert row["menu_item_category_id"] is None
+        assert row["menu_item_category_color"] is None
 
     def test_order_item_list_rejects_foreign_session(
         self,
