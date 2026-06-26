@@ -1376,6 +1376,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/CartSession'
           description: ''
+  /api/orders/cart/sessions/{session_pk}/bill/:
+    get:
+      operationId: orders_cart_sessions_bill_list
+      description: Ordered (already-submitted) items for this table's visit — the
+        bill.
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BillItem'
+          description: ''
   /api/orders/cart/sessions/{session_pk}/checkout/:
     post:
       operationId: orders_cart_sessions_checkout_create
@@ -1531,6 +1557,44 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/orders/cart/sessions/{session_pk}/pay/:
+    post:
+      operationId: orders_cart_sessions_pay_create
+      description: Mark selected ordered items as paid (simulated). Returns the updated
+        bill.
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayOrderItems'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PayOrderItems'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PayOrderItems'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BillItem'
+          description: ''
   /api/orders/order-items/:
     get:
       operationId: orders_order_items_list
@@ -3406,6 +3470,37 @@ components:
       - menus_total
       - staff_active
       - staff_total
+    BillItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        guest_slot:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        payable:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
+        is_paid:
+          type: boolean
+      required:
+      - guest_slot
+      - id
+      - name
+      - payable
+      - quantity
     BookingSettings:
       type: object
       properties:
@@ -3457,6 +3552,10 @@ components:
           type: string
           format: uuid
           readOnly: true
+        menu_item_detail:
+          allOf:
+          - $ref: '#/components/schemas/CartMenuItem'
+          readOnly: true
         quantity:
           type: integer
           maximum: 2147483647
@@ -3473,9 +3572,6 @@ components:
           readOnly: true
           nullable: true
         is_mine:
-          type: boolean
-          readOnly: true
-        is_paid:
           type: boolean
           readOnly: true
         cart_session:
@@ -3500,12 +3596,43 @@ components:
       - created_at
       - guest_slot
       - is_mine
-      - is_paid
       - menu_item
+      - menu_item_detail
       - public_id
       - quantity
       - restaurant
       - updated_at
+    CartMenuItem:
+      type: object
+      description: |-
+        Just enough of the menu item to render a cart line on its own, so the
+        cart never depends on which menu page/sort the client is currently showing.
+
+        These are LIVE reads of the current MenuItem (name/price/image/availability),
+        not an order-time snapshot — a later rename or price change is reflected here.
+        The amount a guest owes is frozen separately on OrderItem.total_price.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        image:
+          type: string
+          format: uri
+          nullable: true
+        is_available:
+          type: boolean
+      required:
+      - id
+      - name
+      - price
     CartSession:
       type: object
       properties:
@@ -5370,6 +5497,16 @@ components:
           type: integer
           minimum: 1
           nullable: true
+    PayOrderItems:
+      type: object
+      properties:
+        order_item_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required:
+      - order_item_ids
     Payment:
       type: object
       properties:

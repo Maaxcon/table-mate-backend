@@ -39,6 +39,32 @@ uv run python manage.py migrate
 
 ---
 
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in the values:
+
+```bash
+cp .env.example .env
+```
+
+### Google OAuth
+
+Three variables drive Google login. The first two come from the Google Cloud
+Console (APIs & Services > Credentials):
+
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — the OAuth client credentials. If
+  either is empty, `manage.py check` and `runserver` print a warning and every
+  Google login fails.
+- `GOOGLE_ALLOWED_REDIRECT_URIS` — comma-separated allowlist of redirect URIs.
+
+`GOOGLE_ALLOWED_REDIRECT_URIS` must stay in sync with the **Authorized redirect
+URIs** in the Google Console, and must list **every origin the frontend is
+served from** (local, staging, production). A value missing here is rejected by
+the backend before it reaches Google; a value missing in the Console is rejected
+by Google. When you add a new served origin, update both places.
+
+---
+
 ## Docker (optional)
 
 Start the stack:

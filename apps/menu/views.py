@@ -21,6 +21,7 @@ from common.api import (
     get_restaurant_id_from_auth,
     require_restaurant_id_from_auth,
 )
+from common.filters import StableOrderingFilter
 
 from . import services
 from .allergens import ALLERGENS
@@ -266,6 +267,9 @@ class MenuItemViewSet(
             restaurant_id=restaurant_id,
             guest_token=guest_token,
         )
+        # Honour ?ordering= (e.g. price) just like the list endpoint; without it
+        # the relevance order from search_menu_items is kept.
+        items = StableOrderingFilter().filter_queryset(request, items, self)
         page = self.paginate_queryset(items)
         if page is not None:
             return self.get_paginated_response(self.get_serializer(page, many=True).data)

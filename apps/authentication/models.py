@@ -3,6 +3,7 @@ from typing import Any, ClassVar
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
+from django.db.models.functions import Lower
 
 from common.models import BaseModel
 
@@ -52,7 +53,8 @@ class UserManager(BaseUserManager["User"]):
 
 
 class User(BaseModel, AbstractBaseUser, PermissionsMixin):
-    email = models.EmailField(unique=True)
+    email = models.EmailField()
+    google_sub = models.CharField(max_length=255, unique=True, null=True, blank=True)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
     phone = models.CharField(max_length=32, null=True, blank=True)
@@ -82,9 +84,18 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
             models.CheckConstraint(
                 condition=models.Q(role__in=RoleCode.values),
                 name="authentication_user_role_valid",
-            )
+            ),
+            models.UniqueConstraint(
+                Lower("email"),
+                name="authentication_user_email_ci_unique",
+            ),
         ]
         ordering = ["id"]
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if self.email:
+            self.email = self.email.lower()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.email

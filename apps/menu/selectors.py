@@ -50,7 +50,9 @@ def search_menu_items(
             is_available=True,
         )
         .filter(
-            Q(name__icontains=query) | Q(description__icontains=query),
+            Q(name__icontains=query)
+            | Q(description__icontains=query)
+            | Q(category__name__icontains=query),
         )
         .select_related("category")
     )

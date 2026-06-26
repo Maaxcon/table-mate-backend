@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -16,6 +16,10 @@ from tests.conftest import UserFactory
 @pytest.mark.django_db
 class TestGoogleAuthView:
     url = "/api/auth/google/"
+
+    @pytest.fixture(autouse=True)
+    def _allow_redirect_uri(self, settings: Any) -> None:
+        settings.GOOGLE_ALLOWED_REDIRECT_URIS = ["http://localhost:3000"]
 
     def test_success_returns_access_token_and_sets_cookie(self) -> None:
         user = UserFactory.create()
@@ -53,6 +57,17 @@ class TestGoogleAuthView:
 
     def test_missing_redirect_uri_returns_400(self) -> None:
         response = APIClient().post(self.url, {"code": "abc"}, format="json")
+        assert response.status_code == 400
+
+    def test_disallowed_redirect_uri_returns_400(self) -> None:
+        user = UserFactory.create()
+        with patch("apps.authentication.views.google_authenticate", return_value=user):
+            response = APIClient().post(
+                self.url,
+                {"code": "valid-code", "redirect_uri": "http://evil.example.com"},
+                format="json",
+            )
+
         assert response.status_code == 400
 
     def test_customer_gets_refresh_cookie(self) -> None:
