@@ -22,7 +22,7 @@ from common.api import (
 )
 from common.permissions import HasAnyRole
 
-from .models import Layout
+from .models import Layout, LayoutVersion
 from .selectors import get_available_tables
 from .serializers import (
     EditorTableSerializer,
@@ -71,6 +71,24 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
             },
             status=status.HTTP_201_CREATED,
         )
+
+    @extend_schema(
+        summary="Latest published layout JSON",
+        description="Returns the layout_json from the most recent LayoutVersion for the admin editor.",
+        responses={200: dict},
+    )
+    @action(detail=False, methods=["get"], url_path="latest", permission_classes=[IsFloor])
+    def latest(self, request: Request) -> Response:
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is None:
+            return Response({"layout_json": None})
+
+        latest = (
+            LayoutVersion.objects.filter(restaurant_id=restaurant_id)
+            .order_by("-published_at", "-id")
+            .first()
+        )
+        return Response({"layout_json": latest.layout_json if latest else None})
 
 
 @extend_schema(tags=["Editor"])
