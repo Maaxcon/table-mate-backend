@@ -19,15 +19,21 @@ from apps.authentication.models import RoleCode, User
 from apps.orders.models import Session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
-from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
+from common.api import (
+    PublicLookupMixin,
+    PublicRestaurantQueryMixin,
+    get_restaurant_id_from_auth,
+    require_restaurant_id_from_auth,
+)
 
 from .filters import ReservationFilter
 from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
-from .serializers import ReservationSerializer
+from .serializers import BatchUpdateSerializer, ReservationSerializer
 from .services import (
     activate_reservation,
+    batch_update_reservations,
     cancel_reservation,
     close_session,
     create_reservation,
@@ -356,3 +362,26 @@ class ReservationViewSet(
         close_session(session, actor=user)
 
         return Response({"detail": "Check closed successfully."})
+
+    @extend_schema(
+        summary="Batch update reservations",
+        description="Move/resize multiple reservations atomically. "
+        "If any validation fails, the entire batch rolls back.",
+        request=BatchUpdateSerializer,
+        responses={200: None, 409: None},
+    )
+    @action(detail=False, methods=["post"], url_path="batch-update")
+    def batch_update(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        if getattr(user, "role", None) not in (RoleCode.ADMIN, RoleCode.WAITER):
+            raise PermissionDenied("Only staff can batch update reservations.")
+
+        serializer = BatchUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        restaurant_id = require_restaurant_id_from_auth(request)
+
+        batch_update_reservations(
+            restaurant_id=restaurant_id,
+            changes=serializer.validated_data["changes"],
+        )
+        return Response(status=status.HTTP_200_OK)
