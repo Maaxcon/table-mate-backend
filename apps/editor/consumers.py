@@ -5,6 +5,7 @@ from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.core.exceptions import ValidationError
 
 from apps.authentication.models import RoleCode
 from common.channels import (
@@ -108,7 +109,7 @@ def _resolve_restaurant_from_uuid(public_id: str) -> int | None:
 
     try:
         return Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
-    except (Restaurant.DoesNotExist, ValueError):
+    except (Restaurant.DoesNotExist, ValueError, ValidationError):
         return None
 
 
