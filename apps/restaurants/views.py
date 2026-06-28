@@ -203,9 +203,13 @@ class ZoneViewSet(
     mixins.DestroyModelMixin,
     viewsets.ReadOnlyModelViewSet[Zone],
 ):
-    permission_classes = [AllowAny]
     queryset = Zone.objects.all()
     serializer_class = ZoneSerializer
+
+    def get_permissions(self) -> list[BasePermission]:
+        if self.request.method in SAFE_METHODS:
+            return [AllowAny()]
+        return [IsAdmin()]
 
     def get_queryset(self) -> QuerySet[Zone]:
         qs = super().get_queryset()
