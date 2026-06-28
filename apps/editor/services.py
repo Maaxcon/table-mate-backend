@@ -83,8 +83,8 @@ def publish_layout(
     # ------------------------------------------------------------------
     zone_id_map: dict[str, str] = {}
     for create_data in zones_data.get("created", []):
-        client_id = str(create_data["_client_id"])
-        zone = Zone.objects.create(
+        zone_client_id = str(create_data["_client_id"])
+        created_zone = Zone.objects.create(
             restaurant_id=restaurant_id,
             name=create_data["name"],
             canvas_cols=create_data.get("canvas_cols", 20),
@@ -92,7 +92,7 @@ def publish_layout(
             edge_styles=create_data.get("edge_styles", {}),
             sort_order=Zone.objects.filter(restaurant_id=restaurant_id).count(),
         )
-        zone_id_map[client_id] = str(zone.public_id)
+        zone_id_map[zone_client_id] = str(created_zone.public_id)
 
     # ------------------------------------------------------------------
     # 2. Remap client-generated zone IDs to server zone IDs in all entity
@@ -149,7 +149,7 @@ def publish_layout(
             raise ValidationError(f"Table references unknown zone_id {zone_id!r}.")
 
         existing = None
-        client_id = None
+        client_id: str | None = None
 
         # 1. Match by UUID if provided and found in DB
         if table_uuid and str(table_uuid) in existing_tables:
