@@ -72,9 +72,58 @@ def publish_layout(
 
     from .models import LayoutVersion
 
-    # ``deleted_table_ids`` is a publish-time instruction, not part of the persisted
-    # layout geometry — pull it out so it never lands in the stored payload.
+    # ``deleted_table_ids`` and ``zones`` are publish-time instructions, not part of
+    # the persisted layout geometry — pull them out so they never land in the stored payload.
     deleted_table_ids = layout_data.pop("deleted_table_ids", [])
+    zones_data = layout_data.pop("zones", {})
+
+    # ------------------------------------------------------------------
+    # 1. Process zone creations (before entity processing so zones exist
+    #    for table/obstacle/portal references).
+    # ------------------------------------------------------------------
+    zone_id_map: dict[str, str] = {}
+    for create_data in zones_data.get("created", []):
+        client_id = str(create_data["_client_id"])
+        zone = Zone.objects.create(
+            restaurant_id=restaurant_id,
+            name=create_data["name"],
+            canvas_cols=create_data.get("canvas_cols", 20),
+            canvas_rows=create_data.get("canvas_rows", 20),
+            edge_styles=create_data.get("edge_styles", {}),
+            sort_order=Zone.objects.filter(restaurant_id=restaurant_id).count(),
+        )
+        zone_id_map[client_id] = str(zone.public_id)
+
+    # ------------------------------------------------------------------
+    # 2. Remap client-generated zone IDs to server zone IDs in all entity
+    #    lists so tables/obstacles/thresholds/portals reference real zones.
+    # ------------------------------------------------------------------
+    for entity_list_name in ("tables", "obstacles", "thresholds", "portals"):
+        for entity in layout_data.get(entity_list_name, []):
+            zid = entity.get("zone_id")
+            if zid and str(zid) in zone_id_map:
+                entity["zone_id"] = zone_id_map[str(zid)]
+            if entity_list_name == "portals":
+                tzid = entity.get("target_zone_id")
+                if tzid and str(tzid) in zone_id_map:
+                    entity["target_zone_id"] = zone_id_map[str(tzid)]
+
+    # ------------------------------------------------------------------
+    # 3. Zone updates (name, canvas cols/rows, edge styles).
+    # ------------------------------------------------------------------
+    for update_data in zones_data.get("updated", []):
+        zone = Zone.objects.filter(
+            public_id=update_data["public_id"], restaurant_id=restaurant_id
+        ).first()
+        if zone is None:
+            continue
+        changed = False
+        for field in ("name", "canvas_cols", "canvas_rows", "edge_styles"):
+            if field in update_data:
+                setattr(zone, field, update_data[field])
+                changed = True
+        if changed:
+            zone.save()
 
     existing_tables = {
         str(t.public_id): t
@@ -178,6 +227,33 @@ def publish_layout(
         deleted_table.active = False
         deleted_table.save(update_fields=["active", "updated_at"])
 
+    # ------------------------------------------------------------------
+    # 4. Zone deletions — deactivate any remaining active tables in the
+    #    deleted zones (tables already moved to another zone were
+    #    reassigned in step 1/2 and will not be caught here).
+    # ------------------------------------------------------------------
+    for zone_id in zones_data.get("deleted", []):
+        zone = Zone.objects.filter(public_id=zone_id, restaurant_id=restaurant_id).first()
+        if zone is None:
+            continue
+        for table in Table.objects.filter(zone=zone, active=True):
+            has_active_reservation = Reservation.objects.filter(
+                table_id=table.pk,
+                status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+            ).exists()
+            has_open_session = Session.objects.filter(
+                table_id=table.pk,
+                status=SessionStatus.OPEN,
+            ).exists()
+            if has_active_reservation or has_open_session:
+                raise TableInUseError(
+                    f"Zone '{zone.name}' has table {table.public_number} with active "
+                    "reservations or sessions. Reassign before removing."
+                )
+            table.active = False
+            table.save(update_fields=["active", "updated_at"])
+        zone.delete()
+
     # Normalize UUID objects (zone_id, target_zone_id, ...) to strings before the
     # layout is written to the JSONField.
     layout_json = _to_jsonable(layout_data)
@@ -209,4 +285,5 @@ def publish_layout(
         "version": version,
         "table_id_map": table_id_map,
         "public_number_map": public_number_map,
+        "zone_id_map": zone_id_map,
     }

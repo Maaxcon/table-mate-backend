@@ -127,6 +127,28 @@ class PortalEntitySerializer(serializers.Serializer[Any]):
     zone_id = serializers.UUIDField()
 
 
+class ZoneCreateSerializer(serializers.Serializer[Any]):
+    _client_id = serializers.UUIDField()
+    name = serializers.CharField(max_length=128)
+    canvas_cols = serializers.IntegerField(min_value=8, max_value=50, default=DEFAULT_CANVAS_COLS)
+    canvas_rows = serializers.IntegerField(min_value=8, max_value=50, default=DEFAULT_CANVAS_ROWS)
+    edge_styles = serializers.JSONField(default=dict)
+
+
+class ZoneUpdateSerializer(serializers.Serializer[Any]):
+    public_id = serializers.UUIDField()
+    name = serializers.CharField(max_length=128, required=False)
+    canvas_cols = serializers.IntegerField(min_value=8, max_value=50, required=False)
+    canvas_rows = serializers.IntegerField(min_value=8, max_value=50, required=False)
+    edge_styles = serializers.JSONField(required=False)
+
+
+class PendingZoneSerializer(serializers.Serializer[Any]):
+    created = ZoneCreateSerializer(many=True, required=False, default=list)
+    updated = ZoneUpdateSerializer(many=True, required=False, default=list)
+    deleted = serializers.ListField(child=serializers.UUIDField(), required=False, default=list)
+
+
 class PublishLayoutSerializer(serializers.Serializer[Any]):
     canvas_cols = serializers.IntegerField(
         min_value=8, max_value=50, required=False, default=DEFAULT_CANVAS_COLS
@@ -141,6 +163,7 @@ class PublishLayoutSerializer(serializers.Serializer[Any]):
     deleted_table_ids = serializers.ListField(
         child=serializers.UUIDField(), required=False, default=list
     )
+    zones = PendingZoneSerializer(required=False)
 
     def _apply_canvas_limits(self, canvas_cols: int, canvas_rows: int) -> None:
         """Inject MaxValueValidator limits derived from canvas dimensions into child entity fields."""
