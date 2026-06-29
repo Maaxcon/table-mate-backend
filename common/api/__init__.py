@@ -42,6 +42,27 @@ def require_restaurant_id_from_auth(request: Request) -> int:
     return restaurant_id
 
 
+def get_restaurant_public_id_from_auth(request: Request) -> str | None:
+    auth = getattr(request, "auth", None)
+    if auth is not None and hasattr(auth, "get"):
+        value = auth.get("restaurant_public_id")
+        return value if isinstance(value, str) else None
+    return None
+
+
+def require_restaurant_public_id_from_auth(request: Request) -> str:
+    restaurant_public_id = get_restaurant_public_id_from_auth(request)
+    if restaurant_public_id is None:
+        raise PermissionDenied("No restaurant public id in the authentication context.")
+    return restaurant_public_id
+
+
+def resolve_restaurant_public_id(restaurant_id: int) -> str:
+    from apps.restaurants.models import Restaurant
+
+    return str(Restaurant.objects.values_list("public_id", flat=True).get(pk=restaurant_id))
+
+
 class PublicLookupMixin:
     lookup_field: ClassVar[str] = "public_id"
     lookup_url_kwarg: ClassVar[str | None] = "public_id"

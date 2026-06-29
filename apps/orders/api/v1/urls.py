@@ -6,6 +6,7 @@ from .views import (
     CartPayView,
     CartSessionItemViewSet,
     CartSessionViewSet,
+    SetGuestNameView,
 )
 
 urlpatterns = [
@@ -39,5 +40,10 @@ urlpatterns = [
         "sessions/<uuid:session_pk>/items/<uuid:pk>/",
         CartSessionItemViewSet.as_view({"delete": "destroy", "patch": "partial_update"}),
         name="cart-item-detail",
+    ),
+    path(
+        "sessions/<uuid:session_pk>/guest-name/",
+        SetGuestNameView.as_view(),
+        name="cart-guest-name",
     ),
 ]

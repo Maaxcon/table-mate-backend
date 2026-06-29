@@ -14,7 +14,7 @@ from apps.authentication.models import RoleCode, User
 from apps.menu.models import MenuItem
 from apps.orders.models import CartItem, CartSession, CartSessionStatus
 from apps.reservations.models import Reservation, ReservationParticipant
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, Table, Zone
 
 from ..conftest import AuthContext, MenuItemFactory
 
@@ -845,7 +845,13 @@ class TestGuestInit:
         # A table with no booking at all -> NO_ACTIVE_RESERVATION (unchanged).
         from apps.orders.models import CartSession
 
-        bare_table = Table.objects.create(restaurant=restaurant, table_number="NB", capacity=2, active=True)
+        bare_table = Table.objects.create(
+            restaurant=restaurant,
+            public_number="NB",
+            capacity=2,
+            zone=Zone.objects.create(restaurant=restaurant, name="Test Zone"),
+            active=True,
+        )
 
         response = api_client.post(
             self.url,

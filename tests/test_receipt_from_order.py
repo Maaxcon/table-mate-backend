@@ -94,7 +94,7 @@ def test_create_receipt_snapshot(
     assert receipt.customer_id == customer.pk
     assert receipt.order_id == order.pk
     assert receipt.payment is not None
-    assert receipt.table_label == f"Table {table.table_number}"
+    assert receipt.table_label == f"Table {table.public_number}"
     assert receipt.server_name == "Olena K"
     assert receipt.guests == 2
     assert receipt.payment_method == PaymentMethod.CASH

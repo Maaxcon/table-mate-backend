@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from apps.authentication.models import User
 from apps.menu.models import MenuItem
-from apps.orders.models import CartItem, CartSession, OrderItem
+from apps.orders.models import CartItem, CartSession, GuestProfile, OrderItem
 from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
@@ -77,6 +77,7 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
     menu_item_detail = CartMenuItemSerializer(source="menu_item", read_only=True)
     added_by = PublicIdRelatedField[User](read_only=True)
     is_mine = serializers.SerializerMethodField()
+    display_name = serializers.SerializerMethodField()
 
     def get_is_mine(self, obj: CartItem) -> bool:
         request = self.context.get("request")
@@ -89,6 +90,15 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
         user = getattr(request, "user", None)
         return bool(user is not None and not user.is_anonymous and obj.added_by_id == user.id)
 
+    def get_display_name(self, obj: CartItem) -> str | None:
+        if obj.guest_identity is None:
+            return None
+        profile = GuestProfile.objects.filter(
+            cart_session=obj.cart_session,
+            guest_identity=obj.guest_identity,
+        ).first()
+        return profile.display_name if profile else None
+
     class Meta:
         model = CartItem
         fields = [
@@ -100,6 +110,7 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
             "added_by",
             "guest_slot",
             "is_mine",
+            "display_name",
             "cart_session",
             "restaurant",
             "created_at",
@@ -182,3 +193,7 @@ class AddCartItemSerializer(serializers.Serializer[None]):
                 field.queryset = MenuItem.objects.filter(
                     restaurant_id=restaurant_id,
                 )
+
+
+class SetGuestNameSerializer(serializers.Serializer[None]):
+    display_name = serializers.CharField(max_length=128, required=True)

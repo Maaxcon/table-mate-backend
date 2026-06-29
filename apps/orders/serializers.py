@@ -118,7 +118,7 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         queryset=Order.objects.all(),
     )
     table_number = serializers.CharField(
-        source="session.table.table_number",
+        source="session.table.public_number",
         read_only=True,
     )
     server_name = serializers.SerializerMethodField()
@@ -250,6 +250,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "menu_item",
             "menu_item_name",
             "guest_slot",
+            "guest_display_name",
             "quantity",
             "comment",
             "modifiers",

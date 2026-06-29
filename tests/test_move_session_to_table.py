@@ -8,7 +8,7 @@ from apps.orders.models import OrderItem, OrderItemStatus, SessionStatus
 from apps.orders.services import create_order_with_items, open_session
 from apps.reservations.models import ReservationStatus
 from apps.reservations.services import move_session_to_table
-from apps.restaurants.models import Table
+from apps.restaurants.models import Table, Zone
 
 
 @pytest.mark.django_db
@@ -24,8 +24,9 @@ class TestMoveSessionToTable:
 
         table2 = Table.objects.create(
             restaurant=restaurant,
-            table_number="T2",
+            public_number="T2",
             capacity=4,
+            zone=Zone.objects.filter(restaurant=restaurant).first(),
             active=True,
         )
 
@@ -92,8 +93,9 @@ class TestMoveSessionToTable:
 
         table2 = Table.objects.create(
             restaurant=restaurant,
-            table_number="T2",
+            public_number="T2",
             capacity=4,
+            zone=Zone.objects.filter(restaurant=restaurant).first(),
             active=True,
         )
 
@@ -126,8 +128,9 @@ class TestMoveSessionToTable:
 
         inactive_table = Table.objects.create(
             restaurant=restaurant,
-            table_number="T2",
+            public_number="T2",
             capacity=4,
+            zone=Zone.objects.filter(restaurant=restaurant).first(),
             active=False,
         )
 

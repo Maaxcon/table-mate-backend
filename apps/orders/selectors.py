@@ -49,7 +49,7 @@ def get_kitchen_tickets(
         )
         .prefetch_related("items")
         .annotate(
-            table_number=F("session__table__table_number"),
+            table_number=F("session__table__public_number"),
             server_name=Trim(
                 Concat(
                     F("order__created_by__first_name"),
