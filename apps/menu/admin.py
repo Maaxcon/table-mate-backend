@@ -47,7 +47,7 @@ class MenuAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
 @admin.register(MenuCategory)
 class MenuCategoryAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
-    list_display = ["name", "menu", "sort_order"]
+    list_display = ["name", "menu", "sort_order", "color"]
 
 
 @admin.register(MenuItem)

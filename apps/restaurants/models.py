@@ -85,13 +85,6 @@ class RestaurantSettings(BaseModel):
         return f"Settings for {self.restaurant.name}"
 
 
-class TableShape(models.TextChoices):
-    RECTANGLE = "rectangle", "Rectangle"
-    ROUND = "round", "Round"
-    SQUARE = "square", "Square"
-    BOOTH = "booth", "Booth"
-
-
 class Zone(BaseModel):
     restaurant = models.ForeignKey(
         "restaurants.Restaurant",
@@ -100,6 +93,9 @@ class Zone(BaseModel):
     )
     name = models.CharField(max_length=128)
     sort_order = models.PositiveIntegerField(default=0)
+    edge_styles = models.JSONField(default=dict, blank=True)
+    canvas_cols = models.PositiveIntegerField(default=20)
+    canvas_rows = models.PositiveIntegerField(default=20)
 
     class Meta:
         ordering = ["restaurant_id", "sort_order", "id"]
@@ -115,32 +111,24 @@ class Zone(BaseModel):
 
 
 class Table(RestaurantScopedModel):
-    table_number = models.CharField(max_length=64)
+    public_number = models.CharField(max_length=64, db_index=True)
     capacity = models.PositiveIntegerField()
-    shape = models.CharField(
-        max_length=20,
-        choices=TableShape.choices,
-        default=TableShape.RECTANGLE,
-    )
     active = models.BooleanField(default=True)
-    position_x = models.IntegerField(null=True, blank=True)
-    position_y = models.IntegerField(null=True, blank=True)
     zone = models.ForeignKey(
         Zone,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="tables",
     )
 
     class Meta:
-        ordering = ["restaurant_id", "table_number", "id"]
+        ordering = ["restaurant_id", "public_number", "id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["restaurant", "table_number"],
-                name="restaurants_table_restaurant_number_unique",
+                fields=["restaurant", "public_number"],
+                condition=models.Q(active=True),
+                name="restaurants_table_restaurant_public_number_active_unique",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.restaurant.name} / {self.table_number}"
+        return f"{self.restaurant.name} / {self.public_number}"

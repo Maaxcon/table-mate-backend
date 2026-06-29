@@ -1,17 +1,14 @@
 from typing import Any, TypedDict
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.restaurants.models import Restaurant, RestaurantSettings, Table, TableShape, Zone
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table, Zone
 
 
 class _TableData(TypedDict):
-    table_number: str
+    public_number: str
     capacity: int
-    shape: str
-    position_x: int
-    position_y: int
     zone_name: str
 
 
@@ -38,86 +35,16 @@ _RESTAURANTS_DATA: list[_RestaurantData] = [
             {"name": "Winter Garden", "sort_order": 2},
         ],
         "tables": [
-            {
-                "table_number": "1",
-                "capacity": 2,
-                "shape": TableShape.ROUND,
-                "position_x": 50,
-                "position_y": 100,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "2",
-                "capacity": 2,
-                "shape": TableShape.ROUND,
-                "position_x": 50,
-                "position_y": 200,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "3",
-                "capacity": 4,
-                "shape": TableShape.RECTANGLE,
-                "position_x": 150,
-                "position_y": 100,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "4",
-                "capacity": 4,
-                "shape": TableShape.RECTANGLE,
-                "position_x": 150,
-                "position_y": 200,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "5",
-                "capacity": 4,
-                "shape": TableShape.RECTANGLE,
-                "position_x": 150,
-                "position_y": 300,
-                "zone_name": "Main Hall",
-            },
-            {
-                "table_number": "6",
-                "capacity": 6,
-                "shape": TableShape.SQUARE,
-                "position_x": 300,
-                "position_y": 150,
-                "zone_name": "VIP Room",
-            },
-            {
-                "table_number": "7",
-                "capacity": 6,
-                "shape": TableShape.SQUARE,
-                "position_x": 300,
-                "position_y": 300,
-                "zone_name": "VIP Room",
-            },
-            {
-                "table_number": "8",
-                "capacity": 8,
-                "shape": TableShape.RECTANGLE,
-                "position_x": 450,
-                "position_y": 100,
-                "zone_name": "Winter Garden",
-            },
-            {
-                "table_number": "9",
-                "capacity": 4,
-                "shape": TableShape.BOOTH,
-                "position_x": 450,
-                "position_y": 250,
-                "zone_name": "Winter Garden",
-            },
-            {
-                "table_number": "10",
-                "capacity": 4,
-                "shape": TableShape.BOOTH,
-                "position_x": 450,
-                "position_y": 350,
-                "zone_name": "Winter Garden",
-            },
+            {"public_number": "T1", "capacity": 2, "zone_name": "Main Hall"},
+            {"public_number": "T2", "capacity": 2, "zone_name": "Main Hall"},
+            {"public_number": "T3", "capacity": 4, "zone_name": "Main Hall"},
+            {"public_number": "T4", "capacity": 4, "zone_name": "Main Hall"},
+            {"public_number": "T5", "capacity": 4, "zone_name": "Main Hall"},
+            {"public_number": "T6", "capacity": 6, "zone_name": "VIP Room"},
+            {"public_number": "T7", "capacity": 6, "zone_name": "VIP Room"},
+            {"public_number": "T8", "capacity": 8, "zone_name": "Winter Garden"},
+            {"public_number": "T9", "capacity": 4, "zone_name": "Winter Garden"},
+            {"public_number": "T10", "capacity": 4, "zone_name": "Winter Garden"},
         ],
     },
     {
@@ -131,46 +58,11 @@ _RESTAURANTS_DATA: list[_RestaurantData] = [
             {"name": "Terrace", "sort_order": 1},
         ],
         "tables": [
-            {
-                "table_number": "T1",
-                "capacity": 2,
-                "shape": TableShape.ROUND,
-                "position_x": 40,
-                "position_y": 80,
-                "zone_name": "Indoor",
-            },
-            {
-                "table_number": "T2",
-                "capacity": 2,
-                "shape": TableShape.ROUND,
-                "position_x": 40,
-                "position_y": 180,
-                "zone_name": "Indoor",
-            },
-            {
-                "table_number": "T3",
-                "capacity": 4,
-                "shape": TableShape.RECTANGLE,
-                "position_x": 120,
-                "position_y": 80,
-                "zone_name": "Indoor",
-            },
-            {
-                "table_number": "T4",
-                "capacity": 4,
-                "shape": TableShape.RECTANGLE,
-                "position_x": 120,
-                "position_y": 200,
-                "zone_name": "Terrace",
-            },
-            {
-                "table_number": "T5",
-                "capacity": 6,
-                "shape": TableShape.SQUARE,
-                "position_x": 250,
-                "position_y": 120,
-                "zone_name": "Terrace",
-            },
+            {"public_number": "T1", "capacity": 2, "zone_name": "Indoor"},
+            {"public_number": "T2", "capacity": 2, "zone_name": "Indoor"},
+            {"public_number": "T3", "capacity": 4, "zone_name": "Indoor"},
+            {"public_number": "T4", "capacity": 4, "zone_name": "Terrace"},
+            {"public_number": "T5", "capacity": 6, "zone_name": "Terrace"},
         ],
     },
 ]
@@ -195,6 +87,12 @@ class Command(BaseCommand):
             type=int,
             help="Restaurant ID to seed (seeds all if omitted)",
         )
+        parser.add_argument(
+            "--prune",
+            action="store_true",
+            help="Delete tables (and their sessions/reservations) whose public_number "
+            "is not in the canonical seed set for the restaurant.",
+        )
 
     @transaction.atomic
     def handle(self, *args: Any, **options: Any) -> None:
@@ -202,6 +100,7 @@ class Command(BaseCommand):
         created_settings = 0
         created_zones = 0
         created_tables = 0
+        pruned_tables = 0
 
         for data in _RESTAURANTS_DATA:
             if options["restaurant_id"]:
@@ -244,29 +143,64 @@ class Command(BaseCommand):
                 if was_created_zone:
                     created_zones += 1
 
+            canonical_numbers = {t["public_number"] for t in data["tables"]}
             for table_data in data["tables"]:
+                zone = zone_map.get(str(table_data["zone_name"]))
+                if zone is None:
+                    raise CommandError(
+                        f"Table {table_data['public_number']!r} references unknown zone "
+                        f"{table_data['zone_name']!r}."
+                    )
                 _, was_created_table = Table.objects.update_or_create(
                     restaurant=restaurant,
-                    table_number=table_data["table_number"],
+                    public_number=table_data["public_number"],
                     defaults={
                         "capacity": table_data["capacity"],
-                        "shape": table_data["shape"],
-                        "position_x": table_data["position_x"],
-                        "position_y": table_data["position_y"],
                         "active": True,
-                        "zone": zone_map.get(str(table_data["zone_name"])),
+                        "zone": zone,
                     },
                 )
                 if was_created_table:
                     created_tables += 1
 
+            if options["prune"]:
+                pruned_tables += self._prune_tables(restaurant, canonical_numbers)
+
             if options["restaurant_id"]:
                 break
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Done: {created_restaurants} restaurants, "
-                f"{created_settings} settings, {created_zones} zones, "
-                f"{created_tables} tables"
-            )
+        summary = (
+            f"Done: {created_restaurants} restaurants, "
+            f"{created_settings} settings, {created_zones} zones, "
+            f"{created_tables} tables"
         )
+        if options["prune"]:
+            summary += f", {pruned_tables} tables pruned"
+        self.stdout.write(self.style.SUCCESS(summary))
+
+    def _prune_tables(self, restaurant: Restaurant, canonical_numbers: set[str]) -> int:
+        """Delete tables not in the canonical seed set, plus their dependents.
+
+        Session.table is on_delete=PROTECT (and Session.reservation too), so the
+        sessions and reservations have to go first; deleting them cascades their
+        orders, tickets, order items and cart sessions.
+        """
+        from apps.orders.models import Session
+        from apps.reservations.models import Reservation
+
+        orphans = list(
+            Table.objects.filter(restaurant=restaurant).exclude(public_number__in=canonical_numbers)
+        )
+        if not orphans:
+            return 0
+
+        orphan_numbers = sorted(t.public_number for t in orphans)
+        orphan_ids = [t.id for t in orphans]
+        Session.objects.filter(restaurant=restaurant, table_id__in=orphan_ids).delete()
+        Reservation.objects.filter(restaurant=restaurant, table_id__in=orphan_ids).delete()
+        deleted, _ = Table.objects.filter(id__in=orphan_ids).delete()
+
+        self.stdout.write(
+            self.style.WARNING(f"  Pruned {len(orphans)} orphaned table(s): {', '.join(orphan_numbers)}")
+        )
+        return len(orphans)

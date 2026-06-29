@@ -1,12 +1,16 @@
 from decimal import Decimal
+from typing import Any
+from zoneinfo import ZoneInfo
 
-from django.db import models
+from django.db import connection, models, transaction
+from django.utils import timezone
 
 from common.models import RestaurantScopedModel
 
 from .cart_item import CartItem as CartItem
 from .cart_session import CartSession as CartSession
 from .cart_session import CartSessionStatus as CartSessionStatus
+from .guest_profile import GuestProfile as GuestProfile
 
 
 class SessionStatus(models.TextChoices):
@@ -204,6 +208,10 @@ class Ticket(RestaurantScopedModel):
     injected_at = models.DateTimeField()
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # Human-friendly per-restaurant sequence that resets each day (rendered as
+    # "T1", "T2", ... on the kitchen kanban instead of the opaque public_id).
+    daily_number = models.PositiveIntegerField(null=True, blank=True)
+    daily_seq_date = models.DateField(null=True, blank=True)
 
     class Meta:
         ordering = ["injected_at", "id"]
@@ -218,7 +226,65 @@ class Ticket(RestaurantScopedModel):
                 condition=models.Q(status__in=TicketStatus.values),
                 name="orders_ticket_status_valid",
             ),
+            models.UniqueConstraint(
+                fields=["restaurant", "daily_seq_date", "daily_number"],
+                name="orders_ticket_daily_number_uniq",
+            ),
         ]
+
+    @property
+    def label(self) -> str:
+        """Display label for the kitchen kanban, e.g. "T1" (empty until numbered)."""
+        if self.daily_number is None:
+            return ""
+        return f"T{self.daily_number}"
+
+    def _assign_daily_number(self) -> None:
+        """Allocate the next per-restaurant, per-day sequence number.
+
+        ``select_for_update()`` cannot lock an aggregate query (Postgres rejects
+        ``FOR UPDATE`` with ``MAX(...)`` and Django silently drops it), so we take a
+        transaction-scoped advisory lock keyed on (restaurant, day) instead. This
+        serializes allocation against concurrent ``create_order_with_items`` calls and
+        releases automatically when the surrounding transaction commits or rolls back,
+        avoiding the unique-constraint races that would otherwise blow up the order.
+        """
+        # Imported lazily: apps.restaurants.selectors imports this module, so a
+        # top-level import would be circular.
+        from apps.restaurants.models import RestaurantSettings
+
+        injected = self.injected_at or timezone.now()
+        # The sequence resets at the restaurant's local midnight, not UTC midnight,
+        # so late-night tickets bucket onto the correct local day (matching how
+        # working-hours/availability are computed elsewhere).
+        tz_name = (
+            RestaurantSettings.objects.filter(restaurant_id=self.restaurant_id)
+            .values_list("timezone", flat=True)
+            .first()
+        )
+        tz = ZoneInfo(tz_name) if tz_name else ZoneInfo("UTC")
+        seq_date = timezone.localdate(injected, tz)
+        self.daily_seq_date = seq_date
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(%s, %s)",
+                [self.restaurant_id, seq_date.toordinal()],
+            )
+        last = Ticket.objects.filter(restaurant_id=self.restaurant_id, daily_seq_date=seq_date).aggregate(
+            max_number=models.Max("daily_number")
+        )["max_number"]
+        self.daily_number = (last or 0) + 1
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if self._state.adding and self.daily_number is None:
+            # The advisory lock is transaction-scoped, so allocation and the INSERT
+            # must share one transaction or the lock would release before the row is
+            # written. atomic() reuses the outer transaction when one is already open.
+            with transaction.atomic():
+                self._assign_daily_number()
+                super().save(*args, **kwargs)
+            return
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"Ticket {self.public_id}"
@@ -243,6 +309,7 @@ class OrderItem(RestaurantScopedModel):
         related_name="order_items",
     )
     guest_slot = models.PositiveIntegerField()
+    guest_display_name = models.CharField(max_length=128, null=True, blank=True)
     quantity = models.PositiveIntegerField()
     comment = models.TextField(null=True, blank=True)
     modifiers = models.JSONField(null=True, blank=True)

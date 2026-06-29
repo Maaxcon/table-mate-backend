@@ -18,8 +18,10 @@ from rest_framework.response import Response
 from apps.authentication.models import RoleCode, User
 from apps.orders.models import Session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
+from apps.restaurants.selectors import _DAY_KEYS
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
 
+from .filters import ReservationFilter
 from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
@@ -62,7 +64,7 @@ class ReservationViewSet(
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
-    filterset_fields = ["customer", "table", "status"]
+    filterset_class = ReservationFilter
     ordering_fields = ["created_at", "updated_at", "start_at", "end_at", "guest_count"]
 
     def get_permissions(self) -> Sequence[BasePermission]:
@@ -125,14 +127,17 @@ class ReservationViewSet(
         if getattr(request.user, "role", None) == RoleCode.CUSTOMER:
             if instance.customer_id != request.user.pk:
                 raise PermissionDenied("You can only modify your own reservations.")
-            if instance.status == ReservationStatus.ACTIVE:
-                raise PermissionDenied("This reservation is already active and can no longer be changed.")
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         status_val = serializer.validated_data.pop("status", None)
         if status_val is not None:
             if status_val == ReservationStatus.CANCELLED:
+                if (
+                    getattr(request.user, "role", None) == RoleCode.CUSTOMER
+                    and instance.status == ReservationStatus.ACTIVE
+                ):
+                    raise PermissionDenied("You cannot cancel an active reservation.")
                 reservation = cancel_reservation(reservation=instance)
             else:
                 reservation = update_reservation_status(
@@ -186,10 +191,14 @@ class ReservationViewSet(
     def available_slots(self, request: Request) -> Response:
         table_id = request.query_params.get("table")
         date_str = request.query_params.get("date")
-        exclude_ids = request.query_params.getlist("exclude")
+        exclude_raw = request.query_params.getlist("exclude")
 
         if not table_id:
             raise ValidationError("table query parameter is required.")
+
+        exclude_ids: list[str] = []
+        for val in exclude_raw:
+            exclude_ids.extend(v.strip() for v in val.split(",") if v.strip())
 
         try:
             table = Table.objects.get(public_id=table_id, active=True)
@@ -212,17 +221,22 @@ class ReservationViewSet(
 
         now_utc = timezone.now()
 
+        def _round_up_30(minutes: int) -> int:
+            return ((minutes + 29) // 30) * 30
+
+        def _round_down_30(minutes: int) -> int:
+            return (minutes // 30) * 30
+
         def day_slots(d: date_type) -> list[str]:
-            day_name = d.strftime("%A").lower()
-            day_config = working_hours.get(day_name)
+            day_config = working_hours.get(_DAY_KEYS[d.weekday()])
             if not day_config:
                 return []
 
             open_t = _parse_time(day_config["open"])
             close_t = _parse_time(day_config["close"])
 
-            open_minutes = open_t.hour * 60 + open_t.minute
-            close_minutes = close_t.hour * 60 + close_t.minute
+            open_minutes = _round_up_30(open_t.hour * 60 + open_t.minute)
+            close_minutes = _round_down_30(close_t.hour * 60 + close_t.minute)
             overnight = close_minutes <= open_minutes
             end_base = close_minutes + (24 * 60 if overnight else 0)
 

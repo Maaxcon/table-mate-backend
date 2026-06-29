@@ -131,7 +131,7 @@ def _active_reservation(restaurant: Restaurant, table: Table, customer: Any) -> 
 
 
 @pytest.mark.django_db
-def test_customer_cannot_reschedule_active_reservation(
+def test_customer_can_prolong_active_reservation(
     restaurant: Restaurant,
     table: Table,
     user_factory: Callable[..., Any],
@@ -149,7 +149,35 @@ def test_customer_cannot_reschedule_active_reservation(
         format="json",
     )
 
-    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.status_code == status.HTTP_200_OK
+    reservation.refresh_from_db()
+    assert reservation.end_at == original_end + timedelta(minutes=30)
+
+
+@pytest.mark.django_db
+def test_customer_cannot_reschedule_active_reservation_start_time(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+    api_factory: Callable[..., AuthContext],
+) -> None:
+    """Active reservations cannot change start_at, only end_at."""
+    customer = user_factory(role=RoleCode.CUSTOMER)
+    customer.save()
+    reservation = _active_reservation(restaurant, table, customer)
+    original_end = reservation.end_at
+    client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
+
+    response = client.patch(
+        f"/api/reservations/reservations/{reservation.public_id}/",
+        {
+            "start_at": (reservation.start_at + timedelta(hours=1)).isoformat(),
+            "end_at": (original_end + timedelta(minutes=30)).isoformat(),
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_409_CONFLICT
     reservation.refresh_from_db()
     assert reservation.end_at == original_end
 
@@ -217,4 +245,4 @@ def test_my_reservations_filters_active_records_and_supports_limit_offset(
         ReservationStatus.PENDING,
     ]
     assert data[0]["restaurant_info"]["name"] == restaurant.name
-    assert data[0]["table_info"]["table_number"] == table.table_number
+    assert data[0]["table_info"]["public_number"] == table.public_number

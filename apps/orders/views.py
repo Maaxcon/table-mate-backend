@@ -120,7 +120,7 @@ class SessionViewSet(
     )
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        session = close_visit_session(session=self.get_object())
+        session = close_visit_session(session=self.get_object(), actor=cast(User, request.user))
         serializer = self.get_serializer(session)
         return Response(serializer.data)
 
@@ -228,7 +228,7 @@ class TicketViewSet(
         if instance.session_id:
             try:
                 session_obj = Session.objects.get(pk=instance.session_id)
-                table_number = session_obj.table.table_number
+                table_number = session_obj.table.public_number
             except (Session.DoesNotExist, AttributeError):
                 pass
 
@@ -315,7 +315,7 @@ class OrderItemViewSet(
             table_number = ""
             try:
                 order_session = instance.order.session
-                table_number = order_session.table.table_number
+                table_number = order_session.table.public_number
             except AttributeError:
                 pass
 

@@ -6,7 +6,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.reservations.models import Reservation
-from common.api import PublicIdRelatedField
+from common.api import PublicIdRelatedField, resolve_restaurant_public_id
 
 from .models import RoleCode, User
 
@@ -131,4 +131,5 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token["token_version"] = user.token_version
         if self._restaurant_id is not None:
             token["restaurant_id"] = self._restaurant_id
+            token["restaurant_public_id"] = resolve_restaurant_public_id(self._restaurant_id)
         return token

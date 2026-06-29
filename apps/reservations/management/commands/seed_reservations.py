@@ -36,8 +36,14 @@ class Command(BaseCommand):
         for restaurant in restaurants:
             self.stdout.write(f"Seeding reservations for restaurant: {restaurant.name}")
 
-            tables = list(Table.objects.filter(restaurant=restaurant, active=True))
-            if not tables:
+            # Index tables by public_number (e.g. "T1"). Table.Meta.ordering sorts
+            # public_number lexicographically ("T1", "T10", "T2", ...), so positional
+            # indexing does NOT match table numbers — always look tables up by number.
+            tables_by_number = {
+                t.public_number: t
+                for t in Table.objects.filter(restaurant=restaurant, active=True)
+            }
+            if not tables_by_number:
                 self.stdout.write(self.style.WARNING(f"No active tables for {restaurant.name}. Skipping."))
                 continue
 
@@ -52,9 +58,8 @@ class Command(BaseCommand):
 
             reservations_config: list[dict[str, Any]] = [
                 # ── Active reservations (ongoing now → sessions created → OCCUPIED) ──
-                # Tables 1, 2, 3, 5
                 {
-                    "table": tables[0 % len(tables)],
+                    "table": "T1",
                     "customer": customers[0 % len(customers)],
                     "guest_count": 2,
                     "start_at": now - timedelta(hours=1),
@@ -64,7 +69,7 @@ class Command(BaseCommand):
                     "notes": "Алергія на горіхи",
                 },
                 {
-                    "table": tables[1 % len(tables)],
+                    "table": "T2",
                     "customer": customers[1 % len(customers)],
                     "guest_count": 4,
                     "start_at": now - timedelta(minutes=45),
@@ -74,7 +79,7 @@ class Command(BaseCommand):
                     "notes": None,
                 },
                 {
-                    "table": tables[2 % len(tables)],
+                    "table": "T3",
                     "customer": customers[2 % len(customers)],
                     "guest_count": 3,
                     "start_at": now - timedelta(minutes=90),
@@ -84,7 +89,7 @@ class Command(BaseCommand):
                     "notes": "Дитячий стільчик",
                 },
                 {
-                    "table": tables[4 % len(tables)],
+                    "table": "T5",
                     "customer": customers[0 % len(customers)],
                     "guest_count": 5,
                     "start_at": now - timedelta(minutes=30),
@@ -94,9 +99,8 @@ class Command(BaseCommand):
                     "notes": None,
                 },
                 # ── Pending reservations (upcoming soon → no sessions → RESERVED) ──
-                # Tables 8, 9 (the two the user reported as broken)
                 {
-                    "table": tables[7 % len(tables)],
+                    "table": "T8",
                     "customer": customers[1 % len(customers)],
                     "guest_count": 4,
                     "start_at": now + timedelta(minutes=8),
@@ -106,7 +110,7 @@ class Command(BaseCommand):
                     "notes": "Потрібен високий стільчик",
                 },
                 {
-                    "table": tables[8 % len(tables)],
+                    "table": "T9",
                     "customer": customers[2 % len(customers)],
                     "guest_count": 3,
                     "start_at": now + timedelta(minutes=12),
@@ -115,20 +119,20 @@ class Command(BaseCommand):
                     "status": ReservationStatus.PENDING,
                     "notes": None,
                 },
-                # ── Far future pending (outside 15 min window → shows FREE) ──
+                # ── Pending reservation (within 15 min window → shows RESERVED) ──
                 {
-                    "table": tables[9 % len(tables)],
+                    "table": "T10",
                     "customer": customers[0 % len(customers)],
                     "guest_count": 4,
-                    "start_at": now + timedelta(days=2, hours=1),
-                    "end_at": now + timedelta(days=2, hours=3),
+                    "start_at": now + timedelta(minutes=5),
+                    "end_at": now + timedelta(hours=2),
                     "type": ReservationType.PRE_BOOKED,
                     "status": ReservationStatus.PENDING,
                     "notes": None,
                 },
                 # ── Past reservations (now completed, no effect on floor plan) ──
                 {
-                    "table": tables[3 % len(tables)],
+                    "table": "T4",
                     "customer": customers[1 % len(customers)],
                     "guest_count": 6,
                     "start_at": now - timedelta(days=2),
@@ -138,7 +142,7 @@ class Command(BaseCommand):
                     "notes": "День народження",
                 },
                 {
-                    "table": tables[6 % len(tables)],
+                    "table": "T7",
                     "customer": customers[0 % len(customers)],
                     "guest_count": 8,
                     "start_at": now - timedelta(days=1),
@@ -149,7 +153,7 @@ class Command(BaseCommand):
                 },
                 # ── Cancelled reservation ──
                 {
-                    "table": tables[5 % len(tables)],
+                    "table": "T6",
                     "customer": customers[2 % len(customers)],
                     "guest_count": 4,
                     "start_at": now + timedelta(days=3),
@@ -158,15 +162,18 @@ class Command(BaseCommand):
                     "status": ReservationStatus.CANCELLED,
                     "notes": "Захворіли",
                 },
-                # ── Future reservation (for table 1, different slot) ──
-                # Removed: previously had status=ACTIVE with start in the future,
-                # which created a nonsensical multi-day "active" reservation.
             ]
 
             for data in reservations_config:
+                table = tables_by_number.get(data["table"])
+                if table is None:
+                    # This restaurant's layout doesn't include the table — skip
+                    # rather than wrapping onto an unrelated one.
+                    continue
+
                 reservation, was_created = Reservation.objects.get_or_create(
                     restaurant=restaurant,
-                    table=data["table"],
+                    table=table,
                     start_at=data["start_at"],
                     defaults={
                         "customer": data["customer"],
@@ -194,7 +201,7 @@ class Command(BaseCommand):
                             pass
                         Session.objects.create(
                             restaurant=restaurant,
-                            table=data["table"],
+                            table=table,
                             reservation=reservation,
                             opened_by=staff_user,
                             guest_count=reservation.guest_count,
