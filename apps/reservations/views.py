@@ -45,6 +45,28 @@ def _parse_time(value: str) -> time_type:
     return time_type(hour=int(parts[0]), minute=int(parts[1]))
 
 
+def _day_window(day_config: object) -> tuple[int, int] | None:
+    """Open minute and (overnight-aware) close minute for a working-hours day, or
+    None if the day is closed or its stored config is malformed (missing or
+    non-HH:MM open/close). Keeps a bad stored config from raising a 500."""
+    if not isinstance(day_config, dict):
+        return None
+    open_str = day_config.get("open")
+    close_str = day_config.get("close")
+    if not isinstance(open_str, str) or not isinstance(close_str, str):
+        return None
+    try:
+        open_t = _parse_time(open_str)
+        close_t = _parse_time(close_str)
+    except (ValueError, IndexError):
+        return None
+    open_minutes = open_t.hour * 60 + open_t.minute
+    close_minutes = close_t.hour * 60 + close_t.minute
+    overnight = close_minutes <= open_minutes
+    end_base = close_minutes + (24 * 60 if overnight else 0)
+    return open_minutes, end_base
+
+
 def _parse_non_negative_int(value: str | None, field_name: str) -> int | None:
     if value is None:
         return None
@@ -222,17 +244,11 @@ class ReservationViewSet(
 
         def day_slots(d: date_type) -> list[str]:
             day_name = weekday_keys[d.weekday()]
-            day_config = working_hours.get(day_name)
-            if not day_config:
+            window = _day_window(working_hours.get(day_name))
+            if not window:
                 return []
 
-            open_t = _parse_time(day_config["open"])
-            close_t = _parse_time(day_config["close"])
-
-            open_minutes = open_t.hour * 60 + open_t.minute
-            close_minutes = close_t.hour * 60 + close_t.minute
-            overnight = close_minutes <= open_minutes
-            end_base = close_minutes + (24 * 60 if overnight else 0)
+            open_minutes, end_base = window
 
             slots: list[str] = []
             minute = open_minutes
@@ -328,15 +344,11 @@ class ReservationViewSet(
         # supported for same-day starts (not after-midnight ones).
         weekday_keys = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
         day_config = working_hours.get(weekday_keys[d.weekday()]) if working_hours else None
+        window = _day_window(day_config)
         within_hours = False
         effective_duration = duration
-        if day_config:
-            open_t = _parse_time(day_config["open"])
-            close_t = _parse_time(day_config["close"])
-            open_minutes = open_t.hour * 60 + open_t.minute
-            close_minutes = close_t.hour * 60 + close_t.minute
-            overnight = close_minutes <= open_minutes
-            end_base = close_minutes + (24 * 60 if overnight else 0)
+        if window:
+            open_minutes, end_base = window
             slot_minutes = t.hour * 60 + t.minute
             until_close = end_base - slot_minutes
             within_hours = slot_minutes >= open_minutes and until_close >= 30

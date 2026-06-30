@@ -141,6 +141,27 @@ def test_availability_clamps_duration_to_closing(
 
 
 @pytest.mark.django_db
+def test_availability_malformed_working_hours_does_not_500(
+    restaurant: Restaurant,
+    table: Table,
+    restaurant_settings: RestaurantSettings,
+    api_client: Any,
+) -> None:
+    # A stored day config missing "close" must yield "closed", not a server error.
+    monday = _next_weekday(0)
+    restaurant_settings.working_hours = {"mon": {"open": "10:00"}}
+    restaurant_settings.save()
+
+    resp = api_client.get(
+        AVAILABILITY_URL,
+        {"restaurant": str(restaurant.public_id), "date": monday.isoformat(), "time": "12:00"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["availability"][str(table.public_id)] is False
+
+
+@pytest.mark.django_db
 def test_availability_false_when_under_min_window_before_close(
     restaurant: Restaurant,
     table: Table,
