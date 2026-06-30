@@ -66,7 +66,7 @@ class ReservationViewSet(
     ordering_fields = ["created_at", "updated_at", "start_at", "end_at", "guest_count"]
 
     def get_permissions(self) -> Sequence[BasePermission]:
-        if self.action == "available_slots":
+        if self.action in ("available_slots", "availability"):
             return [AllowAny()]
         return [IsAuthenticated(), CanManageReservations()]
 
@@ -267,6 +267,92 @@ class ReservationViewSet(
                 result[d.isoformat()] = day_slots(d)
 
         return Response(result)
+
+    @extend_schema(
+        summary="Per-table availability for one slot",
+        description="Given restaurant + date + time (+ optional duration in minutes, "
+        "default 120), returns each active table's availability for that slot as "
+        "{ availability: { '<table_public_id>': true|false } }. A table is free when "
+        "the slot is within working hours, in the future, and has no overlapping "
+        "pending/active reservation. Powers the time-aware floor plan.",
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="availability",
+        permission_classes=[AllowAny],
+        authentication_classes=[],
+    )
+    def availability(self, request: Request) -> Response:
+        restaurant_id = request.query_params.get("restaurant")
+        date_str = request.query_params.get("date")
+        time_str = request.query_params.get("time")
+        duration = _parse_non_negative_int(request.query_params.get("duration"), "duration") or 120
+        duration = max(duration, 30)
+
+        if not restaurant_id:
+            raise ValidationError("restaurant query parameter is required.")
+        if not date_str or not time_str:
+            raise ValidationError("date and time query parameters are required.")
+
+        try:
+            d = date_type.fromisoformat(date_str)
+        except ValueError:
+            raise ValidationError("Invalid date format. Use YYYY-MM-DD.") from None
+        try:
+            t = _parse_time(time_str)
+        except (ValueError, IndexError):
+            raise ValidationError("Invalid time format. Use HH:MM.") from None
+
+        settings = RestaurantSettings.objects.filter(
+            restaurant__public_id=restaurant_id
+        ).first()
+        working_hours = settings.working_hours if settings else {}
+        tz = ZoneInfo(settings.timezone) if settings else ZoneInfo("UTC")
+
+        tables = list(Table.objects.filter(restaurant__public_id=restaurant_id, active=True))
+
+        slot_local = datetime(d.year, d.month, d.day, t.hour, t.minute, tzinfo=tz)
+        slot_start = slot_local.astimezone(ZoneInfo("UTC"))
+        slot_end = slot_start + timedelta(minutes=duration)
+        now_utc = timezone.now()
+
+        # The whole [start, start+duration) window must fit inside the day's working
+        # hours; weekday keys are locale-independent (0 = Monday). Overnight close
+        # after midnight is supported for same-day starts (not after-midnight ones).
+        weekday_keys = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+        day_config = working_hours.get(weekday_keys[d.weekday()]) if working_hours else None
+        within_hours = False
+        if day_config:
+            open_t = _parse_time(day_config["open"])
+            close_t = _parse_time(day_config["close"])
+            open_minutes = open_t.hour * 60 + open_t.minute
+            close_minutes = close_t.hour * 60 + close_t.minute
+            overnight = close_minutes <= open_minutes
+            end_base = close_minutes + (24 * 60 if overnight else 0)
+            slot_minutes = t.hour * 60 + t.minute
+            within_hours = slot_minutes >= open_minutes and slot_minutes + duration <= end_base
+
+        result: dict[str, bool] = {}
+
+        if not (within_hours and slot_start > now_utc):
+            for table in tables:
+                result[str(table.public_id)] = False
+            return Response({"availability": result})
+
+        taken = set(
+            Reservation.objects.filter(
+                table__in=tables,
+                status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+                start_at__lt=slot_end,
+                end_at__gt=slot_start,
+            ).values_list("table_id", flat=True)
+        )
+
+        for table in tables:
+            result[str(table.public_id)] = table.pk not in taken
+
+        return Response({"availability": result})
 
     @extend_schema(responses=ReservationSerializer(many=True))
     @action(detail=False, methods=["get"], url_path="my")
