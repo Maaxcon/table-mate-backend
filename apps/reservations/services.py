@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.db.models import OuterRef, Subquery
@@ -606,10 +607,15 @@ def batch_update_reservations(
     # 3. Validation 2: Operating hours
     settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
     working_hours = settings.working_hours if settings else {}
+    tz = ZoneInfo(settings.timezone) if settings and settings.timezone else ZoneInfo("UTC")
 
     for c in changes:
-        d = c["new_date"]
-        day_key = _DAY_KEYS[d.weekday()]
+        start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
+        end_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
+        local_start = start_at.astimezone(tz)
+        local_end = end_at.astimezone(tz)
+
+        day_key = _DAY_KEYS[local_start.weekday()]
         day_hours = working_hours.get(day_key)
         if not day_hours:
             raise RestaurantClosedError(f"Restaurant closed on {day_key}.")
@@ -619,14 +625,16 @@ def batch_update_reservations(
         if open_min is None or close_min is None:
             raise RestaurantClosedError(f"Invalid operating hours for {day_key}.")
 
-        start_min = c["new_start_time"].hour * 60 + c["new_start_time"].minute
-        end_min = c["new_end_time"].hour * 60 + c["new_end_time"].minute
+        start_min = local_start.hour * 60 + local_start.minute
+        end_min = local_end.hour * 60 + local_end.minute
 
         if close_min > open_min:
             if start_min < open_min or end_min > close_min:
                 raise RestaurantClosedError("Reservation falls outside operating hours.")
         else:  # overnight window
-            if start_min < open_min and end_min > close_min and end_min > open_min:
+            if not (start_min >= open_min or start_min < close_min) or not (
+                end_min >= open_min or end_min < close_min
+            ):
                 raise RestaurantClosedError("Reservation falls outside operating hours.")
 
     # 4. Validation 3: Spatial/temporal overlap with existing DB reservations
