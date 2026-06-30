@@ -60,8 +60,8 @@ def get_reservations_for_table(
     )
 
 
-ACTIVE_STATUSES = [ReservationStatus.PENDING, ReservationStatus.ACTIVE]
-PAST_STATUSES = [ReservationStatus.COMPLETED, ReservationStatus.CANCELLED]
+ACTIVE_STATUSES: list[str] = [ReservationStatus.PENDING, ReservationStatus.ACTIVE]
+PAST_STATUSES: list[str] = [ReservationStatus.COMPLETED, ReservationStatus.CANCELLED]
 
 
 def get_customer_reservations(

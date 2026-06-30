@@ -2655,6 +2655,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reservation'
           description: ''
+  /api/reservations/reservations/availability/:
+    get:
+      operationId: reservations_reservations_availability_retrieve
+      description: 'Given restaurant + date + time (+ optional duration in minutes,
+        default 120), returns each active table''s availability for that slot as {
+        availability: { ''<table_public_id>'': true|false } }. A table is free when
+        the slot is within working hours, in the future, and has no overlapping pending/active
+        reservation. Powers the time-aware floor plan.'
+      summary: Per-table availability for one slot
+      tags:
+      - Reservations
+      security:
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+          description: ''
   /api/reservations/reservations/available-slots/:
     get:
       operationId: reservations_reservations_available_slots_retrieve
