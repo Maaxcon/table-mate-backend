@@ -33,7 +33,7 @@ from .permissions import CanManageReservations
 from .selectors import get_customer_global_reservations, get_customer_reservations
 from .serializers import BatchUpdateSerializer, ReservationSerializer
 from .services import (
-    activate_reservation,
+    activate_pending_reservation,
     batch_update_reservations,
     cancel_reservation,
     create_reservation,
@@ -172,11 +172,9 @@ class ReservationViewSet(
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request: Request, *args: object, **kwargs: object) -> Response:
         reservation = self.get_object()
-        is_staff = getattr(request.user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER)
-        result = activate_reservation(
+        result = activate_pending_reservation(
             reservation=reservation,
-            opened_by=request.user,
-            enforce_window=not is_staff,
+            actor=request.user,
         )
         serializer = self.get_serializer(result)
         return Response(serializer.data)

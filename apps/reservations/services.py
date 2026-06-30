@@ -388,6 +388,11 @@ def activate_pending_reservation(
     if table is None:
         raise ReservationConflictError("Reservation has no table assigned.")
 
+    locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
+
+    if locked.status != ReservationStatus.PENDING:
+        raise ReservationConflictError("Only pending reservations can be activated.")
+
     if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
         raise ReservationConflictError("Table already has an active session.")
 
@@ -406,14 +411,15 @@ def activate_pending_reservation(
     if earlier_pending:
         raise ReservationConflictError("There is an earlier pending reservation for this table.")
 
-    reservation.status = ReservationStatus.ACTIVE
-    reservation.save(update_fields=["status", "updated_at"])
+    locked.status = ReservationStatus.ACTIVE
+    locked.start_at = now
+    locked.save(update_fields=["status", "start_at", "updated_at"])
 
     restaurant = table.restaurant
     session = Session.objects.create(
         restaurant_id=reservation.restaurant_id,
         table=table,
-        reservation=reservation,
+        reservation=locked,
         opened_by=actor,
         guest_count=reservation.guest_count,
         currency=restaurant.settings.currency,
@@ -431,7 +437,7 @@ def activate_pending_reservation(
         )
     )
 
-    return reservation
+    return locked
 
 
 @transaction.atomic
