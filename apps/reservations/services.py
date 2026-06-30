@@ -16,6 +16,7 @@ from common.exceptions import ReservationCancelError, ReservationConflictError, 
 from common.hall_events import (
     emit_hall_new_reservation,
     emit_hall_reservation_cancelled,
+    emit_hall_reservations_updated,
     emit_hall_table_status_changed,
 )
 from common.notification_events import emit_hall_new_reservation_notification
@@ -645,16 +646,22 @@ def batch_update_reservations(
             current_reservation_id=res.id,
         )
 
-    # 5. Apply all changes
+    # 5. Apply all changes — collect affected table IDs for broadcast
+    affected_table_ids: set[str] = set()
+
     for c in changes:
         rid = str(c["reservation_id"])
         res = res_map[rid]
+        affected_table_ids.add(str(res.table.public_id))
         table = Table.objects.get(
             public_id=c["new_table_id"],
             restaurant_id=restaurant_id,
             active=True,
         )
+        affected_table_ids.add(c["new_table_id"])
         res.table = table
         res.start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
         res.end_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
         res.save(update_fields=["table", "start_at", "end_at", "updated_at"])
+
+    emit_hall_reservations_updated(restaurant_id, table_ids=list(affected_table_ids))

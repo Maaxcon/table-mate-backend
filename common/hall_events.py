@@ -180,6 +180,22 @@ def emit_hall_zone_updated(
     )
 
 
+def emit_hall_reservations_updated(
+    restaurant_id: int,
+    *,
+    table_ids: list[str],
+) -> None:
+    _broadcast_hall_event(
+        restaurant_id,
+        {
+            "event_name": "HALL_RESERVATIONS_UPDATED",
+            "schema_version": "1",
+            "table_ids": table_ids,
+            "occurred_at": timezone.now().isoformat(),
+        },
+    )
+
+
 def emit_hall_zone_deleted(
     restaurant_id: int,
     *,
