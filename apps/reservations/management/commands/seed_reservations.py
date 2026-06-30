@@ -47,11 +47,6 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"No active tables for {restaurant.name}. Skipping."))
                 continue
 
-            customers = list(User.objects.filter(restaurant=restaurant, role=RoleCode.CUSTOMER))
-            if not customers:
-                self.stdout.write(self.style.WARNING(f"No customer users for {restaurant.name}. Skipping."))
-                continue
-
             # Delete all existing sessions and reservations for a clean seed
             Session.objects.filter(restaurant=restaurant).delete()
             Reservation.objects.filter(restaurant=restaurant).delete()
@@ -60,7 +55,7 @@ class Command(BaseCommand):
                 # ── Active reservations (ongoing now → sessions created → OCCUPIED) ──
                 {
                     "table": "T1",
-                    "customer": customers[0 % len(customers)],
+                    "customer_name": "Олександр Коваленко",
                     "guest_count": 2,
                     "start_at": now - timedelta(hours=1),
                     "end_at": now + timedelta(hours=2),
@@ -70,7 +65,7 @@ class Command(BaseCommand):
                 },
                 {
                     "table": "T2",
-                    "customer": customers[1 % len(customers)],
+                    "customer_name": "Марія Шевченко",
                     "guest_count": 4,
                     "start_at": now - timedelta(minutes=45),
                     "end_at": now + timedelta(hours=1, minutes=30),
@@ -80,7 +75,7 @@ class Command(BaseCommand):
                 },
                 {
                     "table": "T3",
-                    "customer": customers[2 % len(customers)],
+                    "customer_name": "Дмитро Бондаренко",
                     "guest_count": 3,
                     "start_at": now - timedelta(minutes=90),
                     "end_at": now + timedelta(minutes=90),
@@ -90,7 +85,7 @@ class Command(BaseCommand):
                 },
                 {
                     "table": "T5",
-                    "customer": customers[0 % len(customers)],
+                    "customer_name": "Ірина Мельник",
                     "guest_count": 5,
                     "start_at": now - timedelta(minutes=30),
                     "end_at": now + timedelta(hours=3),
@@ -101,7 +96,7 @@ class Command(BaseCommand):
                 # ── Pending reservations (upcoming soon → no sessions → RESERVED) ──
                 {
                     "table": "T8",
-                    "customer": customers[1 % len(customers)],
+                    "customer_name": "Андрій Ткаченко",
                     "guest_count": 4,
                     "start_at": now + timedelta(minutes=8),
                     "end_at": now + timedelta(hours=2, minutes=30),
@@ -111,7 +106,7 @@ class Command(BaseCommand):
                 },
                 {
                     "table": "T9",
-                    "customer": customers[2 % len(customers)],
+                    "customer_name": "Олена Кравченко",
                     "guest_count": 3,
                     "start_at": now + timedelta(minutes=12),
                     "end_at": now + timedelta(hours=2),
@@ -122,7 +117,7 @@ class Command(BaseCommand):
                 # ── Pending reservation (within 15 min window → shows RESERVED) ──
                 {
                     "table": "T10",
-                    "customer": customers[0 % len(customers)],
+                    "customer_name": "Василь Лисенко",
                     "guest_count": 4,
                     "start_at": now + timedelta(minutes=5),
                     "end_at": now + timedelta(hours=2),
@@ -133,7 +128,7 @@ class Command(BaseCommand):
                 # ── Past reservations (now completed, no effect on floor plan) ──
                 {
                     "table": "T4",
-                    "customer": customers[1 % len(customers)],
+                    "customer_name": "Наталія Попова",
                     "guest_count": 6,
                     "start_at": now - timedelta(days=2),
                     "end_at": now - timedelta(days=2) + timedelta(hours=2),
@@ -143,7 +138,7 @@ class Command(BaseCommand):
                 },
                 {
                     "table": "T7",
-                    "customer": customers[0 % len(customers)],
+                    "customer_name": "Сергій Іваненко",
                     "guest_count": 8,
                     "start_at": now - timedelta(days=1),
                     "end_at": now - timedelta(days=1) + timedelta(hours=2),
@@ -154,7 +149,7 @@ class Command(BaseCommand):
                 # ── Cancelled reservation ──
                 {
                     "table": "T6",
-                    "customer": customers[2 % len(customers)],
+                    "customer_name": "Тетяна Савченко",
                     "guest_count": 4,
                     "start_at": now + timedelta(days=3),
                     "end_at": now + timedelta(days=3, hours=2),
@@ -176,7 +171,7 @@ class Command(BaseCommand):
                     table=table,
                     start_at=data["start_at"],
                     defaults={
-                        "customer": data["customer"],
+                        "customer_name": data["customer_name"],
                         "guest_count": data["guest_count"],
                         "end_at": data["end_at"],
                         "status": data["status"],
