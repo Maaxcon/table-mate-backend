@@ -8,8 +8,10 @@ from apps.authentication.models import RoleCode
 from common.channels import (
     TOKEN_SUBPROTOCOL,
     authenticate_websocket,
+    extract_ws_restaurant,
     extract_ws_token,
     hall_group_name,
+    resolve_restaurant_pk,
     staff_group_name,
 )
 
@@ -106,7 +108,19 @@ class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
             await self.close(code=4001)
             return
 
-        if user is None or restaurant_id is None:
+        if user is None:
+            await self.accept()
+            await self.close(code=4001)
+            return
+
+        # Customers carry no restaurant claim in their token, so let them watch a
+        # specific restaurant's floor via ?restaurant=<public_id>. The stream only
+        # exposes already-public table/reservation status (see _filter_event_for_floor).
+        if restaurant_id is None:
+            public_id = extract_ws_restaurant(self.scope)
+            restaurant_id = await resolve_restaurant_pk(public_id) if public_id else None
+
+        if restaurant_id is None:
             await self.accept()
             await self.close(code=4001)
             return
