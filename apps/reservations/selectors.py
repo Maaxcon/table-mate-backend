@@ -60,18 +60,29 @@ def get_reservations_for_table(
     )
 
 
-def get_customer_reservations(customer_id: int, restaurant_id: int) -> QuerySet[Reservation]:
+ACTIVE_STATUSES = [ReservationStatus.PENDING, ReservationStatus.ACTIVE]
+PAST_STATUSES = [ReservationStatus.COMPLETED, ReservationStatus.CANCELLED]
+
+
+def get_customer_reservations(
+    customer_id: int,
+    restaurant_id: int,
+    statuses: list[str] | None = None,
+) -> QuerySet[Reservation]:
     return Reservation.objects.filter(
         customer_id=customer_id,
         restaurant_id=restaurant_id,
-        status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+        status__in=statuses or ACTIVE_STATUSES,
     ).select_related("table", "restaurant", "customer")
 
 
-def get_customer_global_reservations(customer_id: int) -> QuerySet[Reservation]:
+def get_customer_global_reservations(
+    customer_id: int,
+    statuses: list[str] | None = None,
+) -> QuerySet[Reservation]:
     return Reservation.objects.filter(
         customer_id=customer_id,
-        status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+        status__in=statuses or ACTIVE_STATUSES,
     ).select_related("table", "restaurant", "customer")
 
 

@@ -218,3 +218,43 @@ def test_my_reservations_filters_active_records_and_supports_limit_offset(
     ]
     assert data[0]["restaurant_info"]["name"] == restaurant.name
     assert data[0]["table_info"]["table_number"] == table.table_number
+
+
+@pytest.mark.django_db
+def test_my_reservations_status_past_returns_history_newest_first(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+    api_factory: Callable[..., AuthContext],
+) -> None:
+    customer = user_factory(role=RoleCode.CUSTOMER)
+    customer.save()
+    base_start = timezone.now() - timedelta(days=10)
+    statuses = [
+        ReservationStatus.PENDING,
+        ReservationStatus.ACTIVE,
+        ReservationStatus.COMPLETED,
+        ReservationStatus.CANCELLED,
+    ]
+    for index, reservation_status in enumerate(statuses):
+        start_at = base_start + timedelta(days=index)
+        Reservation.objects.create(
+            restaurant=restaurant,
+            customer=customer,
+            table=table,
+            guest_count=2,
+            start_at=start_at,
+            end_at=start_at + timedelta(hours=2),
+            status=reservation_status,
+        )
+    client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
+
+    response = client.get("/api/reservations/reservations/my/?status=past")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    # Only completed/cancelled, newest start_at first (cancelled is day 3, completed day 2).
+    assert [item["status"] for item in data] == [
+        ReservationStatus.CANCELLED,
+        ReservationStatus.COMPLETED,
+    ]

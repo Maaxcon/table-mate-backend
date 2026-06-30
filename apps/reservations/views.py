@@ -22,7 +22,11 @@ from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restau
 
 from .models import Reservation, ReservationStatus
 from .permissions import CanManageReservations
-from .selectors import get_customer_global_reservations, get_customer_reservations
+from .selectors import (
+    PAST_STATUSES,
+    get_customer_global_reservations,
+    get_customer_reservations,
+)
 from .serializers import ReservationSerializer
 from .services import (
     activate_reservation,
@@ -366,6 +370,20 @@ class ReservationViewSet(
     def my(self, request: Request) -> Response:
         limit = _parse_non_negative_int(request.query_params.get("limit"), "limit")
         offset = _parse_non_negative_int(request.query_params.get("offset"), "offset") or 0
+        # ?status=past returns the guest's history (completed/cancelled), newest
+        # first; the default keeps the active pending/active list.
+        past = request.query_params.get("status") == "past"
+        statuses = PAST_STATUSES if past else None
+
+        def paginate(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
+            if past:
+                qs = qs.order_by("-start_at")
+            if limit is not None:
+                return qs[offset : offset + limit]
+            if offset:
+                return qs[offset:]
+            return qs
+
         restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
             public_id = request.query_params.get(self.restaurant_query_param)
@@ -376,19 +394,15 @@ class ReservationViewSet(
                 except Restaurant.DoesNotExist:
                     raise ValidationError("Restaurant not found.") from None
             else:
-                reservations = get_customer_global_reservations(request.user.pk)  # type: ignore[arg-type]
-                if limit is not None:
-                    reservations = reservations[offset : offset + limit]
-                elif offset:
-                    reservations = reservations[offset:]
-                serializer = self.get_serializer(reservations, many=True)
+                reservations = get_customer_global_reservations(request.user.pk, statuses=statuses)  # type: ignore[arg-type]
+                serializer = self.get_serializer(paginate(reservations), many=True)
                 return Response(serializer.data)
-        reservations = get_customer_reservations(request.user.pk, restaurant_id=restaurant_id)  # type: ignore[arg-type]
-        if limit is not None:
-            reservations = reservations[offset : offset + limit]
-        elif offset:
-            reservations = reservations[offset:]
-        serializer = self.get_serializer(reservations, many=True)
+        reservations = get_customer_reservations(
+            request.user.pk,  # type: ignore[arg-type]
+            restaurant_id=restaurant_id,
+            statuses=statuses,
+        )
+        serializer = self.get_serializer(paginate(reservations), many=True)
         return Response(serializer.data)
 
     @extend_schema(
