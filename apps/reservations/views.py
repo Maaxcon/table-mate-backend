@@ -16,6 +16,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
+from apps.orders.billing import close_visit_session
 from apps.orders.models import Session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
@@ -35,7 +36,6 @@ from .services import (
     activate_reservation,
     batch_update_reservations,
     cancel_reservation,
-    close_session,
     create_reservation,
     create_staff_reservation,
     move_session_to_table,
@@ -144,7 +144,7 @@ class ReservationViewSet(
                     and instance.status == ReservationStatus.ACTIVE
                 ):
                     raise PermissionDenied("You cannot cancel an active reservation.")
-                reservation = cancel_reservation(reservation=instance)
+                reservation = cancel_reservation(reservation=instance, actor=request.user)
             else:
                 reservation = update_reservation_status(
                     instance,
@@ -266,6 +266,8 @@ class ReservationViewSet(
                 d = date_type.fromisoformat(date_str)
             except ValueError:
                 raise ValidationError("Invalid date format. Use YYYY-MM-DD.") from None
+            if d < today_local:
+                raise ValidationError("Cannot query slots for a past date.")
             result[date_str] = day_slots(d)
         else:
             for i in range(14):
@@ -359,7 +361,7 @@ class ReservationViewSet(
         except Session.DoesNotExist:
             raise ValidationError("No active session for this reservation.") from None
 
-        close_session(session, actor=user)
+        close_visit_session(session=session, actor=user)
 
         return Response({"detail": "Check closed successfully."})
 

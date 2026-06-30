@@ -20,8 +20,10 @@ from common.exceptions import (
     CartSessionClosedError,
     DomainError,
     EmptyCartError,
+    ReservationConflictError,
     RestaurantClosedError,
 )
+from common.hall_events import emit_hall_table_status_changed
 from common.money import quantize_money
 from common.notification_events import emit_cart_checked_out, emit_kitchen_ticket_injected
 
@@ -32,6 +34,7 @@ from .models import (
     CreatedBySource,
     Order,
     OrderItem,
+    OrderItemStatus,
     OrderPaymentStatus,
     OrderSource,
     OrderStatus,
@@ -106,18 +109,26 @@ def ensure_visit_session(
     return session
 
 
-def close_visit_session(*, session: Session) -> Session:
+def close_visit_session(*, session: Session, actor: User | None = None) -> Session:
     """End a visit and free the table.
 
-    There is no payment step yet, so a waiter closing the check just ends the
-    visit: closes the Session (bill), marks the Reservation completed, and closes
-    any still-active CartSession. Without completing the reservation the table
-    would stay "occupied" and re-opening it would fail. Idempotent.
+    Closes the Session (bill), marks the Reservation completed, closes any
+    still-active CartSession, and sets the reservation end_at to now.
+    Checks that all order items are served/voided before allowing close.
+    Idempotent — safe to call on an already-closed session.
     """
     closed_carts: list[CartSession] = []
     with transaction.atomic():
         session = Session.objects.select_for_update().select_related("reservation").get(pk=session.pk)
+
         if session.status != SessionStatus.CLOSED:
+            pending_items = OrderItem.objects.filter(
+                order__session=session,
+                status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
+            ).exists()
+            if pending_items:
+                raise ReservationConflictError("Cannot close check: all items must be served or voided first.")
+
             session.status = SessionStatus.CLOSED
             session.save(update_fields=["status"])
 
@@ -125,7 +136,8 @@ def close_visit_session(*, session: Session) -> Session:
         if reservation is not None:
             if reservation.status == ReservationStatus.ACTIVE:
                 reservation.status = ReservationStatus.COMPLETED
-                reservation.save(update_fields=["status"])
+                reservation.end_at = timezone.now()
+                reservation.save(update_fields=["status", "end_at"])
             closed_carts = list(
                 CartSession.objects.select_for_update().filter(reservation=reservation, status=CartSessionStatus.ACTIVE)
             )
@@ -133,6 +145,21 @@ def close_visit_session(*, session: Session) -> Session:
                 cart.status = CartSessionStatus.CLOSED
             if closed_carts:
                 CartSession.objects.bulk_update(closed_carts, ["status"])
+
+        if actor is not None and session.table is not None:
+            table = session.table
+            sid = str(session.public_id)
+            restaurant_id = session.restaurant_id
+            transaction.on_commit(
+                lambda: emit_hall_table_status_changed(
+                    restaurant_id,
+                    table_id=str(table.public_id),
+                    previous_status="occupied",
+                    current_status="free",
+                    session_id=sid,
+                    actor=actor,
+                )
+            )
 
     # Tell any open guest cart it has ended.
     for cart in closed_carts:
