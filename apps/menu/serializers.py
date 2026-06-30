@@ -18,6 +18,7 @@ class MenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
             "menu",
             "name",
             "sort_order",
+            "color",
             "created_at",
             "updated_at",
         ]
@@ -113,7 +114,7 @@ class AdminMenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
 
     class Meta:
         model = MenuCategory
-        fields = ["public_id", "menu", "name", "sort_order", "created_at", "updated_at"]
+        fields = ["public_id", "menu", "name", "sort_order", "color", "created_at", "updated_at"]
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
