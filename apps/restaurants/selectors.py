@@ -75,7 +75,7 @@ def get_employee(employee_id: str, restaurant_id: int) -> User | None:
 
 
 def get_tables_with_occupancy(restaurant_id: int) -> QuerySet[Table]:
-    qs = Table.objects.select_related("zone").filter(restaurant_id=restaurant_id)
+    qs = Table.objects.select_related("zone").filter(restaurant_id=restaurant_id, active=True)
     occupied_subquery = Session.objects.filter(
         table=OuterRef("pk"),
         status=SessionStatus.OPEN,
