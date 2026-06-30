@@ -121,7 +121,7 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
     # model property at runtime; the ignore is purely a typing concern.
     label = serializers.CharField(read_only=True)  # type: ignore[assignment]
     table_number = serializers.CharField(
-        source="session.table.table_number",
+        source="session.table.public_number",
         read_only=True,
     )
     server_name = serializers.SerializerMethodField()
@@ -275,6 +275,7 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "menu_item_category_name",
             "menu_item_category_color",
             "guest_slot",
+            "guest_display_name",
             "quantity",
             "comment",
             "modifiers",

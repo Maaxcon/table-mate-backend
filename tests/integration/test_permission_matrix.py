@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
-from apps.restaurants.models import Table
+from apps.restaurants.models import Table, Zone
 from tests.conftest import UserFactory
 
 ENDPOINTS: list[str] = [
@@ -110,14 +110,68 @@ EDITOR_PATCH_DENIED = {RoleCode.COOK, RoleCode.CUSTOMER}
 def test_editor_table_patch_role_enforcement(role: str, api: Callable[..., Any], restaurant: Any) -> None:
     table = Table.objects.create(
         restaurant=restaurant,
-        table_number="T-EDIT",
+        public_number="T-EDIT",
         capacity=4,
+        zone=Zone.objects.create(restaurant=restaurant, name="Test Zone"),
         active=True,
     )
     ctx = api(role=role, restaurant_id=restaurant.id)
     url = reverse("editor-table-detail", args=[table.public_id])
-    response = ctx.client.patch(url, {"position_x": 10}, format="json")
+    response = ctx.client.patch(url, {"capacity": 6}, format="json")
     if role in EDITOR_PATCH_ALLOWED:
         assert response.status_code == status.HTTP_200_OK, f"{role} should be allowed to PATCH editor tables"
     else:
         assert response.status_code == status.HTTP_403_FORBIDDEN, f"{role} should be denied on PATCH editor tables"
+
+
+@pytest.mark.django_db
+def test_zone_list_allows_anonymous(restaurant: Any) -> None:
+    client = APIClient()
+    url = f"{reverse('zone-list')}?restaurant={restaurant.public_id}"
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+
+
+ZONE_WRITE_ALLOWED = {RoleCode.ADMIN}
+ZONE_WRITE_DENIED = {RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("role", ROLES)
+def test_zone_create_role_enforcement(role: str, api: Callable[..., Any], restaurant: Any) -> None:
+    ctx = api(role=role, restaurant_id=restaurant.id)
+    url = reverse("zone-list")
+    response = ctx.client.post(url, {"name": "New Zone"}, content_type="application/json")
+    if role in ZONE_WRITE_ALLOWED:
+        assert response.status_code == status.HTTP_201_CREATED, f"{role} should be allowed to create zones"
+    else:
+        assert response.status_code == status.HTTP_403_FORBIDDEN, f"{role} should be denied to create zones"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("role", ROLES)
+def test_zone_update_role_enforcement(role: str, api: Callable[..., Any], restaurant: Any) -> None:
+    zone = Zone.objects.create(restaurant=restaurant, name="Test Zone")
+    ctx = api(role=role, restaurant_id=restaurant.id)
+    url = reverse("zone-detail", args=[zone.public_id])
+    response = ctx.client.patch(url, {"name": "Updated"}, content_type="application/json")
+    if role in ZONE_WRITE_ALLOWED:
+        assert response.status_code == status.HTTP_200_OK, f"{role} should be allowed to update zones"
+        zone.refresh_from_db()
+        assert zone.name == "Updated"
+    else:
+        assert response.status_code == status.HTTP_403_FORBIDDEN, f"{role} should be denied to update zones"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("role", ROLES)
+def test_zone_delete_role_enforcement(role: str, api: Callable[..., Any], restaurant: Any) -> None:
+    zone = Zone.objects.create(restaurant=restaurant, name="Test Zone")
+    ctx = api(role=role, restaurant_id=restaurant.id)
+    url = reverse("zone-detail", args=[zone.public_id])
+    response = ctx.client.delete(url)
+    if role in ZONE_WRITE_ALLOWED:
+        assert response.status_code == status.HTTP_204_NO_CONTENT, f"{role} should be allowed to delete zones"
+        assert not Zone.objects.filter(pk=zone.pk).exists()
+    else:
+        assert response.status_code == status.HTTP_403_FORBIDDEN, f"{role} should be denied to delete zones"

@@ -5,13 +5,18 @@ from typing import Any
 from unittest import mock
 
 import pytest
+from django.urls import reverse
 from django.utils import timezone
+from rest_framework import status
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.menu.models import MenuItem
 from apps.orders.billing import checkout_cart_session
 from apps.orders.models import (
     CartItem,
     CartSessionStatus,
+    GuestProfile,
     Order,
     OrderItem,
     OrderItemStatus,
@@ -462,3 +467,41 @@ def test_checkout_blocked_when_restaurant_closed(
     cart.refresh_from_db()
     assert cart.status == CartSessionStatus.ACTIVE
     assert not Order.objects.exists()
+
+
+@pytest.mark.django_db
+def test_guest_display_name_flow(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    """POST a guest name, then verify it appears on the OrderItem after checkout."""
+    _active_reservation(restaurant, table)
+    cart = _open_cart_with_item(table, item, quantity=1)
+
+    cart_item = CartItem.objects.get(cart_session=cart)
+    cart_item.guest_identity = "guest-1"
+    cart_item.save(update_fields=["guest_identity"])
+
+    token = AccessToken()
+    token.payload["is_guest"] = True
+    token.payload["guest_id"] = "guest-1"
+    token.payload["device_id"] = "test-device"
+    token.payload["cart_session_id"] = str(cart.public_id)
+    token.set_exp(lifetime=timedelta(hours=4))
+
+    guest_client = APIClient()
+    guest_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    url = reverse("cart-guest-name", kwargs={"session_pk": cart.public_id})
+    response = guest_client.post(url, {"display_name": "Alice"}, content_type="application/json")
+    assert response.status_code == status.HTTP_200_OK
+
+    profile = GuestProfile.objects.get(cart_session=cart, guest_identity="guest-1")
+    assert profile.display_name == "Alice"
+    assert profile.restaurant_id == cart.restaurant_id
+
+    order = checkout_cart_session(cart_session=cart)
+    order_item = OrderItem.objects.get(order=order)
+    assert order_item.guest_display_name == "Alice"

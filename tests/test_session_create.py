@@ -9,7 +9,7 @@ from rest_framework import status
 
 from apps.authentication.models import RoleCode
 from apps.orders.models import Session, SessionStatus
-from apps.restaurants.models import Table
+from apps.restaurants.models import Table, Zone
 
 from .conftest import AuthContext
 
@@ -113,8 +113,9 @@ class TestSessionPatch:
 
         other_table = Table.objects.create(
             restaurant=table.restaurant,
-            table_number="T2",
+            public_number="T2",
             capacity=4,
+            zone=Zone.objects.filter(restaurant=table.restaurant).first(),
             active=True,
         )
 

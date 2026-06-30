@@ -54,7 +54,7 @@ def test_notification_consumer_rejects_customer(restaurant: Any) -> None:
     async def _test() -> None:
         user = UserFactory.build(role=RoleCode.CUSTOMER)
         await sync_to_async(user.save)()
-        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id)
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
         communicator = WebsocketCommunicator(
             application,
             "/ws/staff/notifications/",
@@ -94,7 +94,7 @@ def test_notification_consumer_allows_waiter(restaurant: Any) -> None:
     async def _test() -> None:
         user = UserFactory.build(role=RoleCode.WAITER)
         await sync_to_async(user.save)()
-        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id)
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
         communicator = WebsocketCommunicator(
             application,
             "/ws/staff/notifications/",
@@ -112,7 +112,7 @@ def test_notification_consumer_allows_admin(restaurant: Any) -> None:
     async def _test() -> None:
         user = UserFactory.build(role=RoleCode.ADMIN)
         await sync_to_async(user.save)()
-        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id)
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
         communicator = WebsocketCommunicator(
             application,
             "/ws/staff/notifications/",
@@ -130,7 +130,7 @@ def test_notification_consumer_allows_cook(restaurant: Any) -> None:
     async def _test() -> None:
         user = UserFactory.build(role=RoleCode.COOK)
         await sync_to_async(user.save)()
-        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id)
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
         communicator = WebsocketCommunicator(
             application,
             "/ws/staff/notifications/",
@@ -305,7 +305,7 @@ def test_floor_consumer_allows_customer(restaurant: Any) -> None:
     async def _test() -> None:
         user = UserFactory.build(role=RoleCode.CUSTOMER)
         await sync_to_async(user.save)()
-        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id)
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
         communicator = WebsocketCommunicator(
             application,
             "/ws/floor/",
@@ -323,7 +323,7 @@ def test_floor_consumer_allows_waiter(restaurant: Any) -> None:
     async def _test() -> None:
         user = UserFactory.build(role=RoleCode.WAITER)
         await sync_to_async(user.save)()
-        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id)
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
         communicator = WebsocketCommunicator(
             application,
             "/ws/floor/",

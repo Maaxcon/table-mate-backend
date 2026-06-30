@@ -191,8 +191,11 @@ class ZoneSerializer(serializers.ModelSerializer[Zone]):
             "public_id",
             "name",
             "sort_order",
+            "edge_styles",
+            "canvas_cols",
+            "canvas_rows",
         ]
-        read_only_fields = fields
+        read_only_fields = ["public_id"]
 
 
 class TableSerializer(serializers.ModelSerializer[Table]):
@@ -205,13 +208,10 @@ class TableSerializer(serializers.ModelSerializer[Table]):
         fields = [
             "public_id",
             "restaurant",
-            "table_number",
+            "public_number",
             "capacity",
             "is_occupied",
-            "shape",
             "active",
-            "position_x",
-            "position_y",
             "zone",
             "created_at",
             "updated_at",
@@ -228,8 +228,10 @@ class UpcomingReservationSerializer(serializers.Serializer[None]):
     public_id = serializers.UUIDField()
     table_id = serializers.UUIDField()
     start_at = serializers.DateTimeField()
+    end_at = serializers.DateTimeField()
 
 
 class LayoutResponseSerializer(serializers.Serializer[None]):
     tables = TableSerializer(many=True)
+    layout = serializers.JSONField(required=False, allow_null=True)
     upcoming_reservations = UpcomingReservationSerializer(many=True)

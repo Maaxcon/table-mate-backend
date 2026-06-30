@@ -22,8 +22,7 @@ from apps.orders.selectors import (
     get_kitchen_tickets,
 )
 from apps.orders.services import create_order_with_items, open_session
-from apps.restaurants.models import Restaurant, RestaurantSettings, Table
-
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table, Zone
 from .conftest import AuthContext
 
 ORDER_LIST_URL = reverse("order-list")
@@ -63,10 +62,12 @@ def _build_session(table: Table, restaurant_id: int, user: Any) -> Session:
 
 def _create_foreign_restaurant_stack(name: str = "Foreign Restaurant") -> tuple[Restaurant, Table, MenuItem]:
     restaurant = Restaurant.objects.create(name=name, address="456 Side St")
+    zone = Zone.objects.create(restaurant=restaurant, name="Main Hall")
     table = Table.objects.create(
         restaurant=restaurant,
-        table_number="T-foreign",
+        public_number="T-foreign",
         capacity=4,
+        zone=zone,
         active=True,
     )
     menu = Menu.objects.create(restaurant=restaurant, name=f"{name} Menu", is_active=True)
@@ -111,7 +112,7 @@ class TestKitchenSelectors:
         ticket = tickets[0]
         annotated = cast(Any, ticket)
         assert ticket.status == TicketStatus.INCOMING
-        assert annotated.table_number == table.table_number
+        assert annotated.table_number == table.public_number
         assert annotated.server_name == actor.get_full_name()
         assert annotated.guest_count == session.guest_count
         assert annotated.items_count > 0
@@ -271,7 +272,7 @@ class TestTicketKanbanAPI:
         assert resp.status_code == status.HTTP_200_OK
         data = resp.json()
         assert data["status"] == TicketStatus.INCOMING
-        assert data["table_number"] == table.table_number
+        assert data["table_number"] == table.public_number
         assert "server_name" in data
         assert data["guest_count"] == 4
         assert data["items_count"] > 0

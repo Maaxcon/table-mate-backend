@@ -9,7 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode
-from apps.authentication.permissions import IsFloor
+from apps.authentication.permissions import IsAdmin, IsFloor
 from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 from common.api import (
@@ -17,13 +17,20 @@ from common.api import (
     PublicRestaurantQueryMixin,
     RestaurantScopedViewSetMixin,
     get_restaurant_id_from_auth,
+    require_restaurant_id_from_auth,
+    require_restaurant_public_id_from_auth,
 )
 from common.permissions import HasAnyRole
 
-from .models import Layout
+from .models import Layout, LayoutVersion
 from .selectors import get_available_tables
-from .serializers import EditorTableSerializer, LayoutSerializer
-from .services import update_table_position
+from .serializers import (
+    EditorTableSerializer,
+    LayoutSerializer,
+    LayoutVersionSerializer,
+    PublishLayoutSerializer,
+)
+from .services import TableInUseError, publish_layout
 
 
 @extend_schema(tags=["Editor"])
@@ -33,6 +40,56 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
     serializer_class = LayoutSerializer
     filterset_fields = ["version", "published_at", "published_by"]
     ordering_fields = ["created_at", "updated_at", "version", "published_at"]
+
+    @extend_schema(
+        request=PublishLayoutSerializer,
+        responses={201: LayoutVersionSerializer},
+    )
+    @action(detail=False, methods=["post"], permission_classes=[IsAdmin])
+    def publish(self, request: Request) -> Response:
+        restaurant_id = require_restaurant_id_from_auth(request)
+        restaurant_public_id = require_restaurant_public_id_from_auth(request)
+        serializer = PublishLayoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = publish_layout(
+                restaurant_id=restaurant_id,
+                restaurant_public_id=restaurant_public_id,
+                layout_data=serializer.validated_data,
+                published_by=request.user,  # type: ignore[arg-type]
+            )
+        except TableInUseError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        version = result["version"]
+        output = LayoutVersionSerializer(version)
+        return Response(
+            {
+                **output.data,
+                "table_id_map": result["table_id_map"],
+                "public_number_map": result.get("public_number_map", {}),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(
+        summary="Latest published layout JSON",
+        description="Returns the layout_json from the most recent LayoutVersion for the admin editor.",
+        responses={200: dict},
+    )
+    @action(detail=False, methods=["get"], url_path="latest", permission_classes=[IsFloor])
+    def latest(self, request: Request) -> Response:
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is None:
+            return Response({"layout_json": None})
+
+        latest = (
+            LayoutVersion.objects.filter(restaurant_id=restaurant_id)
+            .order_by("-published_at", "-id")
+            .first()
+        )
+        return Response({"layout_json": latest.layout_json if latest else None})
 
 
 @extend_schema(tags=["Editor"])
@@ -44,17 +101,19 @@ class EditorTableViewSet(
     queryset = Table.objects.all()
     serializer_class = EditorTableSerializer
     http_method_names = ["get", "patch", "head", "options"]
-    filterset_fields = ["capacity", "shape", "active"]
+    filterset_fields = ["capacity", "active"]
     ordering_fields = [
         "created_at",
         "updated_at",
-        "table_number",
+        "public_number",
         "capacity",
     ]
 
     def get_queryset(self) -> QuerySet[Table]:
         qs = super().get_queryset()
         restaurant_id = get_restaurant_id_from_auth(self.request)
+        if restaurant_id is None:
+            restaurant_id = self.get_restaurant_id()
         if restaurant_id is not None:
             qs = qs.filter(restaurant_id=restaurant_id)
         return qs.filter(active=True)
@@ -166,12 +225,6 @@ class EditorTableViewSet(
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-
-        update_table_position(
-            instance,
-            position_x=serializer.validated_data.get("position_x"),
-            position_y=serializer.validated_data.get("position_y"),
-        )
-
+        serializer.save()
         result_serializer = self.get_serializer(instance)
         return Response(result_serializer.data)

@@ -4,6 +4,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+
 COPY pyproject.toml uv.lock ./
 
 RUN uv sync --frozen --no-dev --group prod --no-install-project
@@ -12,7 +14,7 @@ COPY . .
 
 RUN uv sync --frozen --no-dev --group prod
 
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:$PATH"
 ENV DJANGO_SETTINGS_MODULE="core.settings.production"
 
 EXPOSE 8000

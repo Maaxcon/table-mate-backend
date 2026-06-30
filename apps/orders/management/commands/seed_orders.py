@@ -299,7 +299,7 @@ class Command(BaseCommand):
                     session.tax = session.subtotal * 10 // 100
                     session.total = session.subtotal + session.tax
                     session.save(update_fields=["subtotal", "tax", "total"])
-                    self.stdout.write(f"  Walk-in session on Table {free_table.table_number}.")
+                    self.stdout.write(f"  Walk-in session on Table {free_table.public_number}.")
 
 
 def ticket_defaults_from_profile(profile: dict[str, Any], now: datetime) -> dict[str, Any]:

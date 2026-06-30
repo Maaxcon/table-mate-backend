@@ -201,6 +201,5 @@ SPECTACULAR_SETTINGS = {
     "EXCEPTION_HANDLER": "common.api.exception_handler.custom_exception_handler",
     "ENUM_NAME_OVERRIDES": {
         "ReservationStatus": "apps.reservations.models.ReservationStatus",
-        "TableShape": "apps.restaurants.models.TableShape",
     },
 }

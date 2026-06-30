@@ -23,6 +23,7 @@ from common.exceptions import (
     RestaurantClosedError,
 )
 from common.money import quantize_money
+from common.notification_events import emit_cart_checked_out, emit_kitchen_ticket_injected
 
 from .models import (
     CartItem,
@@ -36,6 +37,8 @@ from .models import (
     OrderStatus,
     Session,
     SessionStatus,
+    Ticket,
+    TicketStatus,
 )
 from .services.cart import _broadcast_cart_updated
 
@@ -221,9 +224,22 @@ def checkout_cart_session(
             currency=currency,
         )
 
+        ticket = Ticket.objects.create(
+            restaurant=order.restaurant,
+            session=session,
+            order=order,
+            status=TicketStatus.INCOMING,
+            injected_at=timezone.now(),
+        )
+
         order_items: list[OrderItem] = []
         order_subtotal = Decimal("0")
         order_tax = Decimal("0")
+        # Build a map of guest_identity → display_name for this session.
+        from apps.orders.models import GuestProfile
+        guest_names = dict(
+            GuestProfile.objects.filter(cart_session=cart_session).values_list("guest_identity", "display_name")
+        )
         for cart_item in cart_items:
             unit_price = cart_item.menu_item.price
             line_total = quantize_money(unit_price * cart_item.quantity)
@@ -232,8 +248,12 @@ def checkout_cart_session(
                 OrderItem.objects.create(
                     restaurant_id=cart_session.restaurant_id,
                     order=order,
+                    ticket=ticket,
                     menu_item=cart_item.menu_item,
                     guest_slot=cart_item.guest_slot or 0,
+                    guest_display_name=(
+                        guest_names.get(cart_item.guest_identity) if cart_item.guest_identity else None
+                    ),
                     quantity=cart_item.quantity,
                     comment=cart_item.comment,
                     unit_price=unit_price,
@@ -257,6 +277,23 @@ def checkout_cart_session(
         cart_session.save(update_fields=["status"])
 
         _recompute_session_totals(session)
+
+        transaction.on_commit(
+            lambda: emit_cart_checked_out(
+                cart_session.restaurant_id,
+                session_id=str(cart_session.public_id),
+                table_number=session.table.public_number,
+                guest_name=user.get_full_name() if user else None,
+            )
+        )
+        transaction.on_commit(
+            lambda: emit_kitchen_ticket_injected(
+                cart_session.restaurant_id,
+                ticket_id=str(ticket.public_id),
+                table_number=session.table.public_number,
+                items_count=len(cart_items),
+            )
+        )
 
     # Broadcast after commit so websocket consumers don't read a pre-commit cart.
     _broadcast_cart_updated(cart_session)
