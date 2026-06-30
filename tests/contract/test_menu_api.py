@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Any, cast
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.test import Client
 from django.urls import reverse
 from rest_framework import status
@@ -267,6 +268,15 @@ class TestAdminMenuCategories:
         category.refresh_from_db()
         assert category.color == "#123ABC"
 
+    def test_direct_orm_write_rejects_invalid_color(
+        self,
+        menu: Menu,
+    ) -> None:
+        # The field validator only fires at the serializer/admin layer; save() must
+        # also reject an unvalidated value written straight through the ORM.
+        with pytest.raises(ValidationError):
+            MenuCategory.objects.create(menu=menu, name="Bad", color="red; }")
+
 
 @pytest.mark.django_db(databases=["default"])
 class TestAdminMenuItems:
@@ -339,9 +349,7 @@ class TestMenuItemSearch:
         )
 
         url = reverse("menu-item-search")
-        response: Any = api_client.get(
-            url, {"restaurant": str(restaurant.public_id), "q": category.name}
-        )
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "q": category.name})
 
         assert response.status_code == status.HTTP_200_OK
         names = [r["name"] for r in response.json()["results"]]
@@ -361,12 +369,8 @@ class TestMenuItemSearch:
             )
 
         url = reverse("menu-item-search")
-        asc: Any = api_client.get(
-            url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "price"}
-        )
-        desc: Any = api_client.get(
-            url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "-price"}
-        )
+        asc: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "price"})
+        desc: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "-price"})
 
         assert asc.status_code == status.HTTP_200_OK
         assert [r["name"] for r in asc.json()["results"]] == [

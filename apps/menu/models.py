@@ -8,6 +8,8 @@ from common.models import BaseModel, RestaurantScopedModel
 
 from .allergens import ALLERGENS
 
+validate_hex_color = RegexValidator(r"^#[0-9a-fA-F]{6}$", message="Use hex color format #RRGGBB.")
+
 
 def validate_str_list(value: object) -> None:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
@@ -45,7 +47,7 @@ class MenuCategory(BaseModel):
         max_length=7,
         null=True,
         blank=True,
-        validators=[RegexValidator(r"^#[0-9a-fA-F]{6}$", message="Use hex color format #RRGGBB.")],
+        validators=[validate_hex_color],
         help_text="Hex color used for category theming.",
     )
 
@@ -64,6 +66,9 @@ class MenuCategory(BaseModel):
     def save(self, *args: Any, **kwargs: Any) -> None:
         if self.color:
             self.color = self.color.upper()
+            # The field validator only runs at the serializer/admin layer, so enforce
+            # it here too — a direct ORM/seed write must not store an unvalidated value.
+            validate_hex_color(self.color)
         super().save(*args, **kwargs)
 
 

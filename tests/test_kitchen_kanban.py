@@ -1,6 +1,6 @@
 # mypy: disable-error-code="no-untyped-call"
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 
@@ -22,7 +22,7 @@ from apps.orders.selectors import (
     get_kitchen_tickets,
 )
 from apps.orders.services import create_order_with_items, open_session
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 
 from .conftest import AuthContext
 
@@ -837,6 +837,36 @@ class TestTicketDailyLabel:
         # A ticket injected on a different day starts its own T1 sequence.
         assert prior_day_ticket.label == "T1"
         assert today_ticket.label == "T1"
+
+    def test_seq_date_uses_restaurant_local_day_not_utc(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        # 23:30 UTC on 2026-06-30 is already 02:30 the next day in Kyiv (UTC+3),
+        # so the ticket must bucket onto 2026-07-01 in the restaurant's local TZ.
+        RestaurantSettings.objects.update_or_create(restaurant=restaurant, defaults={"timezone": "Europe/Kyiv"})
+        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        actor = auth.user
+        session = _build_session(table, restaurant.id, actor)
+        order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        )
+
+        late_utc = datetime(2026, 6, 30, 23, 30, tzinfo=UTC)
+        ticket = Ticket.objects.create(
+            restaurant=restaurant,
+            session=session,
+            order=order,
+            status=TicketStatus.INCOMING,
+            injected_at=late_utc,
+        )
+
+        assert ticket.daily_seq_date == date(2026, 7, 1)
 
     def test_label_present_in_api_response(
         self,

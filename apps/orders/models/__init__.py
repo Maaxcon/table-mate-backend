@@ -1,5 +1,6 @@
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from django.db import connection, models, transaction
 from django.utils import timezone
@@ -247,8 +248,21 @@ class Ticket(RestaurantScopedModel):
         releases automatically when the surrounding transaction commits or rolls back,
         avoiding the unique-constraint races that would otherwise blow up the order.
         """
+        # Imported lazily: apps.restaurants.selectors imports this module, so a
+        # top-level import would be circular.
+        from apps.restaurants.models import RestaurantSettings
+
         injected = self.injected_at or timezone.now()
-        seq_date = timezone.localdate(injected)
+        # The sequence resets at the restaurant's local midnight, not UTC midnight,
+        # so late-night tickets bucket onto the correct local day (matching how
+        # working-hours/availability are computed elsewhere).
+        tz_name = (
+            RestaurantSettings.objects.filter(restaurant_id=self.restaurant_id)
+            .values_list("timezone", flat=True)
+            .first()
+        )
+        tz = ZoneInfo(tz_name) if tz_name else ZoneInfo("UTC")
+        seq_date = timezone.localdate(injected, tz)
         self.daily_seq_date = seq_date
         with connection.cursor() as cursor:
             cursor.execute(
