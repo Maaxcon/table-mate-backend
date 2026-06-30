@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Any
 
-from django.db import models, transaction
+from django.db import connection, models, transaction
 from django.utils import timezone
 
 from common.models import RestaurantScopedModel
@@ -238,21 +238,37 @@ class Ticket(RestaurantScopedModel):
         return f"T{self.daily_number}"
 
     def _assign_daily_number(self) -> None:
-        """Allocate the next per-restaurant, per-day sequence number."""
+        """Allocate the next per-restaurant, per-day sequence number.
+
+        ``select_for_update()`` cannot lock an aggregate query (Postgres rejects
+        ``FOR UPDATE`` with ``MAX(...)`` and Django silently drops it), so we take a
+        transaction-scoped advisory lock keyed on (restaurant, day) instead. This
+        serializes allocation against concurrent ``create_order_with_items`` calls and
+        releases automatically when the surrounding transaction commits or rolls back,
+        avoiding the unique-constraint races that would otherwise blow up the order.
+        """
         injected = self.injected_at or timezone.now()
         seq_date = timezone.localdate(injected)
         self.daily_seq_date = seq_date
-        with transaction.atomic():
-            last = (
-                Ticket.objects.select_for_update()
-                .filter(restaurant_id=self.restaurant_id, daily_seq_date=seq_date)
-                .aggregate(max_number=models.Max("daily_number"))["max_number"]
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(%s, %s)",
+                [self.restaurant_id, seq_date.toordinal()],
             )
-            self.daily_number = (last or 0) + 1
+        last = Ticket.objects.filter(restaurant_id=self.restaurant_id, daily_seq_date=seq_date).aggregate(
+            max_number=models.Max("daily_number")
+        )["max_number"]
+        self.daily_number = (last or 0) + 1
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         if self._state.adding and self.daily_number is None:
-            self._assign_daily_number()
+            # The advisory lock is transaction-scoped, so allocation and the INSERT
+            # must share one transaction or the lock would release before the row is
+            # written. atomic() reuses the outer transaction when one is already open.
+            with transaction.atomic():
+                self._assign_daily_number()
+                super().save(*args, **kwargs)
+            return
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
