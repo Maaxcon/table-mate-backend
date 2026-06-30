@@ -108,3 +108,50 @@ def test_availability_requires_date_and_time(
 ) -> None:
     resp = api_client.get(AVAILABILITY_URL, {"restaurant": str(restaurant.public_id)})
     assert resp.status_code == 400
+
+
+def _next_weekday(target: int) -> Any:
+    """Next future date whose weekday == target (0=Mon). Factory hours: Mon–Thu 09–22."""
+    now = timezone.now().astimezone(KYIV)
+    days = (target - now.weekday()) % 7 or 7
+    return (now + timedelta(days=days)).date()
+
+
+@pytest.mark.django_db
+def test_availability_clamps_duration_to_closing(
+    restaurant: Restaurant,
+    table: Table,
+    restaurant_settings: RestaurantSettings,
+    api_client: Any,
+) -> None:
+    # Monday closes at 22:00. A 120-min default at 20:30 would overflow, but the
+    # window is capped to the 90 min that remain, so the table stays available.
+    monday = _next_weekday(0)
+    resp = api_client.get(
+        AVAILABILITY_URL,
+        {
+            "restaurant": str(restaurant.public_id),
+            "date": monday.isoformat(),
+            "time": "20:30",
+            "duration": 120,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["availability"][str(table.public_id)] is True
+
+
+@pytest.mark.django_db
+def test_availability_false_when_under_min_window_before_close(
+    restaurant: Restaurant,
+    table: Table,
+    restaurant_settings: RestaurantSettings,
+    api_client: Any,
+) -> None:
+    # 15 min before a 22:00 close is below the 30-min minimum bookable window.
+    monday = _next_weekday(0)
+    resp = api_client.get(
+        AVAILABILITY_URL,
+        {"restaurant": str(restaurant.public_id), "date": monday.isoformat(), "time": "21:45"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["availability"][str(table.public_id)] is False

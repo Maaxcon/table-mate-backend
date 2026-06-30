@@ -314,15 +314,18 @@ class ReservationViewSet(
 
         slot_local = datetime(d.year, d.month, d.day, t.hour, t.minute, tzinfo=tz)
         slot_start = slot_local.astimezone(ZoneInfo("UTC"))
-        slot_end = slot_start + timedelta(minutes=duration)
         now_utc = timezone.now()
 
-        # The whole [start, start+duration) window must fit inside the day's working
-        # hours; weekday keys are locale-independent (0 = Monday). Overnight close
-        # after midnight is supported for same-day starts (not after-midnight ones).
+        # The slot must start within working hours and leave at least a minimum
+        # bookable window (30 min) before close. The booking window is capped to
+        # closing time, so a 2h default near closing still counts as available for
+        # however long remains (e.g. 90 min until a 22:00 close). Weekday keys are
+        # locale-independent (0 = Monday); overnight close after midnight is
+        # supported for same-day starts (not after-midnight ones).
         weekday_keys = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
         day_config = working_hours.get(weekday_keys[d.weekday()]) if working_hours else None
         within_hours = False
+        effective_duration = duration
         if day_config:
             open_t = _parse_time(day_config["open"])
             close_t = _parse_time(day_config["close"])
@@ -331,7 +334,11 @@ class ReservationViewSet(
             overnight = close_minutes <= open_minutes
             end_base = close_minutes + (24 * 60 if overnight else 0)
             slot_minutes = t.hour * 60 + t.minute
-            within_hours = slot_minutes >= open_minutes and slot_minutes + duration <= end_base
+            until_close = end_base - slot_minutes
+            within_hours = slot_minutes >= open_minutes and until_close >= 30
+            effective_duration = min(duration, until_close)
+
+        slot_end = slot_start + timedelta(minutes=effective_duration)
 
         result: dict[str, bool] = {}
 
