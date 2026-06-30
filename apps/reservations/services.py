@@ -678,4 +678,4 @@ def batch_update_reservations(
         res.end_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
         res.save(update_fields=["table", "start_at", "end_at", "updated_at"])
 
-    emit_hall_reservations_updated(restaurant_id, table_ids=list(affected_table_ids))
+    transaction.on_commit(lambda: emit_hall_reservations_updated(restaurant_id, table_ids=list(affected_table_ids)))
