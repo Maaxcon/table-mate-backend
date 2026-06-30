@@ -173,6 +173,7 @@ def create_staff_reservation(
     reservation = Reservation.objects.create(
         restaurant_id=restaurant_id,
         customer=None,
+        customer_name=guest_name,
         table=table,
         guest_count=guest_count,
         start_at=start_at,

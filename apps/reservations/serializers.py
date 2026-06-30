@@ -69,6 +69,8 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         ]
 
     def get_customer_name(self, obj: Reservation) -> str:
+        if obj.customer_name:
+            return obj.customer_name
         if obj.customer:
             return f"{obj.customer.first_name} {obj.customer.last_name}".strip() or obj.customer.email
         return "Guest"
