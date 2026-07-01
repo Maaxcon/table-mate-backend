@@ -95,6 +95,7 @@ class Session(RestaurantScopedModel):
     service_charge = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     opened_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-opened_at", "-id"]

@@ -202,6 +202,7 @@ class Command(BaseCommand):
                             guest_count=reservation.guest_count,
                             currency=currency,
                             opened_at=reservation.start_at,
+                            ends_at=reservation.end_at,
                         )
 
         self.stdout.write(self.style.SUCCESS(f"Done: {created_reservations} reservations created"))

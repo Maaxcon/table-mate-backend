@@ -421,6 +421,7 @@ def open_session(
         status=SessionStatus.OPEN,
         currency=currency,
         opened_at=opened_at,
+        ends_at=reservation.end_at,
     )
 
     transaction.on_commit(
