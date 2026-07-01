@@ -1,9 +1,9 @@
 from typing import Any, cast
 
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import ProtectedError, QuerySet
 from drf_spectacular.utils import extend_schema
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -23,6 +23,11 @@ from common.api import (
     RestaurantScopedViewSetMixin,
     get_restaurant_id_from_auth,
     require_restaurant_id_from_auth,
+)
+from common.hall_events import (
+    emit_hall_zone_created,
+    emit_hall_zone_deleted,
+    emit_hall_zone_updated,
 )
 
 from . import selectors, services
@@ -193,11 +198,18 @@ class _PublicRestaurantScopedViewSetMixin(PublicRestaurantQueryMixin):
 class ZoneViewSet(
     PublicLookupMixin,
     _PublicRestaurantScopedViewSetMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.ReadOnlyModelViewSet[Zone],
 ):
-    permission_classes = [AllowAny]
     queryset = Zone.objects.all()
     serializer_class = ZoneSerializer
+
+    def get_permissions(self) -> list[BasePermission]:
+        if self.request.method in SAFE_METHODS:
+            return [AllowAny()]
+        return [IsAdmin()]
 
     def get_queryset(self) -> QuerySet[Zone]:
         qs = super().get_queryset()
@@ -205,6 +217,50 @@ class ZoneViewSet(
         if restaurant_id is not None:
             return qs.filter(restaurant_id=restaurant_id)
         return qs.none()
+
+    def perform_create(self, serializer: BaseSerializer[Zone]) -> None:
+        restaurant_id = self.get_restaurant_id()
+        if restaurant_id is None:
+            raise ValidationError("Restaurant is required to create a zone")
+        zone = serializer.save(restaurant_id=restaurant_id)
+        transaction.on_commit(
+            lambda: emit_hall_zone_created(
+                restaurant_id=restaurant_id,
+                zone_public_id=str(zone.public_id),
+                zone_name=zone.name,
+            )
+        )
+
+    def perform_update(self, serializer: BaseSerializer[Zone]) -> None:
+        zone = serializer.save()
+        transaction.on_commit(
+            lambda: emit_hall_zone_updated(
+                restaurant_id=zone.restaurant_id,
+                zone_public_id=str(zone.public_id),
+                zone_name=zone.name,
+                zone_updated_at=zone.updated_at.isoformat(),
+            )
+        )
+
+    def perform_destroy(self, instance: Zone) -> None:
+        public_id = str(instance.public_id)
+        restaurant_id = instance.restaurant_id
+        instance.delete()
+        transaction.on_commit(
+            lambda: emit_hall_zone_deleted(
+                restaurant_id=restaurant_id,
+                zone_public_id=public_id,
+            )
+        )
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "This zone still has tables. Reassign or remove them before deleting."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 @extend_schema(tags=["Restaurants"])
@@ -323,23 +379,36 @@ class TableViewSet(
 
     @extend_schema(
         summary="Tables layout with upcoming reservations",
-        description="Returns all active tables and today's PENDING reservations for the floor plan.",
+        description=(
+            "Returns all active tables, the latest layout JSON, "
+            "and today's PENDING reservations for the floor plan."
+        ),
         responses=LayoutResponseSerializer,
     )
     @action(detail=False, methods=["get"])
     def layout(self, request: Request) -> Response:
         restaurant_id = self.get_restaurant_id()
         if restaurant_id is None:
-            return Response({"tables": [], "upcoming_reservations": []})
+            return Response({"tables": [], "layout": None, "upcoming_reservations": []})
 
         tables_qs = self.get_queryset().filter(active=True)
         tables_serializer = self.get_serializer(tables_qs, many=True)
+
+        from apps.editor.models import LayoutVersion
+
+        latest_layout = (
+            LayoutVersion.objects.filter(restaurant_id=restaurant_id)
+            .order_by("-published_at", "-id")
+            .first()
+        )
+        layout_payload = latest_layout.layout_json if latest_layout else None
 
         layout_data = selectors.get_layout_data(restaurant_id)
 
         return Response(
             {
                 "tables": tables_serializer.data,
+                "layout": layout_payload,
                 "upcoming_reservations": layout_data["upcoming_reservations"],
             }
         )

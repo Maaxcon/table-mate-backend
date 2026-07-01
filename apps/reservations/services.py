@@ -3,7 +3,7 @@ from typing import Any
 
 from django.db import transaction
 from django.db.models import OuterRef, Subquery
-from django.db.models.functions import Greatest
+from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
@@ -62,7 +62,7 @@ def _check_reservation_conflict(
             table=table,
             status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
         )
-        .annotate(effective_start=Greatest("start_at", Subquery(active_session_subquery)))
+        .annotate(effective_start=Greatest("start_at", Coalesce(Subquery(active_session_subquery), "start_at")))
         .filter(
             effective_start__lt=end_at,
             end_at__gt=start_at,
@@ -127,7 +127,7 @@ def create_reservation(
         lambda: emit_hall_new_reservation_notification(
             restaurant_id,
             reservation_id=str(reservation.public_id),
-            table_number=table.table_number,
+            table_number=table.public_number,
             guest_name=actor.get_full_name() if actor else None,
             guest_count=guest_count,
         )
@@ -197,7 +197,7 @@ def create_staff_reservation(
         lambda: emit_hall_new_reservation_notification(
             restaurant_id,
             reservation_id=str(reservation.public_id),
-            table_number=table.table_number,
+            table_number=table.public_number,
             guest_name=guest_name,
             guest_count=guest_count,
         )
@@ -225,6 +225,14 @@ def reschedule_reservation(
     reservation: Reservation,
     validated_data: dict[str, Any],
 ) -> Reservation:
+    if reservation.status == ReservationStatus.ACTIVE:
+        allowed = {"end_at", "notes"}
+        disallowed = set(validated_data) - allowed
+        if disallowed:
+            raise ReservationConflictError(
+                f"Active reservations can only be prolonged (end_at). Cannot change: {', '.join(sorted(disallowed))}."
+            )
+
     table = validated_data.get("table", reservation.table)
     if table is None:
         raise ReservationConflictError("Table not found or inactive.")
@@ -471,7 +479,7 @@ def move_session_to_table(
         type=reservation.type,
         status=ReservationStatus.ACTIVE,
         created_by_staff=True,
-        notes=f"Moved from table {session.table.table_number}",
+        notes=f"Moved from table {session.table.public_number}",
     )
 
     session.table = new_table

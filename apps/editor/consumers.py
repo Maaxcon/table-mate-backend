@@ -17,7 +17,9 @@ from common.channels import (
 
 _HALL_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 _STAFF_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
-_FLOOR_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER})
+_FLOOR_ALLOWED_ROLES: frozenset[str] = frozenset(
+    {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER}
+)
 
 
 class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
@@ -90,6 +92,10 @@ _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {
     "HALL_TABLE_STATUS_CHANGED": {"event_name", "table_id", "current_status", "occurred_at"},
     "HALL_NEW_RESERVATION": {"event_name", "table_id", "reservation_id", "start_at", "end_at", "occurred_at"},
     "HALL_RESERVATION_CANCELLED": {"event_name", "table_id", "reservation_id", "occurred_at"},
+    "LAYOUT_PUBLISHED": {"event_name", "layout_version_public_id", "restaurant_public_id", "occurred_at"},
+    "ZONE_CREATED": {"event_name", "zone_public_id", "zone_name", "occurred_at"},
+    "ZONE_UPDATED": {"event_name", "zone_public_id", "zone_name", "occurred_at"},
+    "ZONE_DELETED": {"event_name", "zone_public_id", "occurred_at"},
 }
 
 

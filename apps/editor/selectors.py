@@ -4,11 +4,12 @@ from zoneinfo import ZoneInfo
 
 from django.db import models as dm
 from django.db.models import OuterRef, QuerySet, Subquery
-from django.db.models.functions import Greatest
+from django.db.models.functions import Coalesce, Greatest
 
 from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.restaurants.models import RestaurantSettings, Table
+from apps.restaurants.selectors import _DAY_KEYS
 
 
 def _parse_time(value: str) -> time_type:
@@ -24,7 +25,7 @@ def is_within_working_hours(settings: RestaurantSettings, dt: datetime) -> bool:
     tz = ZoneInfo(settings.timezone)
     local_dt = dt.astimezone(tz)
 
-    day_name = local_dt.strftime("%A").lower()
+    day_name = _DAY_KEYS[local_dt.weekday()]
     day_config = working_hours.get(day_name)
 
     current_time = local_dt.time()
@@ -41,7 +42,7 @@ def is_within_working_hours(settings: RestaurantSettings, dt: datetime) -> bool:
                 return True
 
     if current_time <= time_type(hour=12, minute=0):
-        prev_day_name = (local_dt - timedelta(days=1)).strftime("%A").lower()
+        prev_day_name = _DAY_KEYS[(local_dt - timedelta(days=1)).weekday()]
         prev_config = working_hours.get(prev_day_name)
         if prev_config:
             prev_open = _parse_time(prev_config.get("open", "00:00"))
@@ -79,7 +80,7 @@ def get_available_tables(
     reservations = Reservation.objects.filter(
         restaurant_id=restaurant_id,
         status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-    ).annotate(effective_start=Greatest("start_at", Subquery(active_session_subquery)))
+    ).annotate(effective_start=Greatest("start_at", Coalesce(Subquery(active_session_subquery), "start_at")))
 
     overlapping = reservations.filter(
         effective_start__lt=end_at,

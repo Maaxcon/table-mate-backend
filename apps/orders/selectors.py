@@ -49,7 +49,7 @@ def get_kitchen_tickets(
         )
         .prefetch_related("items")
         .annotate(
-            table_number=F("session__table__table_number"),
+            table_number=F("session__table__public_number"),
             server_name=Trim(
                 Concat(
                     F("order__created_by__first_name"),
@@ -87,7 +87,7 @@ def get_kitchen_order_items(
 ) -> QuerySet[OrderItem]:
     """Return order items for kitchen kanban view, filtered by ticket or status."""
     qs = (
-        OrderItem.objects.select_related("menu_item", "ticket", "order__session", "restaurant")
+        OrderItem.objects.select_related("menu_item__category", "ticket", "order__session", "restaurant")
         .filter(restaurant_id=restaurant_id)
         .order_by("created_at", "id")
     )

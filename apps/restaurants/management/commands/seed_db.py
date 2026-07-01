@@ -23,6 +23,9 @@ class Command(BaseCommand):
         self.stdout.write("\n=== Seeding restaurants ===")
         call_command("seed_restaurants", restaurant_id=restaurant_id)
 
+        self.stdout.write("\n=== Seeding layouts ===")
+        call_command("seed_layouts", restaurant_id=restaurant_id)
+
         self.stdout.write("\n=== Seeding menu ===")
         call_command("seed_menu", restaurant_id=restaurant_id)
 

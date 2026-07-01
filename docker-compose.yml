@@ -72,6 +72,7 @@ services:
     command: uv run pytest tests/ -v
     volumes:
       - .:/app
+      - /app/.venv
     environment:
       DATABASE_URL: postgresql://table_mate_user:table_mate_pass@db:5432/table_mate
       REDIS_URL: redis://redis:6379/0

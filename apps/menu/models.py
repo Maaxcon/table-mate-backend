@@ -1,9 +1,14 @@
+from typing import Any
+
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 
 from common.models import BaseModel, RestaurantScopedModel
 
 from .allergens import ALLERGENS
+
+validate_hex_color = RegexValidator(r"^#[0-9a-fA-F]{6}$", message="Use hex color format #RRGGBB.")
 
 
 def validate_str_list(value: object) -> None:
@@ -38,6 +43,13 @@ class MenuCategory(BaseModel):
     )
     name = models.CharField(max_length=255)
     sort_order = models.PositiveIntegerField(default=0)
+    color = models.CharField(
+        max_length=7,
+        null=True,
+        blank=True,
+        validators=[validate_hex_color],
+        help_text="Hex color used for category theming.",
+    )
 
     class Meta:
         ordering = ["menu_id", "sort_order", "id"]
@@ -50,6 +62,14 @@ class MenuCategory(BaseModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if self.color:
+            self.color = self.color.upper()
+            # The field validator only runs at the serializer/admin layer, so enforce
+            # it here too — a direct ORM/seed write must not store an unvalidated value.
+            validate_hex_color(self.color)
+        super().save(*args, **kwargs)
 
 
 class MenuItem(RestaurantScopedModel):
