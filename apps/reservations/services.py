@@ -741,9 +741,12 @@ def batch_update_reservations(
     # 2. Validation 1: Internal consistency — no two payload items overlap same table+time
     occupied: dict[tuple[str, _date, int], str] = {}
     today = timezone.now().date()
+    now_time = timezone.now().time().replace(second=0, microsecond=0)
     for c in changes:
         if c["new_date"] < today:
             raise ValidationError("Cannot batch-update to a past date.")
+        if c["new_date"] == today and c["new_start_time"] < now_time:
+            raise ValidationError("Cannot schedule a reservation in the past.")
     for c in changes:
         table_id = str(c["new_table_id"])
         d = c["new_date"]
