@@ -842,13 +842,13 @@ def batch_update_reservations(
             # is session-derived, so the floor follows the party automatically.
             session = session_map[rid]
             old_table_id = str(session.table.public_id)
-            affected_table_ids.update({old_table_id, c["new_table_id"]})
+            affected_table_ids.update({old_table_id, str(c["new_table_id"])})
             session.ends_at = new_end
             if old_table_id != str(c["new_table_id"]):
                 session.table = table
             session.save(update_fields=["ends_at", "table", "updated_at"])
         else:
-            affected_table_ids.update({str(res.table.public_id), c["new_table_id"]})
+            affected_table_ids.update({str(res.table.public_id), str(c["new_table_id"])})
             res.table = table
             res.start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
             res.end_at = new_end
