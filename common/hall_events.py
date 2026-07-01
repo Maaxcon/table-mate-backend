@@ -28,10 +28,14 @@ def _stable_event_id(event_name: str, *parts: str | int) -> str:
 
 def _broadcast_hall_event(restaurant_id: int, event: dict[str, object]) -> None:
     event_id = str(event.get("event_id", ""))
-    dedup_key = f"dedup:hall:{event_id}"
-    if not cache.add(dedup_key, "1", timeout=_DEDUP_TTL_SECONDS):
-        logger.debug("Dedup: skipping duplicate hall event %s", event_id)
-        return
+    # Only dedup events that carry an event_id. Events without one (e.g.
+    # HALL_RESERVATIONS_UPDATED) would otherwise all collide on the empty key
+    # "dedup:hall:" and every event after the first within the TTL would be dropped.
+    if event_id:
+        dedup_key = f"dedup:hall:{event_id}"
+        if not cache.add(dedup_key, "1", timeout=_DEDUP_TTL_SECONDS):
+            logger.debug("Dedup: skipping duplicate hall event %s", event_id)
+            return
 
     channel_layer = get_channel_layer()
     try:

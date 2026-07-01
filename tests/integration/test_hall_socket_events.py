@@ -16,12 +16,18 @@ from apps.authentication.services import issue_tokens_with_restaurant
 from apps.editor.consumers import HallConsumer
 from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
-from apps.reservations.services import create_reservation, update_reservation_status
-from apps.restaurants.models import Restaurant
+from apps.reservations.services import (
+    create_reservation,
+    reschedule_reservation,
+    update_reservation_status,
+)
+from apps.restaurants.models import Restaurant, Table
+from django.core.cache import cache
 from common.channels import hall_group_name
 from common.hall_events import (
     emit_hall_new_reservation,
     emit_hall_reservation_cancelled,
+    emit_hall_reservations_updated,
     emit_hall_table_status_changed,
 )
 from core.routing import application
@@ -524,3 +530,79 @@ def test_update_reservation_status_cancel_emits_event(restaurant: Any, table: An
         assert call_kwargs["reservation_id"] == str(reservation.public_id)
         assert call_kwargs["table_id"] == str(table.public_id)
         assert call_kwargs["actor"] == admin
+
+
+@pytest.mark.django_db
+def test_emit_hall_reservations_updated_broadcasts_and_is_not_deduped(restaurant: Any, table: Any) -> None:
+    # HALL_RESERVATIONS_UPDATED carries no event_id, so consecutive emits must all
+    # broadcast. Regression for the empty-event_id dedup collision that dropped every
+    # such event after the first within the dedup TTL.
+    cache.clear()
+
+    with patch("common.hall_events.get_channel_layer") as mock_get_layer:
+        mock_layer = AsyncMock()
+        mock_get_layer.return_value = mock_layer
+
+        emit_hall_reservations_updated(restaurant.id, table_ids=[str(table.public_id)])
+        emit_hall_reservations_updated(restaurant.id, table_ids=[str(table.public_id)])
+
+        assert mock_layer.group_send.call_count == 2
+        event = mock_layer.group_send.call_args[0][1]["event"]
+        assert event["event_name"] == "HALL_RESERVATIONS_UPDATED"
+        assert event["table_ids"] == [str(table.public_id)]
+        assert "event_id" not in event
+
+
+@pytest.mark.django_db
+def test_hall_event_with_event_id_still_dedups(restaurant: Any, table: Any) -> None:
+    # Events that DO carry an event_id must still dedup true duplicates.
+    cache.clear()
+    user = UserFactory.build(role=RoleCode.ADMIN)
+    user.save()
+
+    with patch("common.hall_events.get_channel_layer") as mock_get_layer:
+        mock_layer = AsyncMock()
+        mock_get_layer.return_value = mock_layer
+
+        for _ in range(2):
+            emit_hall_reservation_cancelled(
+                restaurant.id,
+                reservation_id="dup-reservation-id",
+                table_id=str(table.public_id),
+                actor=user,
+            )
+
+        mock_layer.group_send.assert_called_once()
+
+
+@pytest.mark.django_db(databases=["default"], transaction=True)
+def test_reschedule_reservation_emits_hall_reservations_updated(
+    restaurant: Any, table: Any, zone: Any
+) -> None:
+    # A single-PATCH reschedule must notify the floor for both the old and new table.
+    new_table = Table.objects.create(
+        restaurant=restaurant,
+        public_number="T2",
+        capacity=4,
+        zone=zone,
+        active=True,
+    )
+    start_at = timezone.now() + timedelta(hours=2)
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=start_at,
+        end_at=start_at + timedelta(hours=2),
+        status=ReservationStatus.PENDING,
+    )
+
+    with patch("apps.reservations.services.emit_hall_reservations_updated") as mock_emit:
+        reschedule_reservation(reservation=reservation, validated_data={"table": new_table})
+
+        mock_emit.assert_called_once()
+        assert mock_emit.call_args[0][0] == restaurant.id
+        assert set(mock_emit.call_args[1]["table_ids"]) == {
+            str(table.public_id),
+            str(new_table.public_id),
+        }
