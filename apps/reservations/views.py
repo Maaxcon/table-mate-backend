@@ -5,7 +5,7 @@ from datetime import time as time_type
 from typing import cast
 from zoneinfo import ZoneInfo
 
-from django.db.models import QuerySet
+from django.db.models import OuterRef, QuerySet, Subquery
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -17,7 +17,7 @@ from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
 from apps.orders.billing import close_visit_session
-from apps.orders.models import Session
+from apps.orders.models import Session, SessionStatus
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
 from common.api import (
@@ -80,6 +80,17 @@ class ReservationViewSet(
 
     def get_queryset(self) -> QuerySet[Reservation]:
         qs = super().get_queryset()
+        # Surface the OPEN session's actuals (arrival/end/table) so the admin scheduler
+        # can render ACTIVE reservations by what really happened, not the booked window.
+        open_session = Session.objects.filter(
+            reservation=OuterRef("pk"), status=SessionStatus.OPEN
+        ).order_by("opened_at")
+        qs = qs.annotate(
+            session_opened_at=Subquery(open_session.values("opened_at")[:1]),
+            session_ends_at=Subquery(open_session.values("ends_at")[:1]),
+            session_table_id=Subquery(open_session.values("table__public_id")[:1]),
+            session_table_number=Subquery(open_session.values("table__public_number")[:1]),
+        )
         role = getattr(self.request.user, "role", None)
         if role and role in (RoleCode.ADMIN, RoleCode.WAITER):
             restaurant_id = get_restaurant_id_from_auth(self.request)
@@ -144,7 +155,7 @@ class ReservationViewSet(
                     and instance.status == ReservationStatus.ACTIVE
                 ):
                     raise PermissionDenied("You cannot cancel an active reservation.")
-                reservation = cancel_reservation(reservation=instance, actor=request.user)
+                reservation = cancel_reservation(reservation=instance)
             else:
                 reservation = update_reservation_status(
                     instance,
@@ -172,9 +183,19 @@ class ReservationViewSet(
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request: Request, *args: object, **kwargs: object) -> Response:
         reservation = self.get_object()
+        user = request.user
+        is_staff = getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER)
+        if not is_staff:
+            from .services import ACTIVATION_EARLY_WINDOW
+
+            if reservation.status == ReservationStatus.PENDING:
+                if reservation.start_at - timezone.now() > ACTIVATION_EARLY_WINDOW:
+                    from common.exceptions import ReservationConflictError
+
+                    raise ReservationConflictError("This reservation cannot be activated yet.")
         result = activate_pending_reservation(
             reservation=reservation,
-            actor=request.user,
+            actor=user,
         )
         serializer = self.get_serializer(result)
         return Response(serializer.data)
