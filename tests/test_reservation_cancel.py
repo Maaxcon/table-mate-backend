@@ -52,7 +52,7 @@ class TestCancelReservationService:
 
         from apps.reservations.services import cancel_reservation
 
-        result = cancel_reservation(res, actor=actor)
+        result = cancel_reservation(res)
         result.refresh_from_db()
         assert result.status == ReservationStatus.CANCELLED
 
@@ -67,7 +67,7 @@ class TestCancelReservationService:
 
         from apps.reservations.services import cancel_reservation
 
-        result = cancel_reservation(res, actor=actor)
+        result = cancel_reservation(res)
         result.refresh_from_db()
         assert result.status == ReservationStatus.CANCELLED
 
@@ -76,28 +76,32 @@ class TestCancelReservationService:
     ) -> None:
         customer = user_factory()
         customer.save()
-        res = _reservation(restaurant=restaurant, table=table, customer=customer, res_status=ReservationStatus.COMPLETED)
+        res = _reservation(
+            restaurant=restaurant, table=table, customer=customer, res_status=ReservationStatus.COMPLETED
+        )
         actor = user_factory(role=RoleCode.ADMIN)
         actor.save()
 
         from apps.reservations.services import cancel_reservation
 
         with pytest.raises(ReservationCancelError, match="Only pending or active"):
-            cancel_reservation(res, actor=actor)
+            cancel_reservation(res)
 
     def test_cannot_cancel_already_cancelled(
         self, api: Any, restaurant: Restaurant, table: Table, user_factory: Any
     ) -> None:
         customer = user_factory()
         customer.save()
-        res = _reservation(restaurant=restaurant, table=table, customer=customer, res_status=ReservationStatus.CANCELLED)
+        res = _reservation(
+            restaurant=restaurant, table=table, customer=customer, res_status=ReservationStatus.CANCELLED
+        )
         actor = user_factory(role=RoleCode.ADMIN)
         actor.save()
 
         from apps.reservations.services import cancel_reservation
 
         with pytest.raises(ReservationCancelError, match="Only pending or active"):
-            cancel_reservation(res, actor=actor)
+            cancel_reservation(res)
 
 
 class TestCancelReservationAPI:

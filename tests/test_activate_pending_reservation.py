@@ -53,11 +53,23 @@ class TestActivatePendingReservation:
         actor = user_factory(role=RoleCode.WAITER)
         actor.save()
         res = _reservation(restaurant=restaurant, table=table)
-        res.status = ReservationStatus.ACTIVE
+        res.status = ReservationStatus.COMPLETED
         res.save()
 
         with pytest.raises(ReservationConflictError, match="Only pending"):
             activate_pending_reservation(res, actor=actor)
+
+    def test_idempotent_for_active(
+        self, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
+    ) -> None:
+        actor = user_factory(role=RoleCode.WAITER)
+        actor.save()
+        res = _reservation(restaurant=restaurant, table=table)
+        res.status = ReservationStatus.ACTIVE
+        res.save()
+
+        result = activate_pending_reservation(res, actor=actor)
+        assert result.status == ReservationStatus.ACTIVE
 
     def test_rejects_if_open_session_exists(
         self, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
@@ -90,7 +102,7 @@ class TestActivatePendingReservation:
         now = timezone.now()
 
         # Earlier pending reservation (already started)
-        earlier = Reservation.objects.create(
+        Reservation.objects.create(
             restaurant=restaurant,
             table=table,
             guest_count=2,

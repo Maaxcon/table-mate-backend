@@ -23,7 +23,7 @@ def _reservation(
     start_offset_hours: int = 2,
 ) -> Reservation:
     now = timezone.now()
-    return Reservation.objects.create(
+    res = Reservation.objects.create(
         restaurant=restaurant,
         table=table,
         customer=customer,
@@ -32,6 +32,20 @@ def _reservation(
         end_at=now + timedelta(hours=start_offset_hours + 1),
         status=res_status,
     )
+    if res_status == ReservationStatus.ACTIVE:
+        from apps.orders.models import Session, SessionStatus
+
+        Session.objects.create(
+            restaurant=restaurant,
+            table=table,
+            reservation=res,
+            guest_count=guest_count,
+            currency="UAH",
+            opened_at=now,
+            ends_at=res.end_at,
+            status=SessionStatus.OPEN,
+        )
+    return res
 
 
 def _url(res: Reservation) -> str:
@@ -86,15 +100,17 @@ class TestRescheduleExtended:
         new_start = now + timedelta(hours=5)
         new_end = new_start + timedelta(hours=1)
 
-        with pytest.raises(ReservationConflictError, match="capacity"):
-            reschedule_reservation(
-                res,
-                {
-                    "table": small_table,
-                    "start_at": new_start,
-                    "end_at": new_end,
-                },
-            )
+        # Staff can override capacity — service allows it, serializer blocks for customers
+        result = reschedule_reservation(
+            res,
+            {
+                "table": small_table,
+                "start_at": new_start,
+                "end_at": new_end,
+            },
+        )
+        result.refresh_from_db()
+        assert result.table_id == small_table.pk
 
     def test_reschedule_completed_rejected(
         self, restaurant: Restaurant, table: Table, user_factory: Any
@@ -102,7 +118,7 @@ class TestRescheduleExtended:
         res = _reservation(restaurant=restaurant, table=table, res_status=ReservationStatus.COMPLETED)
 
         now = timezone.now()
-        with pytest.raises(Exception):
+        with pytest.raises(ReservationConflictError):
             reschedule_reservation(
                 res,
                 {
@@ -114,14 +130,17 @@ class TestRescheduleExtended:
     def test_reschedule_active_allows_prolong(
         self, restaurant: Restaurant, table: Table, user_factory: Any
     ) -> None:
+        from apps.orders.models import Session, SessionStatus
+
         res = _reservation(restaurant=restaurant, table=table, res_status=ReservationStatus.ACTIVE)
+        session = Session.objects.get(reservation=res, status=SessionStatus.OPEN)
 
         now = timezone.now()
         new_end = now + timedelta(hours=5)
 
-        result = reschedule_reservation(res, {"end_at": new_end})
-        result.refresh_from_db()
-        assert result.end_at == new_end
+        reschedule_reservation(res, {"end_at": new_end})
+        session.refresh_from_db()
+        assert session.ends_at == new_end
 
     def test_reschedule_active_rejects_table_change(
         self, restaurant: Restaurant, table: Table, zone: Zone, user_factory: Any

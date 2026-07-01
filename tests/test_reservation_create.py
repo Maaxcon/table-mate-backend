@@ -98,7 +98,27 @@ class TestCreateReservationValidation:
         )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_guest_count_exceeds_capacity_rejected(
+    def test_guest_count_exceeds_capacity_rejected_for_customer(
+        self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
+    ) -> None:
+        customer = user_factory()
+        customer.save()
+        ctx: AuthContext = api(role=RoleCode.CUSTOMER)
+        ctx.client.force_authenticate(user=customer)
+        resp = ctx.client.post(
+            _url(),
+            {
+                "table": str(table.public_id),
+                "guest_count": 999,
+                "start_at": _future_start(),
+                "end_at": _future_end(),
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "capacity" in str(resp.data).lower()
+
+    def test_staff_can_exceed_capacity(
         self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
     ) -> None:
         ctx: AuthContext = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
@@ -112,8 +132,7 @@ class TestCreateReservationValidation:
             },
             format="json",
         )
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "capacity" in str(resp.data).lower()
+        assert resp.status_code == status.HTTP_201_CREATED
 
     def test_invalid_table_rejected(
         self, api: Any, restaurant: Restaurant, restaurant_settings: RestaurantSettings

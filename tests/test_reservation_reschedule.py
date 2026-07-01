@@ -119,7 +119,7 @@ def test_customer_cannot_reschedule_another_customers_reservation(
 
 def _active_reservation(restaurant: Restaurant, table: Table, customer: Any) -> Reservation:
     start_at = timezone.now() - timedelta(minutes=10)
-    return Reservation.objects.create(
+    res = Reservation.objects.create(
         restaurant=restaurant,
         customer=customer,
         table=table,
@@ -128,6 +128,19 @@ def _active_reservation(restaurant: Restaurant, table: Table, customer: Any) -> 
         end_at=start_at + timedelta(hours=2),
         status=ReservationStatus.ACTIVE,
     )
+    from apps.orders.models import Session, SessionStatus
+
+    Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        reservation=res,
+        guest_count=2,
+        currency="UAH",
+        opened_at=start_at,
+        ends_at=res.end_at,
+        status=SessionStatus.OPEN,
+    )
+    return res
 
 
 @pytest.mark.django_db
@@ -137,21 +150,25 @@ def test_customer_can_prolong_active_reservation(
     user_factory: Callable[..., Any],
     api_factory: Callable[..., AuthContext],
 ) -> None:
+    from apps.orders.models import Session, SessionStatus
+
     customer = user_factory(role=RoleCode.CUSTOMER)
     customer.save()
     reservation = _active_reservation(restaurant, table, customer)
-    original_end = reservation.end_at
+    session = Session.objects.get(reservation=reservation, status=SessionStatus.OPEN)
+    original_session_end = session.ends_at
     client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
 
+    new_end = original_session_end + timedelta(minutes=30)
     response = client.patch(
         f"/api/reservations/reservations/{reservation.public_id}/",
-        {"end_at": (original_end + timedelta(minutes=30)).isoformat()},
+        {"end_at": new_end.isoformat()},
         format="json",
     )
 
     assert response.status_code == status.HTTP_200_OK
-    reservation.refresh_from_db()
-    assert reservation.end_at == original_end + timedelta(minutes=30)
+    session.refresh_from_db()
+    assert session.ends_at == new_end
 
 
 @pytest.mark.django_db
