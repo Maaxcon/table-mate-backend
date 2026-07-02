@@ -16,7 +16,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.models import Session
+from apps.orders.models import Session, SessionStatus
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
 
@@ -376,8 +376,23 @@ class ReservationViewSet(
             ).values_list("table_id", flat=True)
         )
 
+        # A table with an open walk-in/visit session is physically taken. Its
+        # reservation may have already ended (guests overstaying), so block the
+        # slot until whichever is later: the booked end, or a grace window from
+        # now (they're seated now and likely staying). Frees up for later slots.
+        grace_until = now_utc + timedelta(minutes=effective_duration)
+        occupied_until: dict[int, datetime] = {}
+        for table_id, res_end in Session.objects.filter(
+            table__in=tables, status=SessionStatus.OPEN
+        ).values_list("table_id", "reservation__end_at"):
+            until = max(res_end, grace_until) if res_end else grace_until
+            if table_id not in occupied_until or until > occupied_until[table_id]:
+                occupied_until[table_id] = until
+
         for table in tables:
-            result[str(table.public_id)] = table.pk not in taken
+            occ = occupied_until.get(table.pk)
+            taken_by_session = occ is not None and slot_start < occ
+            result[str(table.public_id)] = table.pk not in taken and not taken_by_session
 
         return Response({"availability": result})
 
