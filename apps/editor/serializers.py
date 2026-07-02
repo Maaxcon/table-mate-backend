@@ -111,6 +111,7 @@ class ThresholdEntitySerializer(serializers.Serializer[Any]):
     y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
+    rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
     threshold_label = serializers.CharField(
         max_length=64, required=False, allow_blank=True, default="", source="label"
     )
@@ -122,6 +123,7 @@ class PortalEntitySerializer(serializers.Serializer[Any]):
     y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
+    rotation = serializers.IntegerField(min_value=0, max_value=359, default=0)
     target_zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     portal_label = serializers.CharField(max_length=64, required=False, allow_blank=True, default="", source="label")
     zone_id = serializers.UUIDField()
