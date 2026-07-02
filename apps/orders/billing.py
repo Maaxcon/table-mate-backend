@@ -104,6 +104,7 @@ def ensure_visit_session(
             "guest_count": reservation.guest_count,
             "currency": currency,
             "opened_at": timezone.now(),
+            "ends_at": reservation.end_at,
         },
     )
     return session
