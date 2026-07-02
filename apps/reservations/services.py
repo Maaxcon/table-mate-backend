@@ -523,6 +523,14 @@ def activate_pending_reservation(
     if locked.status != ReservationStatus.PENDING:
         raise ReservationConflictError("Only pending reservations can be activated.")
 
+    # Serialize concurrent activations onto this table. The open-session guard below
+    # is a check-then-create: two activations of *different* pending reservations on
+    # the same table lock different reservation rows, so without a per-table lock they
+    # could both pass the guard and each open a session (double-booking). Locking the
+    # table row forces them to run one at a time; the DB constraint
+    # (orders_one_open_session_per_table) is the final backstop.
+    Table.objects.select_for_update().get(pk=table.pk)
+
     if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
         raise ReservationConflictError("Table already has an active session.")
 
