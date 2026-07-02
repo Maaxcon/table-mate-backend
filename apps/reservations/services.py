@@ -705,8 +705,6 @@ def batch_update_reservations(
     Validates internal consistency, operating hours, and DB-level overlaps
     before applying any changes. Rolls back entirely on any failure.
     """
-    from datetime import date as _date
-
     # 1. Lock all affected reservations
     res_public_ids = [c["reservation_id"] for c in changes]
     reservations = Reservation.objects.select_for_update().filter(
@@ -738,28 +736,54 @@ def batch_update_reservations(
                 raise ReservationConflictError(f"Active reservation {rid} has no open session.")
             session_map[rid] = session
 
-    # 2. Validation 1: Internal consistency — no two payload items overlap same table+time
-    occupied: dict[tuple[str, _date, int], str] = {}
+    # 2. Validation 1: Internal consistency — no two payload items may occupy the
+    #    same physical table over overlapping *effective* intervals.
     today = timezone.now().date()
     now_time = timezone.now().time().replace(second=0, microsecond=0)
     for c in changes:
+        # Active party's start is its session.opened_at (immutable, necessarily in
+        # the past); new_start_time is ignored for ACTIVE rows, so the past guard
+        # must not apply — it only gates the booked window of PENDING reservations.
+        if res_map[str(c["reservation_id"])].status == ReservationStatus.ACTIVE:
+            continue
         if c["new_date"] < today:
             raise ValidationError("Cannot batch-update to a past date.")
         if c["new_date"] == today and c["new_start_time"] < now_time:
             raise ValidationError("Cannot schedule a reservation in the past.")
+
+    # Build each item's real effective interval, then check overlap pairwise per
+    # table. The effective window is the true occupancy, not the 30-min booked grid:
+    #   ACTIVE → [session.opened_at, new_end] (party is already seated; opened_at
+    #            is the real anchor — new_start_time is meaningless for a seated row)
+    #   PENDING → [new_start, new_end]
+    # Half-open datetime intervals catch sub-30-min and unaligned overlaps here —
+    # with an attributable conflicting_reservation_id — instead of letting them
+    # surface later as an opaque DB IntegrityError (409 with no attribution).
+    intervals: list[tuple[str, datetime, datetime, str]] = []
     for c in changes:
+        rid = str(c["reservation_id"])
         table_id = str(c["new_table_id"])
-        d = c["new_date"]
-        start_min = c["new_start_time"].hour * 60 + c["new_start_time"].minute
-        end_min = c["new_end_time"].hour * 60 + c["new_end_time"].minute
-        for slot in range(start_min, end_min, 30):
-            key = (table_id, d, slot)
-            if key in occupied:
+        new_end = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
+        if res_map[rid].status == ReservationStatus.ACTIVE:
+            new_start = session_map[rid].opened_at
+        else:
+            new_start = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
+        if new_end <= new_start:
+            raise ReservationConflictError(
+                "Reservation end must be after its start.",
+                conflicting_reservation_id=c["reservation_id"],
+            )
+        intervals.append((table_id, new_start, new_end, c["reservation_id"]))
+
+    for i in range(len(intervals)):
+        t_i, s_i, e_i, _rid_i = intervals[i]
+        for j in range(i + 1, len(intervals)):
+            t_j, s_j, e_j, rid_j = intervals[j]
+            if t_i == t_j and s_i < e_j and s_j < e_i:
                 raise ReservationConflictError(
                     "Overlapping reservations in payload.",
-                    conflicting_reservation_id=c["reservation_id"],
+                    conflicting_reservation_id=rid_j,
                 )
-            occupied[key] = str(c["reservation_id"])
 
     # 3. Validation 2: Operating hours
     settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
@@ -815,6 +839,8 @@ def batch_update_reservations(
             # Occupancy window for an active party is its session actuals: arrival
             # (immutable) to the new end. The booked start_at is irrelevant here.
             start_at = session_map[rid].opened_at
+            if end_at <= start_at:
+                raise ReservationConflictError("End time must be after the party was seated.")
         else:
             start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
 
