@@ -183,7 +183,7 @@ class ReservationViewSet(
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request: Request, *args: object, **kwargs: object) -> Response:
         reservation = self.get_object()
-        user = request.user
+        user = cast(User, request.user)
         is_staff = getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER)
         if not is_staff:
             from .services import ACTIVATION_EARLY_WINDOW

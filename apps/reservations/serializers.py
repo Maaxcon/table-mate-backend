@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from datetime import time as time_type
 
 from django.utils import timezone
 from rest_framework import serializers
@@ -157,7 +158,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         return attrs
 
 
-class BatchUpdateItemSerializer(serializers.Serializer):
+class BatchUpdateItemSerializer(serializers.Serializer[dict[str, object]]):
     reservation_id = serializers.UUIDField()
     new_table_id = serializers.UUIDField()
     new_date = serializers.DateField()
@@ -165,12 +166,12 @@ class BatchUpdateItemSerializer(serializers.Serializer):
     new_end_time = serializers.TimeField()
 
     def validate(self, attrs: dict[str, object]) -> dict[str, object]:
-        start = attrs["new_start_time"]
-        end = attrs["new_end_time"]
+        start: time_type = attrs["new_start_time"]  # type: ignore[assignment]
+        end: time_type = attrs["new_end_time"]  # type: ignore[assignment]
         if start >= end:
             raise serializers.ValidationError("new_end_time must be after new_start_time.")
         return attrs
 
 
-class BatchUpdateSerializer(serializers.Serializer):
-    changes = BatchUpdateItemSerializer(many=True, min_length=1)
+class BatchUpdateSerializer(serializers.Serializer[dict[str, object]]):
+    changes = BatchUpdateItemSerializer(many=True)

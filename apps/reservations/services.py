@@ -329,7 +329,7 @@ def reschedule_reservation(
     if reservation.status in {ReservationStatus.COMPLETED, ReservationStatus.CANCELLED}:
         raise ReservationConflictError(f"Cannot reschedule a {reservation.status} reservation.")
 
-    old_table_public_id = str(reservation.table.public_id)
+    old_table_public_id = str(reservation.table.public_id) if reservation.table else ""
 
     table = validated_data.get("table", reservation.table)
     if table is None:
@@ -380,7 +380,7 @@ def reschedule_reservation(
     # Notify the floor (waiter/booking views) so they refetch. Covers single-PATCH
     # reschedules; the batch path emits the same event from batch_update_reservations.
     restaurant_id = reservation.restaurant_id
-    affected_table_ids = {old_table_public_id, str(reservation.table.public_id)}
+    affected_table_ids = {old_table_public_id, str(reservation.table.public_id) if reservation.table else ""}
     transaction.on_commit(
         lambda: emit_hall_reservations_updated(restaurant_id, table_ids=list(affected_table_ids))
     )
@@ -851,7 +851,7 @@ def batch_update_reservations(
                 session.table = table
             session.save(update_fields=["ends_at", "table", "updated_at"])
         else:
-            affected_table_ids.update({str(res.table.public_id), str(c["new_table_id"])})
+            affected_table_ids.update({str(res.table.public_id) if res.table else "", str(c["new_table_id"])})
             res.table = table
             res.start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
             res.end_at = new_end
