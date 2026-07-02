@@ -120,7 +120,7 @@ class SessionViewSet(
     )
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        session = close_visit_session(session=self.get_object())
+        session = close_visit_session(session=self.get_object(), actor=cast(User, request.user))
         serializer = self.get_serializer(session)
         return Response(serializer.data)
 
