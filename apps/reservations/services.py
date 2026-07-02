@@ -52,8 +52,9 @@ def _check_reservation_conflict(
 ) -> None:
     # For an ACTIVE reservation the occupied window is the OPEN session's actuals
     # [opened_at, ends_at]; for PENDING it's the booked [start_at, end_at]. Coalesce
-    # falls back to the booked values when there is no open session (pending) or a
-    # legacy session predating the ends_at column.
+    # falls back to the booked values when there is no open session (pending). The
+    # fallback also covers any legacy session predating the ends_at backfill
+    # (migration 0025) — a safety net, not the primary mechanism.
     open_session = (
         Session.objects.filter(
             reservation=OuterRef("pk"),
