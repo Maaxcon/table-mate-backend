@@ -114,6 +114,17 @@ class Session(RestaurantScopedModel):
                 condition=models.Q(status__in=SessionStatus.values),
                 name="orders_session_status_valid",
             ),
+            # A physical table holds one seated party at a time. Sessions are only
+            # created for seated (active) parties, so at most one OPEN session may
+            # exist per table. This is the DB backstop for the batch re-seat / prolong
+            # path (which mutates Session.table/ends_at outside the Reservation
+            # exclusion constraint) and for the activate_pending TOCTOU race — both of
+            # which can otherwise double-book a table across concurrent transactions.
+            models.UniqueConstraint(
+                fields=["table"],
+                condition=models.Q(status=SessionStatus.OPEN),
+                name="orders_one_open_session_per_table",
+            ),
         ]
 
     def __str__(self) -> str:
