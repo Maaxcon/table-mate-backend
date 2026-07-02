@@ -147,6 +147,67 @@ class TestBatchUpdateActiveMovesSession:
         session.refresh_from_db()
         assert session.ends_at != original_session_end, "Session ends_at must be updated"
 
+    def test_batch_cannot_double_book_two_active_sessions_onto_one_table(
+        self,
+        api: Any,
+        restaurant: Restaurant,
+        table: Table,
+        zone: Any,
+        restaurant_settings: RestaurantSettings,
+        user_factory: Any,
+    ) -> None:
+        """Two seated parties cannot be batch-moved onto the same physical table.
+
+        Regression for the double-booking hole: active moves mutate the OPEN Session
+        (which has no reservation-level overlap constraint), so the intra-batch guard
+        must catch two overlapping sessions targeting one table.
+        """
+        from .conftest import Table as TableModel
+
+        table2 = TableModel.objects.create(
+            restaurant=restaurant, public_number="T2", capacity=4, zone=zone, active=True
+        )
+
+        actor = user_factory(role=RoleCode.WAITER)
+        actor.save()
+        res1 = _reservation(restaurant=restaurant, table=table, res_status=ReservationStatus.PENDING)
+        res2 = _reservation(restaurant=restaurant, table=table2, res_status=ReservationStatus.PENDING)
+        activated1 = activate_pending_reservation(res1, actor=actor)
+        activated2 = activate_pending_reservation(res2, actor=actor)
+
+        ctx: AuthContext = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        tomorrow = (timezone.now() + timedelta(days=1)).date()
+        resp = ctx.client.post(
+            _url(),
+            {
+                "changes": [
+                    # Both seated parties targeting table1 with overlapping windows.
+                    {
+                        "reservation_id": str(activated1.public_id),
+                        "new_table_id": str(table.public_id),
+                        "new_date": tomorrow.isoformat(),
+                        "new_start_time": "18:00",
+                        "new_end_time": "20:00",
+                    },
+                    {
+                        "reservation_id": str(activated2.public_id),
+                        "new_table_id": str(table.public_id),
+                        "new_date": tomorrow.isoformat(),
+                        "new_start_time": "18:15",
+                        "new_end_time": "20:00",
+                    },
+                ]
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_409_CONFLICT
+
+        # No physical table may end up with two open sessions.
+        assert Session.objects.filter(table=table, status=SessionStatus.OPEN).count() == 1
+        # The second session was rolled back to its original table.
+        session2 = Session.objects.get(reservation=activated2, status=SessionStatus.OPEN)
+        assert session2.table_id == table2.pk
+
     def test_pending_move_changes_reservation_table(
         self, api: Any, restaurant: Restaurant, table: Table, zone: Any, restaurant_settings: RestaurantSettings
     ) -> None:
