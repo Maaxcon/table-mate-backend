@@ -8,12 +8,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
+from django.core.cache import cache
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
-from apps.editor.consumers import HallConsumer
+from apps.editor.consumers import HallConsumer, StaffReservationsConsumer
 from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.services import (
@@ -22,8 +23,7 @@ from apps.reservations.services import (
     update_reservation_status,
 )
 from apps.restaurants.models import Restaurant, Table
-from django.core.cache import cache
-from common.channels import hall_group_name
+from common.channels import hall_group_name, staff_group_name
 from common.hall_events import (
     emit_hall_new_reservation,
     emit_hall_reservation_cancelled,
@@ -329,6 +329,38 @@ def test_hall_consumer_rejects_unauthenticated() -> None:
     asyncio.run(_test())
 
 
+@pytest.mark.django_db
+def test_staff_reservations_consumer_rejects_unauthenticated() -> None:
+    async def _test() -> None:
+        communicator = WebsocketCommunicator(StaffReservationsConsumer.as_asgi(), "/ws/staff/reservations/")
+        await communicator.connect()
+        close_code = await communicator.receive_output(timeout=5)
+        assert close_code["type"] == "websocket.close"
+        assert close_code["code"] == 4001
+
+    asyncio.run(_test())
+
+
+@pytest.mark.django_db(databases=["default"], transaction=True)
+def test_staff_reservations_consumer_rejects_customer(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = await sync_to_async(UserFactory.build)(role=RoleCode.CUSTOMER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id)
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/reservations/",
+            subprotocols=["access_token", access],
+        )
+        await communicator.connect()
+        close_code = await communicator.receive_output(timeout=5)
+        assert close_code["type"] == "websocket.close"
+        assert close_code["code"] == 4003
+        await communicator.disconnect()
+
+    asyncio.run(_test())
+
+
 pytestmark_rt = pytest.mark.django_db(databases=["default"], transaction=True)
 
 
@@ -546,7 +578,7 @@ def test_emit_hall_reservations_updated_broadcasts_and_is_not_deduped(restaurant
         emit_hall_reservations_updated(restaurant.id, table_ids=[str(table.public_id)])
         emit_hall_reservations_updated(restaurant.id, table_ids=[str(table.public_id)])
 
-        assert mock_layer.group_send.call_count == 2
+        assert mock_layer.group_send.call_count == 4
         event = mock_layer.group_send.call_args[0][1]["event"]
         assert event["event_name"] == "HALL_RESERVATIONS_UPDATED"
         assert event["table_ids"] == [str(table.public_id)]
@@ -606,3 +638,61 @@ def test_reschedule_reservation_emits_hall_reservations_updated(
             str(table.public_id),
             str(new_table.public_id),
         }
+
+
+@pytest.mark.django_db
+def test_emit_hall_reservations_updated_broadcasts_to_hall_and_staff_groups(
+    restaurant: Any, table: Any
+) -> None:
+    cache.clear()
+
+    with patch("common.hall_events.get_channel_layer") as mock_get_layer:
+        mock_layer = AsyncMock()
+        mock_get_layer.return_value = mock_layer
+
+        emit_hall_reservations_updated(restaurant.id, table_ids=[str(table.public_id)])
+
+        assert mock_layer.group_send.call_count == 2
+
+        hall_call = mock_layer.group_send.call_args_list[0]
+        assert hall_call[0][0] == hall_group_name(restaurant.id)
+        assert hall_call[0][1]["type"] == "hall.event"
+        assert hall_call[0][1]["event"]["event_name"] == "HALL_RESERVATIONS_UPDATED"
+
+        staff_call = mock_layer.group_send.call_args_list[1]
+        assert staff_call[0][0] == staff_group_name(restaurant.id)
+        assert staff_call[0][1]["type"] == "hall.event"
+        assert staff_call[0][1]["event"]["event_name"] == "HALL_RESERVATIONS_UPDATED"
+
+
+async def _connect_staff_reservations(user: Any, restaurant_id: int) -> WebsocketCommunicator:
+    access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant_id)
+    communicator = WebsocketCommunicator(
+        application,
+        "/ws/staff/reservations/",
+        subprotocols=["access_token", access],
+    )
+    connected, _ = await communicator.connect()
+    assert connected
+    return communicator
+
+
+@pytestmark_rt
+async def test_staff_reservations_consumer_receives_hall_reservations_updated(
+    restaurant: Any, table: Any
+) -> None:
+    admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
+    await sync_to_async(admin.save)()
+
+    communicator = await _connect_staff_reservations(admin, restaurant.id)
+
+    await sync_to_async(emit_hall_reservations_updated)(
+        restaurant.id,
+        table_ids=[str(table.public_id)],
+    )
+
+    event = await communicator.receive_json_from(timeout=5)
+    assert event["event_name"] == "HALL_RESERVATIONS_UPDATED"
+    assert event["table_ids"] == [str(table.public_id)]
+
+    await communicator.disconnect()

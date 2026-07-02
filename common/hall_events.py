@@ -9,7 +9,7 @@ from channels.layers import get_channel_layer
 from django.core.cache import cache
 from django.utils import timezone
 
-from .channels import hall_group_name
+from .channels import hall_group_name, staff_group_name
 
 if TYPE_CHECKING:
     from apps.authentication.models import User
@@ -189,15 +189,25 @@ def emit_hall_reservations_updated(
     *,
     table_ids: list[str],
 ) -> None:
-    _broadcast_hall_event(
-        restaurant_id,
-        {
-            "event_name": "HALL_RESERVATIONS_UPDATED",
-            "schema_version": "1",
-            "table_ids": table_ids,
-            "occurred_at": timezone.now().isoformat(),
-        },
-    )
+    event: dict[str, object] = {
+        "event_name": "HALL_RESERVATIONS_UPDATED",
+        "schema_version": "1",
+        "table_ids": table_ids,
+        "occurred_at": timezone.now().isoformat(),
+    }
+    _broadcast_hall_event(restaurant_id, event)
+
+    channel_layer = get_channel_layer()
+    try:
+        async_to_sync(channel_layer.group_send)(
+            staff_group_name(restaurant_id),
+            {"type": "hall.event", "event": event},
+        )
+    except Exception:
+        logger.exception(
+            "Failed to broadcast reservation event to staff group for restaurant %s",
+            restaurant_id,
+        )
 
 
 def emit_hall_zone_deleted(
