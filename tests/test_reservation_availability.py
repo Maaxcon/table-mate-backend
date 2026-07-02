@@ -33,7 +33,7 @@ def test_availability_marks_overlapping_table_unavailable(
     customer = user_factory()
     customer.save()
     free_table = Table.objects.create(
-        restaurant=restaurant, table_number="T2", capacity=2, active=True
+        restaurant=restaurant, public_number="T2", capacity=2, active=True, zone=table.zone
     )
 
     slot_date, start, end = _future_slot()
