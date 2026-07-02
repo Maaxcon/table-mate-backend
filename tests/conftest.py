@@ -99,6 +99,7 @@ class MenuCategoryFactory(DjangoModelFactory[MenuCategory]):
     menu = SubFactory(MenuFactory)
     name = Sequence(lambda n: f"Category {n}")
     sort_order = Sequence(lambda n: n)
+    color = "#F97316"
 
 
 class MenuItemFactory(DjangoModelFactory[MenuItem]):

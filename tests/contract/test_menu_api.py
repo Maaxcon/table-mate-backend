@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Any, cast
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.test import Client
 from django.urls import reverse
 from rest_framework import status
@@ -34,6 +35,7 @@ class TestPublicMenuCategories:
         assert len(results) >= 1
         assert results[0]["name"] == "Mains"
         assert results[0]["public_id"] == str(category.public_id)
+        assert results[0]["color"] == "#F97316"
 
     def test_filter_by_menu(
         self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
@@ -243,6 +245,37 @@ class TestAdminMenuCategories:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["results"][0]["public_id"] == str(category.public_id)
+        assert data["results"][0]["color"] == "#F97316"
+
+    def test_admin_can_update_category_color(
+        self,
+        api: Any,
+        restaurant: Restaurant,
+        menu: Menu,
+        category: MenuCategory,
+    ) -> None:
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        url = reverse("admin-menu-category-detail", kwargs={"public_id": str(category.public_id)})
+        response: Any = auth.client.patch(
+            url,
+            data={"color": "#123ABC"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        payload = response.json()
+        assert payload["color"] == "#123ABC"
+        category.refresh_from_db()
+        assert category.color == "#123ABC"
+
+    def test_direct_orm_write_rejects_invalid_color(
+        self,
+        menu: Menu,
+    ) -> None:
+        # The field validator only fires at the serializer/admin layer; save() must
+        # also reject an unvalidated value written straight through the ORM.
+        with pytest.raises(ValidationError):
+            MenuCategory.objects.create(menu=menu, name="Bad", color="red; }")
 
 
 @pytest.mark.django_db(databases=["default"])
@@ -316,9 +349,7 @@ class TestMenuItemSearch:
         )
 
         url = reverse("menu-item-search")
-        response: Any = api_client.get(
-            url, {"restaurant": str(restaurant.public_id), "q": category.name}
-        )
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "q": category.name})
 
         assert response.status_code == status.HTTP_200_OK
         names = [r["name"] for r in response.json()["results"]]
@@ -338,12 +369,8 @@ class TestMenuItemSearch:
             )
 
         url = reverse("menu-item-search")
-        asc: Any = api_client.get(
-            url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "price"}
-        )
-        desc: Any = api_client.get(
-            url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "-price"}
-        )
+        asc: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "price"})
+        desc: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "q": "pizza", "ordering": "-price"})
 
         assert asc.status_code == status.HTTP_200_OK
         assert [r["name"] for r in asc.json()["results"]] == [

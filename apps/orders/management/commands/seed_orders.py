@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from itertools import cycle
 from typing import Any
 
 from django.core.management.base import BaseCommand
@@ -23,6 +24,21 @@ from apps.reservations.models import Reservation, ReservationStatus, Reservation
 from apps.restaurants.models import Restaurant, Table
 
 WALKIN_SESSION_COUNT = 3
+
+# Demo ticket profiles, cycled per session so the kitchen kanban is populated
+# across every column and urgency band (≥7m amber, ≥12m red on the frontend).
+# minutes_ago values are offsets from "now"; prep_min only applies to completed.
+TICKET_PROFILES: list[dict[str, Any]] = [
+    {"status": TicketStatus.ACTIVE, "injected_min": 4, "started_min": 4, "items": "mixed"},
+    {"status": TicketStatus.INCOMING, "injected_min": 2, "items": "all_pending"},
+    {"status": TicketStatus.ACTIVE, "injected_min": 6, "started_min": 6, "items": "all_ready"},
+    {"status": TicketStatus.INCOMING, "injected_min": 9, "items": "all_pending"},  # amber
+    {"status": TicketStatus.ACTIVE, "injected_min": 11, "started_min": 11, "items": "mixed"},  # amber
+    {"status": TicketStatus.COMPLETED, "injected_min": 25, "started_min": 20, "prep_min": 9, "items": "all_ready"},
+    {"status": TicketStatus.INCOMING, "injected_min": 15, "items": "all_pending"},  # red
+    {"status": TicketStatus.ACTIVE, "injected_min": 14, "started_min": 14, "items": "mixed"},  # red
+    {"status": TicketStatus.COMPLETED, "injected_min": 33, "started_min": 27, "prep_min": 12, "items": "all_ready"},
+]
 
 
 class Command(BaseCommand):
@@ -57,10 +73,27 @@ class Command(BaseCommand):
                 continue
 
             waiter = staff[0]
+            profiles = cycle(TICKET_PROFILES)
 
             menu_items = list(MenuItem.objects.filter(restaurant=restaurant).order_by("id"))
             if not menu_items:
                 self.stdout.write(self.style.WARNING(f"No menu items for {restaurant.name}. Skipping."))
+
+            # Build a category-diverse pool (one dish per distinct category) so the
+            # kanban shows dishes spanning multiple categories — the kitchen board
+            # colour-codes tickets by MenuItem.category. Fall back to all items when
+            # there aren't enough categories to fill a ticket.
+            items_pool: list[MenuItem] = []
+            seen_categories: set[int | None] = set()
+            for mi in menu_items:
+                if mi.category_id not in seen_categories:
+                    seen_categories.add(mi.category_id)
+                    items_pool.append(mi)
+            if len(items_pool) < 3:
+                items_pool = menu_items
+
+            # Rotates the starting category per session so adjacent tickets differ.
+            session_seq = 0
 
             active_reservations = list(
                 Reservation.objects.filter(
@@ -92,6 +125,9 @@ class Command(BaseCommand):
                 )
 
                 sessions_from_res += 1
+                profile = next(profiles)
+                offset = session_seq
+                session_seq += 1
 
                 items_data = (
                     [
@@ -99,22 +135,22 @@ class Command(BaseCommand):
                         {"slot": 1, "menu": 1, "qty": 1},
                         {"slot": 2, "menu": 2, "qty": 1},
                     ]
-                    if len(menu_items) >= 3
+                    if len(items_pool) >= 3
                     else [
                         {"slot": 1, "menu": 0, "qty": 1},
                     ]
                 )
 
-                for data in items_data:
-                    mi = menu_items[data["menu"] % len(menu_items)]
+                for idx, data in enumerate(items_data):
+                    mi = items_pool[(data["menu"] + offset) % len(items_pool)]
                     unit_price = mi.price
                     total_price = unit_price * data["qty"]
 
-                    order, _ = Order.objects.get_or_create(
-                        restaurant=restaurant,
-                        session=session,
-                        created_by=waiter,
-                        defaults={
+                    order = get_or_create_order(
+                        restaurant,
+                        session,
+                        waiter,
+                        {
                             "created_by_source": CreatedBySource.STAFF,
                             "source": OrderSource.WAITER_MANUAL,
                             "status": OrderStatus.SUBMITTED,
@@ -126,18 +162,17 @@ class Command(BaseCommand):
                         },
                     )
 
-                    ticket, _ = Ticket.objects.get_or_create(
+                    ticket, ticket_created = Ticket.objects.get_or_create(
                         restaurant=restaurant,
                         session=session,
                         order=order,
-                        defaults={
-                            "status": TicketStatus.ACTIVE,
-                            "injected_at": now,
-                            "started_at": now,
-                        },
+                        defaults=ticket_defaults_from_profile(profile, now),
                     )
+                    if not ticket_created:
+                        apply_ticket_profile(ticket, profile, now)
 
-                    OrderItem.objects.get_or_create(
+                    item_comment = "No onions" if profile["items"] == "mixed" and idx == 1 else None
+                    item, item_created = OrderItem.objects.get_or_create(
                         restaurant=restaurant,
                         order=order,
                         ticket=ticket,
@@ -145,13 +180,18 @@ class Command(BaseCommand):
                         guest_slot=data["slot"],
                         defaults={
                             "quantity": data["qty"],
-                            "status": random_item_status(),
+                            "status": item_status_from_profile(profile, idx),
+                            "comment": item_comment,
                             "unit_price": unit_price,
                             "total_price": total_price,
                             "tax_rate": 0.1,
                             "tax_amount": total_price * 10 // 100,
                         },
                     )
+                    if not item_created:
+                        item.status = item_status_from_profile(profile, idx)
+                        item.comment = item_comment
+                        item.save(update_fields=["status", "comment"])
 
                 session.subtotal = (
                     Order.objects.filter(session=session).aggregate(total=models.Sum("total_amount"))["total"] or 0
@@ -211,12 +251,14 @@ class Command(BaseCommand):
                 )
 
                 if menu_items:
-                    mi = menu_items[0]
-                    order, _ = Order.objects.get_or_create(
-                        restaurant=restaurant,
-                        session=session,
-                        created_by=waiter,
-                        defaults={
+                    profile = next(profiles)
+                    mi = items_pool[session_seq % len(items_pool)]
+                    session_seq += 1
+                    order = get_or_create_order(
+                        restaurant,
+                        session,
+                        waiter,
+                        {
                             "created_by_source": CreatedBySource.STAFF,
                             "source": OrderSource.WAITER_MANUAL,
                             "status": OrderStatus.SUBMITTED,
@@ -226,17 +268,16 @@ class Command(BaseCommand):
                             "tax_total": mi.price * 10 // 100,
                         },
                     )
-                    ticket, _ = Ticket.objects.get_or_create(
+                    ticket, ticket_created = Ticket.objects.get_or_create(
                         restaurant=restaurant,
                         session=session,
                         order=order,
-                        defaults={
-                            "status": TicketStatus.ACTIVE,
-                            "injected_at": now,
-                            "started_at": now - timedelta(minutes=45),
-                        },
+                        defaults=ticket_defaults_from_profile(profile, now),
                     )
-                    OrderItem.objects.get_or_create(
+                    if not ticket_created:
+                        apply_ticket_profile(ticket, profile, now)
+
+                    item, item_created = OrderItem.objects.get_or_create(
                         restaurant=restaurant,
                         order=order,
                         ticket=ticket,
@@ -244,13 +285,16 @@ class Command(BaseCommand):
                         guest_slot=1,
                         defaults={
                             "quantity": 2,
-                            "status": OrderItemStatus.READY,
+                            "status": item_status_from_profile(profile, 0),
                             "unit_price": mi.price,
                             "total_price": mi.price * 2,
                             "tax_rate": 0.1,
                             "tax_amount": mi.price * 2 * 10 // 100,
                         },
                     )
+                    if not item_created:
+                        item.status = item_status_from_profile(profile, 0)
+                        item.save(update_fields=["status"])
                     session.subtotal = mi.price * 2
                     session.tax = session.subtotal * 10 // 100
                     session.total = session.subtotal + session.tax
@@ -258,13 +302,43 @@ class Command(BaseCommand):
                     self.stdout.write(f"  Walk-in session on Table {free_table.public_number}.")
 
 
-def random_item_status() -> str:
-    import random
+def ticket_defaults_from_profile(profile: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """Build Ticket field defaults (status + timestamps) from a demo profile."""
+    status = profile["status"]
+    started_at = None
+    completed_at = None
+    if status in (TicketStatus.ACTIVE, TicketStatus.COMPLETED):
+        started_at = now - timedelta(minutes=profile["started_min"])
+    if status == TicketStatus.COMPLETED and started_at is not None:
+        completed_at = started_at + timedelta(minutes=profile["prep_min"])
+    return {
+        "status": status,
+        "injected_at": now - timedelta(minutes=profile["injected_min"]),
+        "started_at": started_at,
+        "completed_at": completed_at,
+    }
 
-    return random.choice(  # nosec B311
-        [
-            OrderItemStatus.PENDING,
-            OrderItemStatus.IN_PROGRESS,
-            OrderItemStatus.READY,
-        ]
-    )
+
+def get_or_create_order(restaurant: Restaurant, session: Session, waiter: User, defaults: dict[str, Any]) -> Order:
+    """Reuse an existing order for the session if present (tolerating demo-data duplicates)."""
+    existing = Order.objects.filter(restaurant=restaurant, session=session, created_by=waiter).first()
+    if existing is not None:
+        return existing
+    return Order.objects.create(restaurant=restaurant, session=session, created_by=waiter, **defaults)
+
+
+def apply_ticket_profile(ticket: Ticket, profile: dict[str, Any], now: datetime) -> None:
+    """Refresh an existing demo ticket's status/timestamps so re-seeding repopulates the board."""
+    for field, value in ticket_defaults_from_profile(profile, now).items():
+        setattr(ticket, field, value)
+    ticket.save(update_fields=["status", "injected_at", "started_at", "completed_at"])
+
+
+def item_status_from_profile(profile: dict[str, Any], index: int) -> str:
+    """Per-item status: all ready, all pending, or alternating (first ready)."""
+    mode = profile["items"]
+    if mode == "all_ready":
+        return OrderItemStatus.READY
+    if mode == "all_pending":
+        return OrderItemStatus.PENDING
+    return OrderItemStatus.READY if index % 2 == 0 else OrderItemStatus.PENDING

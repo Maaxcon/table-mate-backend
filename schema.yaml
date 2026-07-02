@@ -3391,7 +3391,6 @@ paths:
       security:
       - jwtAuth: []
       - jwt_Auth: []
-      - {}
       responses:
         '201':
           content:
@@ -3448,7 +3447,6 @@ paths:
       security:
       - jwtAuth: []
       - jwt_Auth: []
-      - {}
       responses:
         '200':
           content:
@@ -3481,7 +3479,6 @@ paths:
       security:
       - jwtAuth: []
       - jwt_Auth: []
-      - {}
       responses:
         '200':
           content:
@@ -3503,7 +3500,6 @@ paths:
       security:
       - jwtAuth: []
       - jwt_Auth: []
-      - {}
       responses:
         '204':
           description: No response body
@@ -3584,6 +3580,12 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        color:
+          type: string
+          nullable: true
+          description: Hex color used for category theming.
+          pattern: ^#[0-9a-fA-F]{6}$
+          maxLength: 7
         created_at:
           type: string
           format: date-time
@@ -4333,6 +4335,12 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        color:
+          type: string
+          nullable: true
+          description: Hex color used for category theming.
+          pattern: ^#[0-9a-fA-F]{6}$
+          maxLength: 7
         created_at:
           type: string
           format: date-time
@@ -4550,6 +4558,19 @@ components:
         menu_item_name:
           type: string
           readOnly: true
+        menu_item_category_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        menu_item_category_name:
+          type: string
+          readOnly: true
+          nullable: true
+        menu_item_category_color:
+          type: string
+          readOnly: true
+          nullable: true
         guest_slot:
           type: integer
           maximum: 2147483647
@@ -4614,6 +4635,9 @@ components:
       - created_at
       - guest_slot
       - menu_item
+      - menu_item_category_color
+      - menu_item_category_id
+      - menu_item_category_name
       - menu_item_name
       - order
       - public_id
@@ -5206,6 +5230,12 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        color:
+          type: string
+          nullable: true
+          description: Hex color used for category theming.
+          pattern: ^#[0-9a-fA-F]{6}$
+          maxLength: 7
         created_at:
           type: string
           format: date-time
@@ -5437,6 +5467,19 @@ components:
         menu_item_name:
           type: string
           readOnly: true
+        menu_item_category_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        menu_item_category_name:
+          type: string
+          readOnly: true
+          nullable: true
+        menu_item_category_color:
+          type: string
+          readOnly: true
+          nullable: true
         guest_slot:
           type: integer
           maximum: 2147483647
@@ -5735,6 +5778,13 @@ components:
           type: string
           format: uuid
           readOnly: true
+        label:
+          type: string
+          readOnly: true
+        daily_number:
+          type: integer
+          readOnly: true
+          nullable: true
         restaurant:
           type: string
           format: uuid
@@ -5896,6 +5946,22 @@ components:
         * `settled` - Settled
         * `refunded` - Refunded
         * `cancelled` - Cancelled
+    PendingZone:
+      type: object
+      properties:
+        created:
+          type: array
+          items:
+            $ref: '#/components/schemas/ZoneCreate'
+        updated:
+          type: array
+          items:
+            $ref: '#/components/schemas/ZoneUpdate'
+        deleted:
+          type: array
+          items:
+            type: string
+            format: uuid
     PortalEntity:
       type: object
       properties:
@@ -6041,6 +6107,8 @@ components:
           items:
             type: string
             format: uuid
+        zones:
+          $ref: '#/components/schemas/PendingZone'
     Receipt:
       type: object
       properties:
@@ -6659,6 +6727,13 @@ components:
           type: string
           format: uuid
           readOnly: true
+        label:
+          type: string
+          readOnly: true
+        daily_number:
+          type: integer
+          readOnly: true
+          nullable: true
         restaurant:
           type: string
           format: uuid
@@ -6704,9 +6779,11 @@ components:
           readOnly: true
       required:
       - created_at
+      - daily_number
       - guest_count
       - injected_at
       - items_count
+      - label
       - order
       - public_id
       - restaurant
@@ -6918,6 +6995,50 @@ components:
           minimum: 0
       required:
       - name
+      - public_id
+    ZoneCreate:
+      type: object
+      properties:
+        _client_id:
+          type: string
+          format: uuid
+          title: ' client id'
+        name:
+          type: string
+          maxLength: 128
+        canvas_cols:
+          type: integer
+          maximum: 50
+          minimum: 8
+          default: 20
+        canvas_rows:
+          type: integer
+          maximum: 50
+          minimum: 8
+          default: 20
+        edge_styles: {}
+      required:
+      - _client_id
+      - name
+    ZoneUpdate:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        canvas_cols:
+          type: integer
+          maximum: 50
+          minimum: 8
+        canvas_rows:
+          type: integer
+          maximum: 50
+          minimum: 8
+        edge_styles: {}
+      required:
       - public_id
   securitySchemes:
     jwtAuth:

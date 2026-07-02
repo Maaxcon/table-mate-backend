@@ -348,7 +348,10 @@ class SetGuestNameView(GuestFallbackAuthMixin, APIView):
         GuestProfile.objects.update_or_create(
             cart_session=session,
             guest_identity=guest_identity,
-            defaults={"display_name": serializer.validated_data["display_name"]},
+            defaults={
+                "display_name": serializer.validated_data["display_name"],
+                "restaurant_id": session.restaurant_id,
+            },
         )
 
         return Response(status=status.HTTP_200_OK)

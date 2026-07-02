@@ -117,6 +117,9 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
     order: PublicIdRelatedField[Order] = PublicIdRelatedField(
         queryset=Order.objects.all(),
     )
+    # `label` shadows Field.label in the stubs, but DRF resolves it from the
+    # model property at runtime; the ignore is purely a typing concern.
+    label = serializers.CharField(read_only=True)  # type: ignore[assignment]
     table_number = serializers.CharField(
         source="session.table.public_number",
         read_only=True,
@@ -160,6 +163,8 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         model = Ticket
         fields = [
             "public_id",
+            "label",
+            "daily_number",
             "restaurant",
             "session",
             "order",
@@ -176,6 +181,8 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         ]
         read_only_fields = [
             "public_id",
+            "label",
+            "daily_number",
             "restaurant",
             "table_number",
             "server_name",
@@ -219,6 +226,21 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         allow_null=True,
     )
     menu_item_name = serializers.CharField(source="menu_item.name", read_only=True)
+    menu_item_category_id = serializers.UUIDField(
+        source="menu_item.category.public_id",
+        read_only=True,
+        allow_null=True,
+    )
+    menu_item_category_name = serializers.CharField(
+        source="menu_item.category.name",
+        read_only=True,
+        allow_null=True,
+    )
+    menu_item_category_color = serializers.CharField(
+        source="menu_item.category.color",
+        read_only=True,
+        allow_null=True,
+    )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -249,6 +271,9 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "ticket",
             "menu_item",
             "menu_item_name",
+            "menu_item_category_id",
+            "menu_item_category_name",
+            "menu_item_category_color",
             "guest_slot",
             "guest_display_name",
             "quantity",
