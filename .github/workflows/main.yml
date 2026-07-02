@@ -77,7 +77,6 @@ jobs:
           diff /tmp/schema.yaml schema.yaml
 
       - name: Migration drift gate
-        if: github.event_name != 'pull_request'
         run: uv run python manage.py makemigrations --check --dry-run
 
       - name: Run tests
