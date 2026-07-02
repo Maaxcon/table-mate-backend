@@ -2510,6 +2510,16 @@ paths:
         schema:
           type: integer
       - in: query
+        name: start_at__date__gte
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: start_at__date__lte
+        schema:
+          type: string
+          format: date
+      - in: query
         name: status
         schema:
           type: string
@@ -2739,6 +2749,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reservation'
           description: ''
+  /api/reservations/reservations/batch-update/:
+    post:
+      operationId: reservations_reservations_batch_update_create
+      description: Move/resize multiple reservations atomically. If any validation
+        fails, the entire batch rolls back.
+      summary: Batch update reservations
+      tags:
+      - Reservations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BatchUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BatchUpdate'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          description: No response body
+        '409':
+          description: No response body
   /api/reservations/reservations/my/:
     get:
       operationId: reservations_reservations_my_list
@@ -2759,6 +2797,16 @@ paths:
         description: A page number within the paginated result set.
         schema:
           type: integer
+      - in: query
+        name: start_at__date__gte
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: start_at__date__lte
+        schema:
+          type: string
+          format: date
       - in: query
         name: status
         schema:
@@ -3645,6 +3693,39 @@ components:
       - menus_total
       - staff_active
       - staff_total
+    BatchUpdate:
+      type: object
+      properties:
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchUpdateItem'
+      required:
+      - changes
+    BatchUpdateItem:
+      type: object
+      properties:
+        reservation_id:
+          type: string
+          format: uuid
+        new_table_id:
+          type: string
+          format: uuid
+        new_date:
+          type: string
+          format: date
+        new_start_time:
+          type: string
+          format: time
+        new_end_time:
+          type: string
+          format: time
+      required:
+      - new_date
+      - new_end_time
+      - new_start_time
+      - new_table_id
+      - reservation_id
     BillItem:
       type: object
       properties:
@@ -5457,6 +5538,22 @@ components:
         end_at:
           type: string
           format: date-time
+        opened_at:
+          type: string
+          nullable: true
+          readOnly: true
+        session_ends_at:
+          type: string
+          nullable: true
+          readOnly: true
+        session_table:
+          type: string
+          nullable: true
+          readOnly: true
+        session_table_number:
+          type: string
+          nullable: true
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6099,6 +6196,22 @@ components:
         end_at:
           type: string
           format: date-time
+        opened_at:
+          type: string
+          nullable: true
+          readOnly: true
+        session_ends_at:
+          type: string
+          nullable: true
+          readOnly: true
+        session_table:
+          type: string
+          nullable: true
+          readOnly: true
+        session_table_number:
+          type: string
+          nullable: true
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6120,9 +6233,13 @@ components:
       - customer_name
       - end_at
       - guest_count
+      - opened_at
       - public_id
       - restaurant
       - restaurant_info
+      - session_ends_at
+      - session_table
+      - session_table_number
       - start_at
       - table
       - table_info
