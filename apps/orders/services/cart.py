@@ -37,7 +37,7 @@ from common.exceptions import (
     ReservationConflictError,
     RestaurantClosedError,
 )
-from common.hall_events import emit_hall_table_status_changed
+from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
 
 from ..models import (
     CartItem,
@@ -433,6 +433,11 @@ def open_session(
             session_id=str(session.public_id),
             actor=actor,
         )
+    )
+
+    table_id = str(table.public_id)
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
     )
 
     return session

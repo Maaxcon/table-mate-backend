@@ -23,7 +23,7 @@ from common.exceptions import (
     ReservationConflictError,
     RestaurantClosedError,
 )
-from common.hall_events import emit_hall_table_status_changed
+from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
 from common.money import quantize_money
 from common.notification_events import emit_cart_checked_out, emit_kitchen_ticket_injected
 
@@ -151,15 +151,19 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
             table = session.table
             sid = str(session.public_id)
             restaurant_id = session.restaurant_id
+            table_id = str(table.public_id)
             transaction.on_commit(
                 lambda: emit_hall_table_status_changed(
                     restaurant_id,
-                    table_id=str(table.public_id),
+                    table_id=table_id,
                     previous_status="occupied",
                     current_status="free",
                     session_id=sid,
                     actor=actor,
                 )
+            )
+            transaction.on_commit(
+                lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
             )
 
     # Tell any open guest cart it has ended.

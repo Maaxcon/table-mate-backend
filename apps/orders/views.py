@@ -20,7 +20,7 @@ from common.api import (
     require_restaurant_id_from_auth,
 )
 from common.exceptions import TableOccupiedError
-from common.hall_events import emit_hall_table_status_changed
+from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
 from .billing import close_visit_session, ensure_visit_session
@@ -76,16 +76,18 @@ class SessionViewSet(
             serializer.instance = ensure_visit_session(reservation, opened_by=cast(User, self.request.user))
             restaurant_id = get_restaurant_id_from_auth(self.request)
             if restaurant_id is not None:
+                table_id = str(table.public_id)
 
                 def _on_commit() -> None:
                     emit_hall_table_status_changed(
                         restaurant_id,
-                        table_id=str(table.public_id),
+                        table_id=table_id,
                         previous_status="free",
                         current_status="occupied",
                         session_id=str(serializer.instance.public_id),
                         actor=cast(User, self.request.user),
                     )
+                    emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
 
                 transaction.on_commit(_on_commit)
 
