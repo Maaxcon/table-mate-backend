@@ -226,3 +226,22 @@ def emit_hall_zone_deleted(
             "occurred_at": timezone.now().isoformat(),
         },
     )
+
+
+def emit_hall_session_auto_extended(
+    restaurant_id: int,
+    *,
+    table_id: str,
+    ends_at: str,
+    clamped_by: str,
+) -> None:
+    event: dict[str, object] = {
+        "event_name": "HALL_SESSION_AUTO_EXTENDED",
+        "schema_version": "1",
+        "table_id": table_id,
+        "ends_at": ends_at,
+        "clamped_by": clamped_by,
+        "occurred_at": timezone.now().isoformat(),
+    }
+    _broadcast_hall_event(restaurant_id, event)
+    _send_to_staff_group(restaurant_id, event)

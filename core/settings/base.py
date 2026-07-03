@@ -189,6 +189,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "orders.close_stale_carts",
         "schedule": float(env.int("CLOSE_STALE_CARTS_INTERVAL_SECONDS", default=300)),
     },
+    "auto-extend-sessions": {
+        "task": "orders.auto_extend_sessions",
+        "schedule": float(env.int("AUTO_EXTEND_SESSIONS_INTERVAL_SECONDS", default=300)),
+    },
 }
 
 SPECTACULAR_SETTINGS = {

@@ -17,6 +17,8 @@ from .cart import (
     void_order_item,
 )
 from .sessions import (
+    auto_extend_all_sessions,
+    auto_extend_session,
     close_stale_cart_sessions,
     create_cart_session,
     ensure_active_cart_for_table,
@@ -31,6 +33,8 @@ def __getattr__(name: str) -> object:
 
 __all__ = [
     "add_item_to_cart",
+    "auto_extend_all_sessions",
+    "auto_extend_session",
     "close_stale_cart_sessions",
     "create_cart_session",
     "create_order_with_items",

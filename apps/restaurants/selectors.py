@@ -1,4 +1,5 @@
 from datetime import datetime as datetime_cls
+from datetime import timedelta as timedelta_cls
 from typing import Any, TypedDict
 from zoneinfo import ZoneInfo
 
@@ -62,6 +63,47 @@ def is_restaurant_open(restaurant_id: int, when: datetime_cls | None = None) -> 
     if close_min > open_min:
         return open_min <= now_min < close_min
     return now_min >= open_min or now_min < close_min  # overnight window
+
+
+def get_working_hours_close_at(
+    restaurant_id: int,
+    when: datetime_cls,
+) -> datetime_cls | None:
+    """Return the closing time as a datetime for the day containing ``when``.
+
+    Returns ``None`` if no working hours are configured (no limit). Handles
+    overnight windows: if close <= open the closing time rolls into the next day.
+    """
+    settings = get_restaurant_settings(restaurant_id)
+    if settings is None:
+        return None
+    working_hours = settings.working_hours or {}
+    if not working_hours:
+        return None
+
+    tz = ZoneInfo(settings.timezone) if settings.timezone else ZoneInfo("UTC")
+    local = when.astimezone(tz)
+    hours = working_hours.get(_DAY_KEYS[local.weekday()])
+    if not isinstance(hours, dict):
+        return None
+
+    open_min = _hhmm_to_minutes(hours.get("open"))
+    close_min = _hhmm_to_minutes(hours.get("close"))
+    if open_min is None or close_min is None:
+        return None
+
+    close_hour, close_minute = divmod(close_min, 60)
+
+    if close_min > open_min:
+        # Same-day close
+        close_dt = local.replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
+    else:
+        # Overnight window — close is the next day
+        close_dt = (local + timedelta_cls(days=1)).replace(
+            hour=close_hour, minute=close_minute, second=0, microsecond=0,
+        )
+
+    return close_dt.astimezone(timezone.utc)
 
 
 def list_employees(restaurant_id: int) -> QuerySet[User]:
@@ -142,5 +184,6 @@ __all__ = [
     "get_restaurant",
     "get_restaurant_settings",
     "get_tables_with_occupancy",
+    "get_working_hours_close_at",
     "list_employees",
 ]
