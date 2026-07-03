@@ -419,6 +419,13 @@ def activate_reservation(
             locked.status = ReservationStatus.ACTIVE
             locked.save(update_fields=["status"])
         ensure_visit_session(locked, opened_by=opened_by_user)
+
+    restaurant_id = locked.restaurant_id
+    table_id = str(locked.table.public_id) if locked.table else ""
+    if table_id:
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
+        )
     return locked
 
 
@@ -456,6 +463,12 @@ def activate_reservation_by_scan(
     reservation.save(update_fields=["status"])
 
     ensure_visit_session(reservation, opened_by=user)
+
+    restaurant_id = reservation.restaurant_id
+    table_id = str(table.public_id)
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
+    )
     return True, "Table verified and activated."
 
 
@@ -498,6 +511,12 @@ def update_reservation_status(
                 table_id=str(table.public_id),
                 actor=actor,
             )
+        )
+
+    table_id = str(reservation.table.public_id) if reservation.table else ""
+    if table_id:
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(reservation.restaurant_id, table_ids=[table_id])
         )
 
     return reservation
@@ -580,6 +599,11 @@ def activate_pending_reservation(
         )
     )
 
+    table_id = str(table.public_id)
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(reservation.restaurant_id, table_ids=[table_id])
+    )
+
     return locked
 
 
@@ -660,6 +684,11 @@ def move_session_to_table(
         )
     )
 
+    affected_table_ids = [str(old_table.public_id), str(new_table.public_id)]
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(session.restaurant_id, table_ids=affected_table_ids)
+    )
+
     return session
 
 
@@ -698,6 +727,11 @@ def close_session(
             session_id=str(session.public_id),
             actor=actor,
         )
+    )
+
+    table_id = str(session.table.public_id)
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(session.restaurant_id, table_ids=[table_id])
     )
 
     return session
