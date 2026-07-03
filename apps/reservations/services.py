@@ -828,44 +828,7 @@ def batch_update_reservations(
                     conflicting_reservation_id=rid_j,
                 )
 
-    # 3. Validation 2: Operating hours
-    settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
-    working_hours = settings.working_hours if settings else {}
-    tz = ZoneInfo(settings.timezone) if settings and settings.timezone else ZoneInfo("UTC")
-
-    for c in changes:
-        # A seated party may stay past closing time; operating hours only gate the
-        # booked (PENDING) window, not a prolong of an already-active session.
-        if res_map[str(c["reservation_id"])].status == ReservationStatus.ACTIVE:
-            continue
-        start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
-        end_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
-        local_start = start_at.astimezone(tz)
-        local_end = end_at.astimezone(tz)
-
-        day_key = _DAY_KEYS[local_start.weekday()]
-        day_hours = working_hours.get(day_key)
-        if not day_hours:
-            raise RestaurantClosedError(f"Restaurant closed on {day_key}.")
-
-        open_min = _hhmm_to_minutes(day_hours.get("open"))
-        close_min = _hhmm_to_minutes(day_hours.get("close"))
-        if open_min is None or close_min is None:
-            raise RestaurantClosedError(f"Invalid operating hours for {day_key}.")
-
-        start_min = local_start.hour * 60 + local_start.minute
-        end_min = local_end.hour * 60 + local_end.minute
-
-        if close_min > open_min:
-            if start_min < open_min or end_min > close_min:
-                raise RestaurantClosedError("Reservation falls outside operating hours.")
-        else:  # overnight window
-            if not (start_min >= open_min or start_min < close_min) or not (
-                end_min >= open_min or end_min < close_min
-            ):
-                raise RestaurantClosedError("Reservation falls outside operating hours.")
-
-    # 4. Validation 3: Spatial/temporal overlap with existing DB reservations
+    # 3. Spatial/temporal overlap with existing DB reservations
     for c in changes:
         rid = str(c["reservation_id"])
         res = res_map[rid]
