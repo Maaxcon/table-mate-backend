@@ -84,16 +84,21 @@ def test_emit_hall_new_reservation_sends_to_group(restaurant: Any, table: Any) -
             actor=user,
         )
 
-        mock_layer.group_send.assert_called_once()
-        call_args = mock_layer.group_send.call_args
-        assert call_args[0][0] == hall_group_name(restaurant.id)
-        event = call_args[0][1]["event"]
+        assert mock_layer.group_send.call_count == 2
+
+        hall_call = mock_layer.group_send.call_args_list[0]
+        assert hall_call[0][0] == hall_group_name(restaurant.id)
+        event = hall_call[0][1]["event"]
         assert event["event_name"] == "HALL_NEW_RESERVATION"
         assert event["schema_version"] == "1"
         assert event["reservation_id"] == "test-reservation-id"
         assert event["table_id"] == str(table.public_id)
         assert event["actor_id"] == user.pk
         assert event["actor_role"] == RoleCode.WAITER
+
+        staff_call = mock_layer.group_send.call_args_list[1]
+        assert staff_call[0][0] == staff_group_name(restaurant.id)
+        assert staff_call[0][1]["event"]["event_name"] == "HALL_NEW_RESERVATION"
 
 
 @pytest.mark.django_db(databases=["default"], transaction=True)
@@ -528,16 +533,21 @@ def test_emit_hall_reservation_cancelled_sends_to_group(restaurant: Any, table: 
             actor=user,
         )
 
-        mock_layer.group_send.assert_called_once()
-        call_args = mock_layer.group_send.call_args
-        assert call_args[0][0] == hall_group_name(restaurant.id)
-        event = call_args[0][1]["event"]
+        assert mock_layer.group_send.call_count == 2
+
+        hall_call = mock_layer.group_send.call_args_list[0]
+        assert hall_call[0][0] == hall_group_name(restaurant.id)
+        event = hall_call[0][1]["event"]
         assert event["event_name"] == "HALL_RESERVATION_CANCELLED"
         assert event["schema_version"] == "1"
         assert event["reservation_id"] == "test-reservation-id"
         assert event["table_id"] == str(table.public_id)
         assert event["actor_id"] == user.pk
         assert event["actor_role"] == RoleCode.ADMIN
+
+        staff_call = mock_layer.group_send.call_args_list[1]
+        assert staff_call[0][0] == staff_group_name(restaurant.id)
+        assert staff_call[0][1]["event"]["event_name"] == "HALL_RESERVATION_CANCELLED"
 
 
 @pytest.mark.django_db(databases=["default"], transaction=True)
@@ -588,6 +598,7 @@ def test_emit_hall_reservations_updated_broadcasts_and_is_not_deduped(restaurant
 @pytest.mark.django_db
 def test_hall_event_with_event_id_still_dedups(restaurant: Any, table: Any) -> None:
     # Events that DO carry an event_id must still dedup true duplicates.
+    # The hall group deduplicates, but the staff group does not (it receives all).
     cache.clear()
     user = UserFactory.build(role=RoleCode.ADMIN)
     user.save()
@@ -604,7 +615,9 @@ def test_hall_event_with_event_id_still_dedups(restaurant: Any, table: Any) -> N
                 actor=user,
             )
 
-        mock_layer.group_send.assert_called_once()
+        # 1st emit: hall (1) + staff (1) = 2 calls
+        # 2nd emit: hall deduped (0) + staff (1) = 1 call
+        assert mock_layer.group_send.call_count == 3
 
 
 @pytest.mark.django_db(databases=["default"], transaction=True)
