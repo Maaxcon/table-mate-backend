@@ -93,6 +93,20 @@ def emit_hall_layout_published(
     )
 
 
+def _send_to_staff_group(restaurant_id: int, event: dict[str, object]) -> None:
+    channel_layer = get_channel_layer()
+    try:
+        async_to_sync(channel_layer.group_send)(
+            staff_group_name(restaurant_id),
+            {"type": "hall.event", "event": event},
+        )
+    except Exception:
+        logger.exception(
+            "Failed to broadcast event to staff group for restaurant %s",
+            restaurant_id,
+        )
+
+
 def emit_hall_reservation_cancelled(
     restaurant_id: int,
     *,
@@ -100,19 +114,18 @@ def emit_hall_reservation_cancelled(
     table_id: str,
     actor: User,
 ) -> None:
-    _broadcast_hall_event(
-        restaurant_id,
-        {
-            "event_name": "HALL_RESERVATION_CANCELLED",
-            "schema_version": "1",
-            "event_id": _stable_event_id("HALL_RESERVATION_CANCELLED", reservation_id, table_id),
-            "reservation_id": reservation_id,
-            "table_id": table_id,
-            "actor_id": actor.pk,
-            "actor_role": actor.role,
-            "occurred_at": timezone.now().isoformat(),
-        },
-    )
+    event: dict[str, object] = {
+        "event_name": "HALL_RESERVATION_CANCELLED",
+        "schema_version": "1",
+        "event_id": _stable_event_id("HALL_RESERVATION_CANCELLED", reservation_id, table_id),
+        "reservation_id": reservation_id,
+        "table_id": table_id,
+        "actor_id": actor.pk,
+        "actor_role": actor.role,
+        "occurred_at": timezone.now().isoformat(),
+    }
+    _broadcast_hall_event(restaurant_id, event)
+    _send_to_staff_group(restaurant_id, event)
 
 
 def emit_hall_new_reservation(
@@ -124,21 +137,20 @@ def emit_hall_new_reservation(
     end_at: str,
     actor: User,
 ) -> None:
-    _broadcast_hall_event(
-        restaurant_id,
-        {
-            "event_name": "HALL_NEW_RESERVATION",
-            "schema_version": "1",
-            "event_id": _stable_event_id("HALL_NEW_RESERVATION", reservation_id, table_id),
-            "reservation_id": reservation_id,
-            "table_id": table_id,
-            "start_at": start_at,
-            "end_at": end_at,
-            "actor_id": actor.pk,
-            "actor_role": actor.role,
-            "occurred_at": timezone.now().isoformat(),
-        },
-    )
+    event: dict[str, object] = {
+        "event_name": "HALL_NEW_RESERVATION",
+        "schema_version": "1",
+        "event_id": _stable_event_id("HALL_NEW_RESERVATION", reservation_id, table_id),
+        "reservation_id": reservation_id,
+        "table_id": table_id,
+        "start_at": start_at,
+        "end_at": end_at,
+        "actor_id": actor.pk,
+        "actor_role": actor.role,
+        "occurred_at": timezone.now().isoformat(),
+    }
+    _broadcast_hall_event(restaurant_id, event)
+    _send_to_staff_group(restaurant_id, event)
 
 
 def emit_hall_zone_created(
@@ -196,18 +208,7 @@ def emit_hall_reservations_updated(
         "occurred_at": timezone.now().isoformat(),
     }
     _broadcast_hall_event(restaurant_id, event)
-
-    channel_layer = get_channel_layer()
-    try:
-        async_to_sync(channel_layer.group_send)(
-            staff_group_name(restaurant_id),
-            {"type": "hall.event", "event": event},
-        )
-    except Exception:
-        logger.exception(
-            "Failed to broadcast reservation event to staff group for restaurant %s",
-            restaurant_id,
-        )
+    _send_to_staff_group(restaurant_id, event)
 
 
 def emit_hall_zone_deleted(
