@@ -166,10 +166,6 @@ class BatchUpdateItemSerializer(serializers.Serializer[dict[str, object]]):
     new_end_time = serializers.TimeField()
 
     def validate(self, attrs: dict[str, object]) -> dict[str, object]:
-        start: time_type = attrs["new_start_time"]  # type: ignore[assignment]
-        end: time_type = attrs["new_end_time"]  # type: ignore[assignment]
-        if start >= end:
-            raise serializers.ValidationError("new_end_time must be after new_start_time.")
         return attrs
 
 

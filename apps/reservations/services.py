@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -737,6 +737,13 @@ def close_session(
     return session
 
 
+def _batch_end_date(c: dict[str, Any]) -> date:
+    """Return end date, advanced by 1 day if the reservation crosses midnight."""
+    if c["new_end_time"] <= c["new_start_time"]:
+        return c["new_date"] + timedelta(days=1)
+    return c["new_date"]
+
+
 @transaction.atomic
 def batch_update_reservations(
     *,
@@ -806,7 +813,7 @@ def batch_update_reservations(
     for c in changes:
         rid = str(c["reservation_id"])
         table_id = str(c["new_table_id"])
-        new_end = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
+        new_end = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
         if res_map[rid].status == ReservationStatus.ACTIVE:
             new_start = session_map[rid].opened_at
         else:
@@ -840,7 +847,7 @@ def batch_update_reservations(
         if table is None:
             raise NotFound(f"Table {c['new_table_id']} not found or inactive.")
 
-        end_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
+        end_at = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
         if res.status == ReservationStatus.ACTIVE:
             # Occupancy window for an active party is its session actuals: arrival
             # (immutable) to the new end. The booked start_at is irrelevant here.
@@ -869,7 +876,7 @@ def batch_update_reservations(
             restaurant_id=restaurant_id,
             active=True,
         )
-        new_end = timezone.make_aware(datetime.combine(c["new_date"], c["new_end_time"]))
+        new_end = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
 
         if res.status == ReservationStatus.ACTIVE:
             # The booking (table/start_at/end_at) is immutable once seated. Only the
