@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import cast
 
 from django.db import IntegrityError, transaction
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
@@ -155,10 +155,16 @@ def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: i
     scope a run to one tenant.
     """
     now = timezone.now()
-    base = CartSession.objects.filter(status=CartSessionStatus.ACTIVE).filter(
-        Q(reservation__status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED])
-        | Q(reservation__session__ends_at__lt=now)
-        | Q(reservation__session__isnull=True, reservation__end_at__lt=now)
+    base = (
+        CartSession.objects.filter(status=CartSessionStatus.ACTIVE)
+        .filter(
+            Q(reservation__status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED])
+            | Q(reservation__session__ends_at__lt=now)
+            | (
+                Q(reservation__end_at__lt=now)
+                & ~Exists(Session.objects.filter(reservation=OuterRef("reservation")))
+            )
+        )
     )
     if restaurant_id is not None:
         base = base.filter(restaurant_id=restaurant_id)
@@ -166,7 +172,12 @@ def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: i
     total_closed = 0
     while True:
         with transaction.atomic():
-            batch = list(base.select_for_update(skip_locked=True).order_by("pk")[:batch_size])
+            batch_ids = list(base.values_list("pk", flat=True)[:batch_size])
+            if not batch_ids:
+                break
+            batch = list(
+                CartSession.objects.filter(pk__in=batch_ids).select_for_update(skip_locked=True)
+            )
             if not batch:
                 break
             for cart in batch:
