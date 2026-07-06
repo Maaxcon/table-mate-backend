@@ -1,7 +1,9 @@
+from typing import Any
+
 from django.db import migrations
 
 
-def backfill_ends_at(apps, schema_editor):
+def backfill_ends_at(apps: Any, schema_editor: Any) -> None:
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(
             """

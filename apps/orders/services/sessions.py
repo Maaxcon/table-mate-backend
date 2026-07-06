@@ -1,6 +1,8 @@
 """Cart-session lifecycle: open, ensure-for-table, stale cleanup, and auto-extend."""
 
 import logging
+from datetime import datetime, timedelta
+from typing import cast
 
 from django.db import IntegrityError, transaction
 from django.db.models import OuterRef, Q, Subquery
@@ -182,8 +184,8 @@ def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: i
 
 def _find_conflict_limit(
     session: Session,
-    target_end: timezone.datetime,
-) -> timezone.datetime | None:
+    target_end: datetime,
+) -> datetime | None:
     """Return the earliest conflicting reservation's effective start, or None."""
     from apps.reservations.services import _check_reservation_conflict
 
@@ -227,7 +229,7 @@ def _find_conflict_limit(
         .first()
     )
     if earliest is not None:
-        return earliest.eff_start
+        return cast(datetime | None, earliest.eff_start)
     return None
 
 
@@ -241,10 +243,10 @@ def auto_extend_session(session: Session) -> dict[str, object]:
     """
     now = timezone.now()
 
-    if session.ends_at is None or session.ends_at > now + timezone.timedelta(minutes=_AUTO_EXTEND_AHEAD_MINUTES):
+    if session.ends_at is None or session.ends_at > now + timedelta(minutes=_AUTO_EXTEND_AHEAD_MINUTES):
         return {"extended": False, "clamped_by": None, "new_ends_at": None}
 
-    target = now + timezone.timedelta(minutes=_AUTO_EXTEND_DURATION_MINUTES)
+    target = now + timedelta(minutes=_AUTO_EXTEND_DURATION_MINUTES)
     reason: str | None = None
 
     # 1. Clamp to working hours
@@ -303,7 +305,7 @@ def auto_extend_all_sessions(restaurant_id: int | None = None) -> list[dict[str,
     result dicts.
     """
     now = timezone.now()
-    threshold = now + timezone.timedelta(minutes=_AUTO_EXTEND_AHEAD_MINUTES)
+    threshold = now + timedelta(minutes=_AUTO_EXTEND_AHEAD_MINUTES)
 
     qs = Session.objects.filter(
         status=SessionStatus.OPEN,
