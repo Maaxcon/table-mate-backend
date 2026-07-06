@@ -401,8 +401,11 @@ class ReservationViewSet(
         serializer.is_valid(raise_exception=True)
         restaurant_id = require_restaurant_id_from_auth(request)
 
+        user = cast(User, request.user)
         batch_update_reservations(
             restaurant_id=restaurant_id,
             changes=serializer.validated_data["changes"],
+            cancellations=serializer.validated_data.get("cancellations") or None,
+            actor=user,
         )
         return Response(status=status.HTTP_200_OK)

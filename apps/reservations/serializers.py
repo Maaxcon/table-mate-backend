@@ -170,3 +170,8 @@ class BatchUpdateItemSerializer(serializers.Serializer[dict[str, object]]):
 
 class BatchUpdateSerializer(serializers.Serializer[dict[str, object]]):
     changes = BatchUpdateItemSerializer(many=True)
+    cancellations = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        default=list,
+    )
