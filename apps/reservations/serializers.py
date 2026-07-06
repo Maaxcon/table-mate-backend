@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from datetime import time as time_type
 
 from django.utils import timezone
 from rest_framework import serializers

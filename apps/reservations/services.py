@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
@@ -740,8 +740,8 @@ def close_session(
 def _batch_end_date(c: dict[str, Any]) -> date:
     """Return end date, advanced by 1 day if the reservation crosses midnight."""
     if c["new_end_time"] <= c["new_start_time"]:
-        return c["new_date"] + timedelta(days=1)
-    return c["new_date"]
+        return cast(date, c["new_date"] + timedelta(days=1))
+    return cast(date, c["new_date"])
 
 
 @transaction.atomic
