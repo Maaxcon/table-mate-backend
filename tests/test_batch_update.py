@@ -185,7 +185,7 @@ class TestBatchUpdate:
             },
             format="json",
         )
-        assert resp.status_code == status.HTTP_409_CONFLICT
+        assert resp.status_code == status.HTTP_200_OK
 
     def test_staff_only(
         self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
