@@ -1,3 +1,4 @@
+from datetime import UTC
 from datetime import datetime as datetime_cls
 from datetime import timedelta as timedelta_cls
 from typing import Any, TypedDict
@@ -103,7 +104,7 @@ def get_working_hours_close_at(
             hour=close_hour, minute=close_minute, second=0, microsecond=0,
         )
 
-    return close_dt.astimezone(timezone.utc)
+    return close_dt.astimezone(UTC)
 
 
 def list_employees(restaurant_id: int) -> QuerySet[User]:
