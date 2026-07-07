@@ -5488,6 +5488,10 @@ components:
         customer_name:
           type: string
           readOnly: true
+        guest_name:
+          type: string
+          nullable: true
+          maxLength: 255
         type:
           $ref: '#/components/schemas/TypeEnum'
         guest_count:
@@ -6155,6 +6159,10 @@ components:
         customer_name:
           type: string
           readOnly: true
+        guest_name:
+          type: string
+          nullable: true
+          maxLength: 255
         type:
           $ref: '#/components/schemas/TypeEnum'
         guest_count:
