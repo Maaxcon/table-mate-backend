@@ -4395,7 +4395,6 @@ components:
         rotation:
           type: integer
           maximum: 359
-          minimum: 0
           default: 0
         zone_id:
           type: string
@@ -5901,6 +5900,10 @@ components:
         height:
           type: integer
           minimum: 1
+        rotation:
+          type: integer
+          maximum: 359
+          default: 0
         target_zone_id:
           type: string
           format: uuid
@@ -6555,7 +6558,6 @@ components:
         rotation:
           type: integer
           maximum: 359
-          minimum: 0
           default: 0
         shape:
           $ref: '#/components/schemas/ShapeEnum'
@@ -6611,6 +6613,10 @@ components:
         height:
           type: integer
           minimum: 1
+        rotation:
+          type: integer
+          maximum: 359
+          default: 0
         threshold_label:
           type: string
           default: ''

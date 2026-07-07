@@ -1,8 +1,10 @@
-from datetime import datetime
+from collections.abc import Iterable
+from datetime import datetime, timedelta
 
 from django.db.models import QuerySet
 from django.utils import timezone
 
+from apps.orders.models import Session, SessionStatus
 from apps.restaurants.models import Table
 
 from .models import Reservation, ReservationParticipant, ReservationStatus
@@ -92,3 +94,66 @@ def get_reservation_by_id(reservation_id: str, restaurant_id: int) -> Reservatio
 
 def get_reservation_participant_ids(reservation: Reservation) -> list[int]:
     return list(ReservationParticipant.objects.filter(reservation=reservation).values_list("user_id", flat=True))
+
+
+def get_session_grace_cutoffs(
+    restaurant_id: int,
+    table_ids: Iterable[int] | None,
+    now: datetime,
+    grace_period: timedelta,
+) -> dict[int, datetime]:
+    """For each table with a currently OPEN session, the instant it can be
+    considered free again: whichever is later, its reservation's booked end,
+    or `now + grace_period` (they're seated right now and likely to stay at
+    least that long). Batchable — call once and reuse across many slots
+    instead of re-querying per slot.
+    """
+    grace_until = now + grace_period
+    qs = Session.objects.filter(status=SessionStatus.OPEN, reservation__restaurant_id=restaurant_id)
+    if table_ids is not None:
+        qs = qs.filter(table_id__in=table_ids)
+
+    cutoffs: dict[int, datetime] = {}
+    for table_id, res_end in qs.values_list("table_id", "reservation__end_at"):
+        until = max(res_end, grace_until) if res_end else grace_until
+        if table_id not in cutoffs or until > cutoffs[table_id]:
+            cutoffs[table_id] = until
+    return cutoffs
+
+
+def get_unavailable_table_ids(
+    *,
+    restaurant_id: int,
+    start_at: datetime,
+    end_at: datetime,
+    table_ids: Iterable[int] | None = None,
+    current_reservation_id: int | None = None,
+    now: datetime | None = None,
+) -> set[int]:
+    """Ids of tables on this restaurant that are NOT bookable for
+    [start_at, end_at).
+
+    A table is unavailable when either an overlapping pending/active
+    reservation already claims it, or it currently has an open session that
+    may still occupy it once the window starts — a walk-in seated after its
+    booked start, or guests overstaying past their booked end.
+
+    This is the single source of truth for "is this table free": the floor
+    editor's available-tables lookup, the reservation-conflict check on
+    create/reschedule, and the customer-facing availability map all call it,
+    so they can't disagree about the same table/slot.
+    """
+    reservations = Reservation.objects.filter(restaurant_id=restaurant_id, status__in=ACTIVE_STATUSES)
+    if table_ids is not None:
+        reservations = reservations.filter(table_id__in=table_ids)
+    if current_reservation_id is not None:
+        reservations = reservations.exclude(id=current_reservation_id)
+
+    unavailable = set(
+        reservations.filter(start_at__lt=end_at, end_at__gt=start_at).values_list("table_id", flat=True)
+    )
+
+    cutoffs = get_session_grace_cutoffs(restaurant_id, table_ids, now or timezone.now(), end_at - start_at)
+    unavailable.update(table_id for table_id, until in cutoffs.items() if start_at < until)
+
+    return unavailable

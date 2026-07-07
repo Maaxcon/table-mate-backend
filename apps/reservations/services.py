@@ -2,8 +2,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.db import transaction
-from django.db.models import OuterRef, Subquery
-from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
@@ -21,6 +19,7 @@ from common.notification_events import emit_hall_new_reservation_notification
 
 from ..editor.selectors import get_available_tables
 from .models import Reservation, ReservationStatus, ReservationType
+from .selectors import get_unavailable_table_ids
 
 
 def check_availability(
@@ -47,30 +46,14 @@ def _check_reservation_conflict(
     end_at: datetime,
     current_reservation_id: int | None = None,
 ) -> None:
-    active_session_subquery = (
-        Session.objects.filter(
-            reservation=OuterRef("pk"),
-            status=SessionStatus.OPEN,
-        )
-        .order_by("opened_at")
-        .values("opened_at")[:1]
+    unavailable = get_unavailable_table_ids(
+        restaurant_id=restaurant_id,
+        start_at=start_at,
+        end_at=end_at,
+        table_ids=[table.pk],
+        current_reservation_id=current_reservation_id,
     )
-
-    qs = (
-        Reservation.objects.filter(
-            restaurant_id=restaurant_id,
-            table=table,
-            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-        )
-        .annotate(effective_start=Greatest("start_at", Coalesce(Subquery(active_session_subquery), "start_at")))
-        .filter(
-            effective_start__lt=end_at,
-            end_at__gt=start_at,
-        )
-    )
-    if current_reservation_id is not None:
-        qs = qs.exclude(id=current_reservation_id)
-    if qs.exists():
+    if table.pk in unavailable:
         raise ReservationConflictError("Table is not available during the requested time.")
 
 

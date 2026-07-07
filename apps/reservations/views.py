@@ -17,7 +17,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.models import Session, SessionStatus
+from apps.orders.models import Session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
 from common.channels import resolve_restaurant_pk
@@ -29,6 +29,8 @@ from .selectors import (
     PAST_STATUSES,
     get_customer_global_reservations,
     get_customer_reservations,
+    get_session_grace_cutoffs,
+    get_unavailable_table_ids,
 )
 from .serializers import ReservationSerializer
 from .services import (
@@ -255,6 +257,16 @@ class ReservationViewSet(
 
         now_utc = timezone.now()
 
+        # A currently open session may still occupy the table when a near-term
+        # slot starts (overstaying guests, or seated after the booked start).
+        # Same grace logic the availability action and the booking-conflict
+        # check use, so a slot listed here doesn't 409 when actually booked.
+        # Grace period matches this endpoint's own slot granularity since the
+        # final booking duration isn't known yet.
+        session_cutoff = get_session_grace_cutoffs(
+            table.restaurant_id, [table.pk], now_utc, timedelta(minutes=30)
+        ).get(table.pk)
+
         # working_hours uses 3-letter keys (mon–sun); index by weekday() (0=Mon)
         # to stay locale-independent rather than relying on strftime names.
         weekday_keys = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -284,7 +296,8 @@ class ReservationViewSet(
                     continue
 
                 overlaps = any(slot_utc < r["end_at"] and slot_end_utc > r["start_at"] for r in reservations)
-                if not overlaps:
+                blocked_by_session = session_cutoff is not None and slot_utc < session_cutoff
+                if not overlaps and not blocked_by_session:
                     slots.append(slot_start_str)
 
                 minute += 30
@@ -398,32 +411,17 @@ class ReservationViewSet(
                 result[str(table.public_id)] = False
             return Response({"availability": result})
 
-        taken = set(
-            Reservation.objects.filter(
-                table__in=tables,
-                status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-                start_at__lt=slot_end,
-                end_at__gt=slot_start,
-            ).values_list("table_id", flat=True)
+        # Same selector the booking-conflict check and the floor editor use, so
+        # a table marked free here can't 409 when the guest actually books it.
+        unavailable = get_unavailable_table_ids(
+            restaurant_id=restaurant_pk,
+            start_at=slot_start,
+            end_at=slot_end,
+            table_ids=[t.pk for t in tables],
+            now=now_utc,
         )
-
-        # A table with an open walk-in/visit session is physically taken. Its
-        # reservation may have already ended (guests overstaying), so block the
-        # slot until whichever is later: the booked end, or a grace window from
-        # now (they're seated now and likely staying). Frees up for later slots.
-        grace_until = now_utc + timedelta(minutes=effective_duration)
-        occupied_until: dict[int, datetime] = {}
-        for table_id, res_end in Session.objects.filter(
-            table__in=tables, status=SessionStatus.OPEN
-        ).values_list("table_id", "reservation__end_at"):
-            until = max(res_end, grace_until) if res_end else grace_until
-            if table_id not in occupied_until or until > occupied_until[table_id]:
-                occupied_until[table_id] = until
-
         for table in tables:
-            occ = occupied_until.get(table.pk)
-            taken_by_session = occ is not None and slot_start < occ
-            result[str(table.public_id)] = table.pk not in taken and not taken_by_session
+            result[str(table.public_id)] = table.pk not in unavailable
 
         return Response({"availability": result})
 
