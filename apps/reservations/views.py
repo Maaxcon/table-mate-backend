@@ -95,14 +95,14 @@ class ReservationViewSet(
         user = cast(User, request.user)
         guest_name = request.data.get("guest_name")
 
-        if guest_name and getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
+        if getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
             reservation = create_staff_reservation(
                 restaurant_id=restaurant_id,
                 table_id=str(serializer.validated_data["table"].public_id),
                 guest_count=serializer.validated_data["guest_count"],
                 start_at=serializer.validated_data["start_at"],
                 end_at=serializer.validated_data["end_at"],
-                guest_name=guest_name,
+                guest_name=guest_name or "",
                 guest_phone=request.data.get("guest_phone", ""),
                 notes=serializer.validated_data.get("notes"),
                 actor=user,

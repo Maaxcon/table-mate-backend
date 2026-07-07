@@ -49,6 +49,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "table_info",
             "restaurant_info",
             "customer_name",
+            "guest_name",
             "type",
             "guest_count",
             "start_at",
@@ -69,6 +70,8 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         ]
 
     def get_customer_name(self, obj: Reservation) -> str:
+        if obj.guest_name:
+            return obj.guest_name
         if obj.customer:
             return f"{obj.customer.first_name} {obj.customer.last_name}".strip() or obj.customer.email
         return "Guest"

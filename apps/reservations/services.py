@@ -163,11 +163,9 @@ def create_staff_reservation(
         end_at=end_at,
     )
 
-    staff_notes = f"Guest: {guest_name}"
+    staff_notes = notes or ""
     if guest_phone:
-        staff_notes += f", Phone: {guest_phone}"
-    if notes:
-        staff_notes += f"\n{notes}"
+        staff_notes = f"Phone: {guest_phone}" + (f"\n{staff_notes}" if staff_notes else "")
 
     reservation = Reservation.objects.create(
         restaurant_id=restaurant_id,
@@ -179,7 +177,8 @@ def create_staff_reservation(
         type=ReservationType.PRE_BOOKED,
         status=ReservationStatus.PENDING,
         created_by_staff=True,
-        notes=staff_notes,
+        guest_name=guest_name or "",
+        notes=staff_notes or None,
     )
 
     transaction.on_commit(
