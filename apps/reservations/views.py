@@ -336,28 +336,36 @@ class ReservationViewSet(
 
         tables = list(Table.objects.filter(restaurant__public_id=restaurant_id, active=True))
 
-        slot_local = datetime(d.year, d.month, d.day, t.hour, t.minute, tzinfo=tz)
-        slot_start = slot_local.astimezone(ZoneInfo("UTC"))
         now_utc = timezone.now()
 
         # The slot must start within working hours and leave at least a minimum
         # bookable window (30 min) before close. The booking window is capped to
         # closing time, so a 2h default near closing still counts as available for
         # however long remains (e.g. 90 min until a 22:00 close). Weekday keys are
-        # locale-independent (0 = Monday); overnight close after midnight is
-        # supported for same-day starts (not after-midnight ones).
+        # locale-independent (0 = Monday).
         weekday_keys = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
         day_config = working_hours.get(weekday_keys[d.weekday()]) if working_hours else None
         window = _day_window(day_config)
         within_hours = False
         effective_duration = duration
+        # An after-midnight slot on an overnight day (e.g. 01:00 when the venue opens
+        # 18:00) belongs to the next calendar day and sits on the extended timeline
+        # (24:00 = 1440+) — exactly how day_slots lists it. Resolve it the same way,
+        # or the slot reads as before opening and every table is reported as taken.
+        slot_date = d
         if window:
             open_minutes, end_base = window
             slot_minutes = t.hour * 60 + t.minute
+            overnight = end_base > 24 * 60
+            if overnight and slot_minutes < open_minutes:
+                slot_minutes += 24 * 60
+                slot_date = d + timedelta(days=1)
             until_close = end_base - slot_minutes
             within_hours = slot_minutes >= open_minutes and until_close >= 30
             effective_duration = min(duration, until_close)
 
+        slot_local = datetime(slot_date.year, slot_date.month, slot_date.day, t.hour, t.minute, tzinfo=tz)
+        slot_start = slot_local.astimezone(ZoneInfo("UTC"))
         slot_end = slot_start + timedelta(minutes=effective_duration)
 
         result: dict[str, bool] = {}
