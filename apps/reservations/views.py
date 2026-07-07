@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from apps.authentication.models import RoleCode, User
 from apps.orders.models import Session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
+from apps.restaurants.selectors import _DAY_KEYS
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
 from common.channels import resolve_restaurant_pk
 
@@ -225,7 +226,6 @@ class ReservationViewSet(
         detail=False,
         methods=["get"],
         url_path="available-slots",
-        permission_classes=[AllowAny],
         authentication_classes=[],
     )
     def available_slots(self, request: Request) -> Response:
@@ -267,12 +267,8 @@ class ReservationViewSet(
             table.restaurant_id, [table.pk], now_utc, timedelta(minutes=30)
         ).get(table.pk)
 
-        # working_hours uses 3-letter keys (mon–sun); index by weekday() (0=Mon)
-        # to stay locale-independent rather than relying on strftime names.
-        weekday_keys = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
-
         def day_slots(d: date_type) -> list[str]:
-            day_name = weekday_keys[d.weekday()]
+            day_name = _DAY_KEYS[d.weekday()]
             window = _day_window(working_hours.get(day_name))
             if not window:
                 return []
@@ -330,7 +326,6 @@ class ReservationViewSet(
         detail=False,
         methods=["get"],
         url_path="availability",
-        permission_classes=[AllowAny],
         authentication_classes=[],
     )
     def availability(self, request: Request) -> Response:
@@ -379,8 +374,7 @@ class ReservationViewSet(
         # closing time, so a 2h default near closing still counts as available for
         # however long remains (e.g. 90 min until a 22:00 close). Weekday keys are
         # locale-independent (0 = Monday).
-        weekday_keys = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
-        day_config = working_hours.get(weekday_keys[d.weekday()]) if working_hours else None
+        day_config = working_hours.get(_DAY_KEYS[d.weekday()]) if working_hours else None
         window = _day_window(day_config)
         within_hours = False
         effective_duration = duration
