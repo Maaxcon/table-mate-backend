@@ -29,7 +29,6 @@ services:
       - .env
     environment:
       DJANGO_SETTINGS_MODULE: core.settings.local
-      # override localhost → docker service name
       DATABASE_URL: postgresql://table_mate_user:table_mate_pass@db:5432/table_mate
       REDIS_URL: redis://redis:6379/0
     depends_on:
@@ -81,6 +80,22 @@ services:
       db:
         condition: service_started
       redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ../table-mate-frontend
+      target: build
+    command: npx vite --host 0.0.0.0
+    env_file:
+      - .env
+    ports:
+      - "${FRONTEND_EXPOSED_PORT:-5173}:5173"
+    volumes:
+      - ../table-mate-frontend:/app
+      - /app/node_modules
+    depends_on:
+      web:
         condition: service_started
 volumes:
   postgres_data:
