@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Sequence
 from datetime import date as date_type
 from datetime import datetime, timedelta
@@ -19,6 +20,7 @@ from apps.authentication.models import RoleCode, User
 from apps.orders.models import Session, SessionStatus
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
+from common.channels import resolve_restaurant_pk
 
 from .filters import ReservationFilter
 from .models import Reservation, ReservationStatus
@@ -328,13 +330,23 @@ class ReservationViewSet(
         except (ValueError, IndexError):
             raise ValidationError("Invalid time format. Use HH:MM.") from None
 
-        settings = RestaurantSettings.objects.filter(
-            restaurant__public_id=restaurant_id
-        ).first()
+        # Validate + resolve the public_id to an integer pk once (a raw UUID cast on
+        # a bad id would 500). resolve_restaurant_pk returns None for a malformed
+        # UUID or an unknown restaurant: a bad id is a client error, a valid-but-
+        # missing one simply has no floor to report.
+        restaurant_pk = resolve_restaurant_pk(restaurant_id)
+        if restaurant_pk is None:
+            try:
+                uuid.UUID(str(restaurant_id))
+            except (ValueError, AttributeError, TypeError):
+                raise ValidationError("Invalid restaurant id.") from None
+            return Response({"availability": {}})
+
+        settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_pk).first()
         working_hours = settings.working_hours if settings else {}
         tz = ZoneInfo(settings.timezone) if settings else ZoneInfo("UTC")
 
-        tables = list(Table.objects.filter(restaurant__public_id=restaurant_id, active=True))
+        tables = list(Table.objects.filter(restaurant_id=restaurant_pk, active=True))
 
         now_utc = timezone.now()
 
