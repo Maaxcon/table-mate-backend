@@ -119,12 +119,18 @@ class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
             await self.close(code=4001)
             return
 
-        # Customers carry no restaurant claim in their token, so let them watch a
-        # specific restaurant's floor via ?restaurant=<public_id>. The stream only
-        # exposes already-public table/reservation status (see _filter_event_for_floor).
-        if restaurant_id is None:
-            public_id = extract_ws_restaurant(self.scope)
-            restaurant_id = await resolve_restaurant_pk(public_id) if public_id else None
+        # The floor stream is public — only already-public table/reservation status
+        # leaks through (see _filter_event_for_floor) — so an explicit
+        # ?restaurant=<public_id> wins over the token's restaurant claim. Otherwise a
+        # staff member of one restaurant viewing another's booking page would watch
+        # their *own* floor while the page shows someone else's tables. Customers
+        # carry no claim and rely on the param entirely; fall back to the claim only
+        # when the param is missing or unresolvable.
+        public_id = extract_ws_restaurant(self.scope)
+        if public_id:
+            resolved = await resolve_restaurant_pk(public_id)
+            if resolved is not None:
+                restaurant_id = resolved
 
         if restaurant_id is None:
             await self.accept()
