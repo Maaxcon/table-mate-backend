@@ -4,7 +4,7 @@ from datetime import date as date_type
 from datetime import datetime, timedelta
 from datetime import time as time_type
 from typing import cast
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db.models import QuerySet
 from django.utils import timezone
@@ -68,6 +68,17 @@ def _day_window(day_config: object) -> tuple[int, int] | None:
     overnight = close_minutes <= open_minutes
     end_base = close_minutes + (24 * 60 if overnight else 0)
     return open_minutes, end_base
+
+
+def _safe_zoneinfo(name: object) -> ZoneInfo:
+    """A restaurant's stored timezone as ZoneInfo, falling back to UTC for a blank
+    or misconfigured value — a bad setting shouldn't 500 the public endpoints."""
+    if isinstance(name, str) and name:
+        try:
+            return ZoneInfo(name)
+        except (ValueError, ZoneInfoNotFoundError):
+            pass
+    return ZoneInfo("UTC")
 
 
 def _parse_non_negative_int(value: str | None, field_name: str) -> int | None:
@@ -230,7 +241,7 @@ class ReservationViewSet(
 
         settings = RestaurantSettings.objects.filter(restaurant_id=table.restaurant_id).first()
         working_hours = settings.working_hours if settings else {}
-        tz = ZoneInfo(settings.timezone) if settings else ZoneInfo("UTC")
+        tz = _safe_zoneinfo(settings.timezone if settings else None)
 
         today_local = timezone.now().astimezone(tz).date()
 
@@ -344,7 +355,7 @@ class ReservationViewSet(
 
         settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_pk).first()
         working_hours = settings.working_hours if settings else {}
-        tz = ZoneInfo(settings.timezone) if settings else ZoneInfo("UTC")
+        tz = _safe_zoneinfo(settings.timezone if settings else None)
 
         tables = list(Table.objects.filter(restaurant_id=restaurant_pk, active=True))
 
