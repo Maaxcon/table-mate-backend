@@ -213,7 +213,8 @@ def _find_conflict_limit(
     else:
         return None
 
-    # Conflict found — find the earliest one
+    # Conflict found — find the earliest one using the same overlap predicate
+    # as _check_reservation_conflict so the clamp always matches the detection.
     open_session_sq = (
         Session.objects.filter(
             reservation=OuterRef("pk"),
@@ -234,8 +235,15 @@ def _find_conflict_limit(
                 Subquery(open_session_sq.values("opened_at")[:1]),
                 "start_at",
             ),
+            eff_end=Coalesce(
+                Subquery(open_session_sq.values("ends_at")[:1]),
+                "end_at",
+            ),
         )
-        .filter(eff_start__gt=session.opened_at)
+        .filter(
+            eff_start__lt=target_end,
+            eff_end__gt=session.opened_at,
+        )
         .order_by("eff_start")
         .first()
     )
@@ -251,62 +259,82 @@ def auto_extend_session(session: Session) -> dict[str, object]:
     reservation conflicts (clamps to the conflict's start). Returns a dict
     with ``extended`` (bool), ``clamped_by`` (str or None), and
     ``new_ends_at`` (datetime or None).
+
+    Safe under concurrency: acquires a row-level lock on both the session and
+    its table so the conflict-check-then-write is serialized against all other
+    occupancy writers (create_reservation, _prolong_active_reservation,
+    batch_update_reservations, activate_pending_reservation).
     """
-    now = timezone.now()
+    with transaction.atomic():
+        # Re-fetch under lock so we serialize against _prolong_active_reservation
+        # and any other session mutator, and re-read ends_at fresh.
+        locked = (
+            Session.objects.select_for_update()
+            .filter(pk=session.pk, status=SessionStatus.OPEN)
+            .first()
+        )
+        if locked is None:
+            return {"extended": False, "clamped_by": None, "new_ends_at": None}
 
-    if session.ends_at is None or session.ends_at > now + timedelta(minutes=_AUTO_EXTEND_AHEAD_MINUTES):
-        return {"extended": False, "clamped_by": None, "new_ends_at": None}
+        # Serialize against create_reservation, batch_update, activate_pending
+        # which all lock the Table row before writing occupancy.
+        Table.objects.select_for_update().get(pk=locked.table_id)
 
-    target = now + timedelta(minutes=_AUTO_EXTEND_DURATION_MINUTES)
-    reason: str | None = None
+        now = timezone.now()
 
-    # 1. Clamp to working hours
-    close_at = get_working_hours_close_at(session.restaurant_id, now)
-    if close_at is not None and target > close_at:
-        target = close_at
-        reason = "working_hours"
+        if locked.ends_at is None or locked.ends_at > now + timedelta(minutes=_AUTO_EXTEND_AHEAD_MINUTES):
+            return {"extended": False, "clamped_by": None, "new_ends_at": None}
 
-    # 2. Clamp to upcoming conflict
-    conflict_limit = _find_conflict_limit(session, target)
-    if conflict_limit is not None and conflict_limit < target:
-        target = conflict_limit
-        reason = "conflict"
+        target = now + timedelta(minutes=_AUTO_EXTEND_DURATION_MINUTES)
+        reason: str | None = None
 
-    # 3. No meaningful extension
-    if target <= session.ends_at:
-        return {"extended": False, "clamped_by": reason, "new_ends_at": None}
+        # 1. Clamp to working hours
+        close_at = get_working_hours_close_at(locked.restaurant_id, now)
+        if close_at is not None and target > close_at:
+            target = close_at
+            reason = "working_hours"
 
-    # 4. Apply
-    session.ends_at = target
-    session.save(update_fields=["ends_at", "updated_at"])
+        # 2. Clamp to upcoming conflict
+        conflict_limit = _find_conflict_limit(locked, target)
+        if conflict_limit is not None and conflict_limit < target:
+            target = conflict_limit
+            reason = "conflict"
 
-    restaurant_id = session.restaurant_id
-    table_id = str(session.table.public_id)
-    target_iso = target.isoformat()
+        # 3. No meaningful extension
+        if target <= locked.ends_at:
+            return {"extended": False, "clamped_by": reason, "new_ends_at": None}
 
-    transaction.on_commit(
-        lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
-    )
+        # 4. Apply
+        locked.ends_at = target
+        locked.save(update_fields=["ends_at", "updated_at"])
 
-    if reason == "conflict":
+        restaurant_id = locked.restaurant_id
+        table_id = str(locked.table.public_id)
+        target_iso = target.isoformat()
+
         transaction.on_commit(
-            lambda: emit_hall_session_auto_extended(
-                restaurant_id,
-                table_id=table_id,
-                ends_at=target_iso,
-                clamped_by="conflict",
-            )
+            lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
         )
 
-    logger.info(
-        "Auto-extended session %s (table %s) to %s (reason=%s)",
-        session.public_id,
-        table_id,
-        target_iso,
-        reason or "none",
-    )
+        if reason == "conflict":
+            transaction.on_commit(
+                lambda: emit_hall_session_auto_extended(
+                    restaurant_id,
+                    table_id=table_id,
+                    ends_at=target_iso,
+                    clamped_by="conflict",
+                )
+            )
 
-    return {"extended": True, "clamped_by": reason, "new_ends_at": target}
+        logger.info(
+            "Auto-extended session %s (table %s) to %s (reason=%s)",
+            locked.public_id,
+            table_id,
+            target_iso,
+            reason or "none",
+        )
+
+        return {"extended": True, "clamped_by": reason, "new_ends_at": target}
 
 
 def auto_extend_all_sessions(restaurant_id: int | None = None) -> list[dict[str, object]]:
