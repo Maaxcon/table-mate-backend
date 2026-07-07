@@ -248,7 +248,7 @@ def reschedule_reservation(
         current_reservation_id=reservation.id,
     )
 
-    fields_to_update = ["table", "guest_count", "start_at", "end_at", "notes"]
+    fields_to_update = ["table", "guest_count", "start_at", "end_at", "notes", "guest_name"]
     for field in fields_to_update:
         if field in validated_data:
             setattr(reservation, field, validated_data[field])
