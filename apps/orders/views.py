@@ -3,6 +3,7 @@ from typing import Any, cast
 
 from django.db import transaction
 from django.db.models import QuerySet
+from django.utils.timezone import localdate, localtime
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -24,7 +25,7 @@ from common.hall_events import emit_hall_table_status_changed
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
 from .billing import close_visit_session, ensure_visit_session
-from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, VoidReason
+from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, TicketStatus, VoidReason
 from .serializers import (
     CreateOrderSerializer,
     OrderItemSerializer,
@@ -220,7 +221,17 @@ class TicketViewSet(
         restaurant_id = get_restaurant_id_from_auth(self.request)
         if restaurant_id is None:
             return qs.none()
-        return get_kitchen_tickets(restaurant_id)
+        qs = get_kitchen_tickets(restaurant_id)
+        status_filter = self.request.query_params.get("status")
+        if status_filter == TicketStatus.COMPLETED:
+            qs = qs.filter(completed_at__date=localdate())
+        return qs
+
+    def perform_update(self, serializer):  # type: ignore[no-untyped-def]
+        if serializer.validated_data.get("status") == TicketStatus.COMPLETED:
+            serializer.save(completed_at=localtime())
+        else:
+            serializer.save()
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         instance = serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
