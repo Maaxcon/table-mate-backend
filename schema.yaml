@@ -2729,6 +2729,30 @@ paths:
         the slot is within working hours, in the future, and has no overlapping pending/active
         reservation. Powers the time-aware floor plan.'
       summary: Per-table availability for one slot
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: YYYY-MM-DD.
+        required: true
+      - in: query
+        name: duration
+        schema:
+          type: integer
+        description: Minutes, default 120, clamped to a minimum of 30.
+      - in: query
+        name: restaurant
+        schema:
+          type: string
+        description: Restaurant public ID.
+        required: true
+      - in: query
+        name: time
+        schema:
+          type: string
+        description: HH:MM, restaurant-local.
+        required: true
       tags:
       - Reservations
       security:
@@ -2748,6 +2772,26 @@ paths:
         returns slots for that date only. Otherwise returns slots for the next 14
         days.
       summary: Available time slots for a table
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: YYYY-MM-DD. Omit to get the next 14 days.
+      - in: query
+        name: exclude
+        schema:
+          type: array
+          items:
+            type: string
+        description: Reservation public ID(s) to exclude, e.g. the booking currently
+          being rescheduled.
+      - in: query
+        name: table
+        schema:
+          type: string
+        description: Table public ID.
+        required: true
       tags:
       - Reservations
       security:

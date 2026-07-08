@@ -9,11 +9,13 @@ import pytest
 from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
+from apps.restaurants.selectors import _DAY_KEYS
 
 KYIV = ZoneInfo("Europe/Kyiv")
 UTC = ZoneInfo("UTC")
 
 AVAILABLE_SLOTS_URL = "/api/reservations/reservations/available-slots/"
+AVAILABILITY_URL = "/api/reservations/reservations/availability/"
 
 
 @pytest.mark.django_db
@@ -122,3 +124,102 @@ def test_available_slots_without_exclude_still_blocks_others_sessions(
     assert resp.status_code == 200
     slots = resp.json()[today_kyiv.isoformat()]
     assert "12:30" not in slots
+
+
+@pytest.mark.django_db
+def test_available_slots_and_availability_agree_at_a_misaligned_closing_tail(
+    restaurant: Restaurant,
+    table: Table,
+    restaurant_settings: RestaurantSettings,
+    api_client: Any,
+) -> None:
+    """available-slots must never list a start time that availability would
+    then reject as "too close to closing" for the exact same instant — a
+    close time that isn't 30-min-aligned (22:40, not 22:00 or 22:30) used to
+    break that invariant: available-slots only checked the slot started
+    before close, while availability required at least 30 min left, so the
+    grid could offer a slot that 409s (or availability could report a table
+    free/taken for a time the grid never listed at all).
+    """
+    target_date = (datetime.now(KYIV) + timedelta(days=7)).date()
+    day_key = _DAY_KEYS[target_date.weekday()]
+    restaurant_settings.working_hours = {
+        **restaurant_settings.working_hours,
+        day_key: {"open": "10:00", "close": "22:40"},
+    }
+    restaurant_settings.save(update_fields=["working_hours"])
+
+    slots_resp = api_client.get(
+        AVAILABLE_SLOTS_URL,
+        {"table": str(table.public_id), "date": target_date.isoformat()},
+    )
+    assert slots_resp.status_code == 200
+    slots = slots_resp.json()[target_date.isoformat()]
+
+    # 22:00 leaves exactly 40 min before the 22:40 close -> still bookable.
+    assert "22:00" in slots
+    # 22:30 would leave only 10 min -> available-slots must not offer it...
+    assert "22:30" not in slots
+
+    # ...and availability must agree it's not bookable either, for the same time.
+    avail_resp = api_client.get(
+        AVAILABILITY_URL,
+        {
+            "restaurant": str(restaurant.public_id),
+            "date": target_date.isoformat(),
+            "time": "22:30",
+            "duration": 30,
+        },
+    )
+    assert avail_resp.status_code == 200
+    assert avail_resp.json()["availability"][str(table.public_id)] is False
+
+    # And it must agree 22:00 (the last slot available-slots did offer) is bookable.
+    avail_resp_ok = api_client.get(
+        AVAILABILITY_URL,
+        {
+            "restaurant": str(restaurant.public_id),
+            "date": target_date.isoformat(),
+            "time": "22:00",
+            "duration": 30,
+        },
+    )
+    assert avail_resp_ok.status_code == 200
+    assert avail_resp_ok.json()["availability"][str(table.public_id)] is True
+
+
+@pytest.mark.django_db
+def test_available_slots_filters_past_slots_on_an_explicitly_queried_past_date(
+    restaurant: Restaurant,
+    table: Table,
+    restaurant_settings: RestaurantSettings,
+    api_client: Any,
+) -> None:
+    """The past-slot filter used to only apply when the queried date exactly
+    equaled the server's "today" (`d == today_local`) — so a date explicitly
+    queried while it's already yesterday (relevant right after midnight, for
+    a still-open overnight session that started the night before) skipped
+    the filter entirely and returned every slot on that day, including ones
+    from many hours in the past. The filter must key off the absolute instant
+    (slot_utc <= now_utc), not day equality.
+    """
+    today_kyiv = datetime.now(KYIV).date()
+    yesterday = today_kyiv - timedelta(days=1)
+    day_key = _DAY_KEYS[yesterday.weekday()]
+    restaurant_settings.working_hours = {
+        **restaurant_settings.working_hours,
+        day_key: {"open": "10:00", "close": "20:00"},
+    }
+    restaurant_settings.save(update_fields=["working_hours"])
+    fixed_now = datetime(today_kyiv.year, today_kyiv.month, today_kyiv.day, 8, 0, tzinfo=KYIV).astimezone(UTC)
+
+    with patch("apps.reservations.views.timezone.now", return_value=fixed_now):
+        resp = api_client.get(
+            AVAILABLE_SLOTS_URL,
+            {"table": str(table.public_id), "date": yesterday.isoformat()},
+        )
+
+    assert resp.status_code == 200
+    # Yesterday's entire 10:00-20:00 window is in the past relative to
+    # 08:00 today -> nothing should be offered.
+    assert resp.json()[yesterday.isoformat()] == []

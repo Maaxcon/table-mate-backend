@@ -10,7 +10,7 @@ from django.db.models import QuerySet
 from django.utils import timezone
 from drf_spectacular.plumbing import build_array_type, build_basic_type, build_object_type
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -63,6 +63,16 @@ def _non_none_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
 
 
 _STR_SCHEMA = _non_none_schema(build_basic_type(OpenApiTypes.STR))
+
+
+# The shortest window a slot may leave before close to still count as
+# bookable. Shared by available_slots and availability so they can't
+# disagree at the closing tail: for a close time that isn't 30-min-aligned
+# (e.g. 22:40), available_slots used to offer a slot as late as "whatever
+# fits before end_base", while availability rejected anything with under 30
+# min left — a slot the grid listed could 409, or availability could report
+# a table free for a slot the grid never even offered.
+MIN_BOOKABLE_WINDOW_MINUTES = 30
 
 
 def _parse_time(value: str) -> time_type:
@@ -243,6 +253,22 @@ class ReservationViewSet(
         description="Returns available 30-min time slots for a table. "
         "If date is provided, returns slots for that date only. "
         "Otherwise returns slots for the next 14 days.",
+        parameters=[
+            OpenApiParameter(name="table", type=str, required=True, description="Table public ID."),
+            OpenApiParameter(
+                name="date",
+                type=str,
+                required=False,
+                description="YYYY-MM-DD. Omit to get the next 14 days.",
+            ),
+            OpenApiParameter(
+                name="exclude",
+                type=str,
+                required=False,
+                many=True,
+                description="Reservation public ID(s) to exclude, e.g. the booking currently being rescheduled.",
+            ),
+        ],
         responses=OpenApiResponse(
             response=build_object_type(
                 additionalProperties=build_array_type(_STR_SCHEMA),
@@ -315,7 +341,12 @@ class ReservationViewSet(
 
             slots: list[str] = []
             minute = open_minutes
-            while minute < end_base:
+            # Matches availability's own within_hours check: stop once fewer than
+            # MIN_BOOKABLE_WINDOW_MINUTES remain before close, not just "the slot
+            # technically starts before close" — otherwise a close time that isn't
+            # 30-min-aligned (e.g. 22:40) offers a slot here that availability
+            # would then reject for the exact same start time.
+            while minute < end_base and end_base - minute >= MIN_BOOKABLE_WINDOW_MINUTES:
                 h = (minute // 60) % 24
                 m = minute % 60
                 slot_start_str = f"{h:02d}:{m:02d}"
@@ -325,7 +356,12 @@ class ReservationViewSet(
                 slot_utc = slot_local.astimezone(ZoneInfo("UTC"))
                 slot_end_utc = slot_utc + timedelta(minutes=30)
 
-                if d == today_local and slot_utc <= now_utc:
+                # Compares the absolute instant directly rather than gating on
+                # `d == today_local` — the old gate meant a day queried explicitly
+                # while it's already in the past (e.g. yesterday's still-open
+                # overnight tail, queried just after midnight) skipped this check
+                # entirely and returned long-past slots as if they were bookable.
+                if slot_utc <= now_utc:
                     minute += 30
                     continue
 
@@ -359,6 +395,17 @@ class ReservationViewSet(
         "{ availability: { '<table_public_id>': true|false } }. A table is free when "
         "the slot is within working hours, in the future, and has no overlapping "
         "pending/active reservation. Powers the time-aware floor plan.",
+        parameters=[
+            OpenApiParameter(name="restaurant", type=str, required=True, description="Restaurant public ID."),
+            OpenApiParameter(name="date", type=str, required=True, description="YYYY-MM-DD."),
+            OpenApiParameter(name="time", type=str, required=True, description="HH:MM, restaurant-local."),
+            OpenApiParameter(
+                name="duration",
+                type=int,
+                required=False,
+                description="Minutes, default 120, clamped to a minimum of 30.",
+            ),
+        ],
         responses=inline_serializer(
             name="TableAvailabilityResponse",
             fields={
@@ -441,7 +488,7 @@ class ReservationViewSet(
                 slot_minutes += 24 * 60
                 slot_date = d + timedelta(days=1)
             until_close = end_base - slot_minutes
-            within_hours = slot_minutes >= open_minutes and until_close >= 30
+            within_hours = slot_minutes >= open_minutes and until_close >= MIN_BOOKABLE_WINDOW_MINUTES
             effective_duration = min(duration, until_close)
 
         slot_local = datetime(slot_date.year, slot_date.month, slot_date.day, t.hour, t.minute, tzinfo=tz)
