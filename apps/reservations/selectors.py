@@ -109,7 +109,7 @@ def get_session_grace_cutoffs(
     restaurant_id: int,
     table_ids: Iterable[int] | None,
     now: datetime,
-    current_reservation_id: int | None = None,
+    current_reservation_id: int | Iterable[int] | None = None,
 ) -> dict[int, datetime]:
     """For each table with a currently OPEN session, the instant it can be
     considered free again: whichever is later, its reservation's booked end,
@@ -119,7 +119,11 @@ def get_session_grace_cutoffs(
 
     `current_reservation_id` excludes that reservation's own session — a
     guest prolonging their own active (seated) reservation must not have
-    their own session block the extension.
+    their own session block the extension. Accepts an iterable too (mirrors
+    the reservation-overlap exclusion's `public_id__in`, which already
+    supports the available-slots endpoint's multi-value `exclude` param —
+    without this, a caller resolving several excluded ids would only ever
+    get its session-side exclusion silently dropped down to one).
 
     Also requires the linked reservation to still be ACTIVE — an OPEN session
     should always imply that, but if some path ever cancels/completes a
@@ -138,7 +142,10 @@ def get_session_grace_cutoffs(
     if table_ids is not None:
         qs = qs.filter(table_id__in=table_ids)
     if current_reservation_id is not None:
-        qs = qs.exclude(reservation_id=current_reservation_id)
+        if isinstance(current_reservation_id, int):
+            qs = qs.exclude(reservation_id=current_reservation_id)
+        else:
+            qs = qs.exclude(reservation_id__in=current_reservation_id)
 
     cutoffs: dict[int, datetime] = {}
     for table_id, res_end in qs.values_list("table_id", "reservation__end_at"):

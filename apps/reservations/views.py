@@ -283,6 +283,17 @@ class ReservationViewSet(
             qs = qs.exclude(public_id__in=exclude_ids)
         reservations = list(qs.values("start_at", "end_at"))
 
+        # Resolved separately from the `qs.exclude(...)` above, which removes
+        # these rows rather than surfacing their ids — needed below so the
+        # excluded reservation's own OPEN session doesn't also self-block via
+        # the grace cutoff (mirrors reschedule_reservation's
+        # current_reservation_id, which excludes it on both fronts).
+        exclude_pks = (
+            list(Reservation.objects.filter(public_id__in=exclude_ids).values_list("id", flat=True))
+            if exclude_ids
+            else None
+        )
+
         now_utc = timezone.now()
 
         # A currently open session may still occupy the table when a near-term
@@ -290,9 +301,9 @@ class ReservationViewSet(
         # Same fixed grace period the availability action and the
         # booking-conflict check use, so a slot listed here doesn't 409 when
         # actually booked.
-        session_cutoff = get_session_grace_cutoffs(table.restaurant_id, [table.pk], now_utc).get(
-            table.pk
-        )
+        session_cutoff = get_session_grace_cutoffs(
+            table.restaurant_id, [table.pk], now_utc, exclude_pks
+        ).get(table.pk)
 
         def day_slots(d: date_type) -> list[str]:
             day_name = _DAY_KEYS[d.weekday()]
