@@ -101,17 +101,24 @@ def get_session_grace_cutoffs(
     table_ids: Iterable[int] | None,
     now: datetime,
     grace_period: timedelta,
+    current_reservation_id: int | None = None,
 ) -> dict[int, datetime]:
     """For each table with a currently OPEN session, the instant it can be
     considered free again: whichever is later, its reservation's booked end,
     or `now + grace_period` (they're seated right now and likely to stay at
     least that long). Batchable — call once and reuse across many slots
     instead of re-querying per slot.
+
+    `current_reservation_id` excludes that reservation's own session — a
+    guest prolonging their own active (seated) reservation must not have
+    their own session block the extension.
     """
     grace_until = now + grace_period
     qs = Session.objects.filter(status=SessionStatus.OPEN, reservation__restaurant_id=restaurant_id)
     if table_ids is not None:
         qs = qs.filter(table_id__in=table_ids)
+    if current_reservation_id is not None:
+        qs = qs.exclude(reservation_id=current_reservation_id)
 
     cutoffs: dict[int, datetime] = {}
     for table_id, res_end in qs.values_list("table_id", "reservation__end_at"):
@@ -153,7 +160,13 @@ def get_unavailable_table_ids(
         reservations.filter(start_at__lt=end_at, end_at__gt=start_at).values_list("table_id", flat=True)
     )
 
-    cutoffs = get_session_grace_cutoffs(restaurant_id, table_ids, now or timezone.now(), end_at - start_at)
+    cutoffs = get_session_grace_cutoffs(
+        restaurant_id,
+        table_ids,
+        now or timezone.now(),
+        end_at - start_at,
+        current_reservation_id,
+    )
     unavailable.update(table_id for table_id, until in cutoffs.items() if start_at < until)
 
     return unavailable
