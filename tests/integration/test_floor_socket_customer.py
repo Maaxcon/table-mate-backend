@@ -52,6 +52,52 @@ async def test_customer_rejected_without_restaurant_query(restaurant: Any) -> No
 
 
 @pytestmark_rt
+async def test_anonymous_connects_to_floor_with_restaurant_query(restaurant: Any) -> None:
+    """A guest browsing the booking page before logging in carries no JWT at
+    all — the stream is public (see _filter_event_for_floor), so the
+    connection must still succeed via ?restaurant=<public_id> alone.
+    """
+    communicator = WebsocketCommunicator(application, f"/ws/floor/?restaurant={restaurant.public_id}")
+    connected, _ = await communicator.connect()
+    assert connected
+    await communicator.disconnect()
+
+
+@pytestmark_rt
+async def test_anonymous_rejected_without_restaurant_query(restaurant: Any) -> None:
+    communicator = WebsocketCommunicator(application, "/ws/floor/")
+    await communicator.connect()
+    output = await communicator.receive_output(timeout=5)
+    assert output["type"] == "websocket.close"
+    assert output["code"] == 4001
+    await communicator.disconnect()
+
+
+@pytestmark_rt
+async def test_anonymous_receives_filtered_floor_broadcast(restaurant: Any, table: Any) -> None:
+    user, _ = await _customer_token()
+    communicator = WebsocketCommunicator(application, f"/ws/floor/?restaurant={restaurant.public_id}")
+    connected, _ = await communicator.connect()
+    assert connected
+
+    await sync_to_async(emit_hall_table_status_changed)(
+        restaurant.id,
+        table_id=str(table.public_id),
+        previous_status="free",
+        current_status="occupied",
+        session_id="test-session",
+        actor=user,
+    )
+
+    event = await communicator.receive_json_from(timeout=5)
+    assert event["event_name"] == "HALL_TABLE_STATUS_CHANGED"
+    assert event["table_id"] == str(table.public_id)
+    assert event["current_status"] == "occupied"
+
+    await communicator.disconnect()
+
+
+@pytestmark_rt
 async def test_customer_receives_filtered_floor_broadcast(restaurant: Any, table: Any) -> None:
     user, access = await _customer_token()
     communicator = WebsocketCommunicator(

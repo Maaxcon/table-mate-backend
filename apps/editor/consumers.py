@@ -107,25 +107,23 @@ def _filter_event_for_floor(event: dict[str, object]) -> dict[str, object]:
 
 class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
+        # Auth is optional here, not required: the floor stream is public — only
+        # already-public table/reservation status leaks through (see
+        # _filter_event_for_floor) — so an anonymous guest browsing the booking
+        # page before logging in may still connect via ?restaurant=<public_id>,
+        # same as the guest-facing floor page itself. A malformed/expired token
+        # degrades to anonymous rather than rejecting the connection outright.
         try:
             user, restaurant_id = await authenticate_websocket(self.scope)
         except Exception:
-            await self.accept()
-            await self.close(code=4001)
-            return
+            user, restaurant_id = None, None
 
-        if user is None:
-            await self.accept()
-            await self.close(code=4001)
-            return
-
-        # The floor stream is public — only already-public table/reservation status
-        # leaks through (see _filter_event_for_floor) — so an explicit
-        # ?restaurant=<public_id> wins over the token's restaurant claim. Otherwise a
-        # staff member of one restaurant viewing another's booking page would watch
-        # their *own* floor while the page shows someone else's tables. Customers
-        # carry no claim and rely on the param entirely; fall back to the claim only
-        # when the param is missing or unresolvable.
+        # An explicit ?restaurant=<public_id> wins over the token's restaurant
+        # claim. Otherwise a staff member of one restaurant viewing another's
+        # booking page would watch their *own* floor while the page shows
+        # someone else's tables. Customers and anonymous guests carry no claim
+        # and rely on the param entirely; fall back to the claim only when the
+        # param is missing or unresolvable.
         public_id = extract_ws_restaurant(self.scope)
         if public_id:
             resolved = await resolve_restaurant_pk(public_id)
@@ -137,7 +135,7 @@ class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
             await self.close(code=4001)
             return
 
-        if user.role not in _FLOOR_ALLOWED_ROLES:
+        if user is not None and user.role not in _FLOOR_ALLOWED_ROLES:
             await self.accept()
             await self.close(code=4003)
             return
