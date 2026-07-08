@@ -111,11 +111,13 @@ class TestSessionPatch:
         session = self._open_session(auth.client, table)
         session_id = str(session["public_id"])
 
+        other_zone = Zone.objects.filter(restaurant=table.restaurant).first()
+        assert other_zone is not None
         other_table = Table.objects.create(
             restaurant=table.restaurant,
             public_number="T2",
             capacity=4,
-            zone=Zone.objects.filter(restaurant=table.restaurant).first(),
+            zone=other_zone,
             active=True,
         )
 

@@ -12,9 +12,9 @@ def backfill_daily_numbers(apps: StateApps, schema_editor: BaseDatabaseSchemaEdi
     Numbers reset each day and follow injection order (FIFO), matching the
     runtime allocation in Ticket._assign_daily_number.
     """
-    Ticket = apps.get_model('orders', 'Ticket')
+    Ticket = apps.get_model("orders", "Ticket")
     counters: dict[tuple[int, object], int] = {}
-    tickets = Ticket.objects.order_by('restaurant_id', 'injected_at', 'id').iterator()
+    tickets = Ticket.objects.order_by("restaurant_id", "injected_at", "id").iterator()
     for ticket in tickets:
         seq_date = timezone.localdate(ticket.injected_at)
         key = (ticket.restaurant_id, seq_date)
@@ -22,35 +22,36 @@ def backfill_daily_numbers(apps: StateApps, schema_editor: BaseDatabaseSchemaEdi
         counters[key] = next_number
         ticket.daily_number = next_number
         ticket.daily_seq_date = seq_date
-        ticket.save(update_fields=['daily_number', 'daily_seq_date'])
+        ticket.save(update_fields=["daily_number", "daily_seq_date"])
 
 
 def reverse_backfill(apps: StateApps, schema_editor: BaseDatabaseSchemaEditor) -> None:
-    Ticket = apps.get_model('orders', 'Ticket')
+    Ticket = apps.get_model("orders", "Ticket")
     Ticket.objects.update(daily_number=None, daily_seq_date=None)
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('orders', '0016_session_service_charge'),
-        ('restaurants', '0014_merge_20260612_1620'),
+        ("orders", "0016_session_service_charge"),
+        ("restaurants", "0014_merge_20260612_1620"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='ticket',
-            name='daily_number',
+            model_name="ticket",
+            name="daily_number",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='ticket',
-            name='daily_seq_date',
+            model_name="ticket",
+            name="daily_seq_date",
             field=models.DateField(blank=True, null=True),
         ),
         migrations.RunPython(backfill_daily_numbers, reverse_backfill),
         migrations.AddConstraint(
-            model_name='ticket',
-            constraint=models.UniqueConstraint(fields=('restaurant', 'daily_seq_date', 'daily_number'), name='orders_ticket_daily_number_uniq'),
+            model_name="ticket",
+            constraint=models.UniqueConstraint(
+                fields=("restaurant", "daily_seq_date", "daily_number"), name="orders_ticket_daily_number_uniq"
+            ),
         ),
     ]

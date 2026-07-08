@@ -163,11 +163,9 @@ def create_staff_reservation(
         end_at=end_at,
     )
 
-    staff_notes = f"Guest: {guest_name}"
+    staff_notes = notes or ""
     if guest_phone:
-        staff_notes += f", Phone: {guest_phone}"
-    if notes:
-        staff_notes += f"\n{notes}"
+        staff_notes = f"Phone: {guest_phone}" + (f"\n{staff_notes}" if staff_notes else "")
 
     reservation = Reservation.objects.create(
         restaurant_id=restaurant_id,
@@ -179,7 +177,8 @@ def create_staff_reservation(
         type=ReservationType.PRE_BOOKED,
         status=ReservationStatus.PENDING,
         created_by_staff=True,
-        notes=staff_notes,
+        guest_name=guest_name or "",
+        notes=staff_notes or None,
     )
 
     transaction.on_commit(
@@ -207,7 +206,7 @@ def create_staff_reservation(
 
 
 @transaction.atomic
-def cancel_reservation(reservation: Reservation) -> Reservation:
+def cancel_reservation(reservation: Reservation, *, actor: User) -> Reservation:
     """Cancel a pending or active reservation. Rejects any other state.
 
     Mirrors reschedule/activate: the state-machine lives here, not in the view.
@@ -216,7 +215,19 @@ def cancel_reservation(reservation: Reservation) -> Reservation:
     if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
         raise ReservationCancelError("Only pending or active reservations can be cancelled.")
     locked.status = ReservationStatus.CANCELLED
-    locked.save(update_fields=["status"])
+    locked.save(update_fields=["status", "updated_at"])
+
+    if locked.table is not None:
+        table = locked.table
+        transaction.on_commit(
+            lambda: emit_hall_reservation_cancelled(
+                locked.restaurant_id,
+                reservation_id=str(locked.public_id),
+                table_id=str(table.public_id),
+                actor=actor,
+            )
+        )
+
     return locked
 
 
@@ -249,7 +260,7 @@ def reschedule_reservation(
         current_reservation_id=reservation.id,
     )
 
-    fields_to_update = ["table", "guest_count", "start_at", "end_at", "notes"]
+    fields_to_update = ["table", "guest_count", "start_at", "end_at", "notes", "guest_name"]
     for field in fields_to_update:
         if field in validated_data:
             setattr(reservation, field, validated_data[field])
@@ -534,7 +545,8 @@ def close_session(
     reservation = session.reservation
     if reservation.status == ReservationStatus.ACTIVE:
         reservation.status = ReservationStatus.COMPLETED
-        reservation.end_at = timezone.now()
+        now = timezone.now()
+        reservation.end_at = now if now > reservation.start_at else reservation.start_at + timedelta(seconds=1)
         reservation.save(update_fields=["status", "end_at", "updated_at"])
 
     transaction.on_commit(

@@ -95,14 +95,14 @@ class ReservationViewSet(
         user = cast(User, request.user)
         guest_name = request.data.get("guest_name")
 
-        if guest_name and getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
+        if getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
             reservation = create_staff_reservation(
                 restaurant_id=restaurant_id,
                 table_id=str(serializer.validated_data["table"].public_id),
                 guest_count=serializer.validated_data["guest_count"],
                 start_at=serializer.validated_data["start_at"],
                 end_at=serializer.validated_data["end_at"],
-                guest_name=guest_name,
+                guest_name=guest_name or "",
                 guest_phone=request.data.get("guest_phone", ""),
                 notes=serializer.validated_data.get("notes"),
                 actor=user,
@@ -138,7 +138,7 @@ class ReservationViewSet(
                     and instance.status == ReservationStatus.ACTIVE
                 ):
                     raise PermissionDenied("You cannot cancel an active reservation.")
-                reservation = cancel_reservation(reservation=instance)
+                reservation = cancel_reservation(reservation=instance, actor=request.user)  # type: ignore[arg-type]
             else:
                 reservation = update_reservation_status(
                     instance,
@@ -191,10 +191,14 @@ class ReservationViewSet(
     def available_slots(self, request: Request) -> Response:
         table_id = request.query_params.get("table")
         date_str = request.query_params.get("date")
-        exclude_ids = request.query_params.getlist("exclude")
+        exclude_raw = request.query_params.getlist("exclude")
 
         if not table_id:
             raise ValidationError("table query parameter is required.")
+
+        exclude_ids: list[str] = []
+        for val in exclude_raw:
+            exclude_ids.extend(v.strip() for v in val.split(",") if v.strip())
 
         try:
             table = Table.objects.get(public_id=table_id, active=True)
@@ -217,6 +221,12 @@ class ReservationViewSet(
 
         now_utc = timezone.now()
 
+        def _round_up_30(minutes: int) -> int:
+            return ((minutes + 29) // 30) * 30
+
+        def _round_down_30(minutes: int) -> int:
+            return (minutes // 30) * 30
+
         def day_slots(d: date_type) -> list[str]:
             day_config = working_hours.get(_DAY_KEYS[d.weekday()])
             if not day_config:
@@ -225,8 +235,8 @@ class ReservationViewSet(
             open_t = _parse_time(day_config["open"])
             close_t = _parse_time(day_config["close"])
 
-            open_minutes = open_t.hour * 60 + open_t.minute
-            close_minutes = close_t.hour * 60 + close_t.minute
+            open_minutes = _round_up_30(open_t.hour * 60 + open_t.minute)
+            close_minutes = _round_down_30(close_t.hour * 60 + close_t.minute)
             overnight = close_minutes <= open_minutes
             end_base = close_minutes + (24 * 60 if overnight else 0)
 
