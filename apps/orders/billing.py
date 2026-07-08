@@ -5,6 +5,7 @@ __all__ = [
 ]
 
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -126,7 +127,8 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
         if reservation is not None:
             if reservation.status == ReservationStatus.ACTIVE:
                 reservation.status = ReservationStatus.COMPLETED
-                reservation.end_at = max(timezone.now(), reservation.start_at)
+                now = timezone.now()
+                reservation.end_at = now if now > reservation.start_at else reservation.start_at + timedelta(seconds=1)
                 reservation.save(update_fields=["status", "end_at"])
             closed_carts = list(
                 CartSession.objects.select_for_update().filter(reservation=reservation, status=CartSessionStatus.ACTIVE)
