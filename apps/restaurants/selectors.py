@@ -127,9 +127,8 @@ def get_layout_data(restaurant_id: int) -> LayoutData:
             "table_id": r.table.public_id,
             "start_at": r.start_at,
             "end_at": r.end_at,
-            "customer_name": (
-                r.guest_name or (r.customer.get_full_name() or r.customer.email) if r.customer else "Guest"
-            ),
+            "customer_name": r.guest_name
+            or ((r.customer.get_full_name() or r.customer.email) if r.customer else "Guest"),
             "guest_count": r.guest_count,
         }
         for r in reservations
