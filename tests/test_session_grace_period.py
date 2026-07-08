@@ -101,3 +101,36 @@ def test_session_grace_period_blocks_near_term_slot_regardless_of_duration(
     )
 
     assert table.pk in short_unavailable
+
+
+@pytest.mark.django_db
+def test_dangling_open_session_on_cancelled_reservation_does_not_block_table(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+) -> None:
+    """A session left OPEN after its reservation was cancelled (a
+    data-integrity bug elsewhere, not a normal state — see
+    cancel_reservation, which now closes it) must not make the table look
+    permanently occupied. Without this guard the grace cutoff recomputes to
+    "now + 30min" on every single check forever, since a cancelled
+    reservation's end_at never arrives to age it out.
+    """
+    customer = user_factory()
+    customer.save()
+    now = timezone.now()
+    reservation = _seated_reservation(restaurant, table, customer, now)
+    reservation.status = ReservationStatus.CANCELLED
+    reservation.save(update_fields=["status"])
+    # The session itself is untouched — still OPEN, exactly the dangling
+    # state a missed cleanup path would leave behind.
+
+    unavailable = get_unavailable_table_ids(
+        restaurant_id=restaurant.id,
+        start_at=now + timedelta(minutes=10),
+        end_at=now + timedelta(minutes=40),
+        table_ids=[table.pk],
+        now=now,
+    )
+
+    assert table.pk not in unavailable

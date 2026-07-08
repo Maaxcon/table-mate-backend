@@ -120,9 +120,21 @@ def get_session_grace_cutoffs(
     `current_reservation_id` excludes that reservation's own session — a
     guest prolonging their own active (seated) reservation must not have
     their own session block the extension.
+
+    Also requires the linked reservation to still be ACTIVE — an OPEN session
+    should always imply that, but if some path ever cancels/completes a
+    reservation without also closing its session (a data-integrity bug, not a
+    normal state), this recomputes "occupied until now + grace" on every
+    single check, forever, since there's no reservation end to age it out.
+    Guarding on reservation status here means a table can't get stuck looking
+    permanently occupied just because a session was left dangling.
     """
     grace_until = now + SESSION_GRACE_PERIOD
-    qs = Session.objects.filter(status=SessionStatus.OPEN, reservation__restaurant_id=restaurant_id)
+    qs = Session.objects.filter(
+        status=SessionStatus.OPEN,
+        reservation__restaurant_id=restaurant_id,
+        reservation__status=ReservationStatus.ACTIVE,
+    )
     if table_ids is not None:
         qs = qs.filter(table_id__in=table_ids)
     if current_reservation_id is not None:

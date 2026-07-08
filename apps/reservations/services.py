@@ -194,12 +194,25 @@ def cancel_reservation(reservation: Reservation) -> Reservation:
     """Cancel a pending or active reservation. Rejects any other state.
 
     Mirrors reschedule/activate: the state-machine lives here, not in the view.
+    Staff can cancel an ACTIVE (seated) reservation directly — unlike the
+    normal checkout flow (close_session), this doesn't require order items to
+    be served/voided first, since the booking is being voided outright. Any
+    lingering OPEN session must still be closed here, or the table would look
+    occupied indefinitely: get_unavailable_table_ids treats an open session as
+    "still physically occupied" and re-derives its grace cutoff from the
+    current time on every check, so a session left open never ages out.
     """
     locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
     if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
         raise ReservationCancelError("Only pending or active reservations can be cancelled.")
     locked.status = ReservationStatus.CANCELLED
     locked.save(update_fields=["status"])
+
+    session = Session.objects.filter(reservation=locked, status=SessionStatus.OPEN).first()
+    if session:
+        session.status = SessionStatus.CLOSED
+        session.save(update_fields=["status", "updated_at"])
+
     return locked
 
 
