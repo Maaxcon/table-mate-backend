@@ -2739,7 +2739,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Reservation'
+                $ref: '#/components/schemas/TableAvailabilityResponse'
           description: ''
   /api/reservations/reservations/available-slots/:
     get:
@@ -2758,7 +2758,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Reservation'
+                type: object
+                description: date (YYYY-MM-DD) -> list of bookable HH:MM slot start
+                  times
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
           description: ''
   /api/reservations/reservations/my/:
     get:
@@ -4394,7 +4400,6 @@ components:
           minimum: 1
         rotation:
           type: integer
-          maximum: 359
           default: 0
         zone_id:
           type: string
@@ -5902,7 +5907,6 @@ components:
           minimum: 1
         rotation:
           type: integer
-          maximum: 359
           default: 0
         target_zone_id:
           type: string
@@ -6528,6 +6532,16 @@ components:
       - restaurant
       - updated_at
       - zone
+    TableAvailabilityResponse:
+      type: object
+      properties:
+        availability:
+          type: object
+          additionalProperties:
+            type: boolean
+          description: table public_id -> is it free for the requested slot
+      required:
+      - availability
     TableEntity:
       type: object
       properties:
@@ -6557,7 +6571,6 @@ components:
           minimum: 1
         rotation:
           type: integer
-          maximum: 359
           default: 0
         shape:
           $ref: '#/components/schemas/ShapeEnum'
@@ -6615,7 +6628,6 @@ components:
           minimum: 1
         rotation:
           type: integer
-          maximum: 359
           default: 0
         threshold_label:
           type: string

@@ -8,7 +8,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db.models import QuerySet
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.plumbing import build_array_type, build_basic_type, build_object_type
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -221,6 +224,12 @@ class ReservationViewSet(
         description="Returns available 30-min time slots for a table. "
         "If date is provided, returns slots for that date only. "
         "Otherwise returns slots for the next 14 days.",
+        responses=OpenApiResponse(
+            response=build_object_type(
+                additionalProperties=build_array_type(build_basic_type(OpenApiTypes.STR)),
+                description="date (YYYY-MM-DD) -> list of bookable HH:MM slot start times",
+            ),
+        ),
     )
     @action(
         detail=False,
@@ -320,6 +329,15 @@ class ReservationViewSet(
         "{ availability: { '<table_public_id>': true|false } }. A table is free when "
         "the slot is within working hours, in the future, and has no overlapping "
         "pending/active reservation. Powers the time-aware floor plan.",
+        responses=inline_serializer(
+            name="TableAvailabilityResponse",
+            fields={
+                "availability": drf_serializers.DictField(
+                    child=drf_serializers.BooleanField(),
+                    help_text="table public_id -> is it free for the requested slot",
+                ),
+            },
+        ),
     )
     @action(
         detail=False,
