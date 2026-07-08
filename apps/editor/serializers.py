@@ -65,6 +65,27 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
 # ---------------------------------------------------------------------------
 
 
+class RotationField(serializers.IntegerField):
+    """Degrees, normalized to [0, 360) rather than bounds-checked.
+
+    A plain IntegerField(max_value=359) is asymmetric — it rejects 360 (the
+    same angle as 0) while happily accepting an unbounded negative like
+    -1000000, since there's no min_value. Normalizing via modulo sidesteps
+    picking an arbitrary lower bound entirely: any integer input maps to its
+    canonical angle instead of being rejected or stored un-normalized.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("default", 0)
+        kwargs.pop("min_value", None)
+        kwargs.pop("max_value", None)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data: Any) -> int:
+        value: int = super().to_internal_value(data)
+        return value % 360
+
+
 class TableEntitySerializer(serializers.Serializer[Any]):
     id = serializers.UUIDField(required=False, allow_null=True, default=None)
     # Opaque client-side correlation handle for newly-added entities (not yet persisted).
@@ -79,7 +100,7 @@ class TableEntitySerializer(serializers.Serializer[Any]):
     y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
-    rotation = serializers.IntegerField(max_value=359, default=0)
+    rotation = RotationField()
     shape = serializers.ChoiceField(choices=["rectangle", "round", "square", "booth"])
     capacity = serializers.IntegerField(min_value=1, max_value=20)
     zone_id = serializers.UUIDField()
@@ -102,7 +123,7 @@ class ObstacleEntitySerializer(serializers.Serializer[Any]):
     y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
-    rotation = serializers.IntegerField(max_value=359, default=0)
+    rotation = RotationField()
     zone_id = serializers.UUIDField()
 
 
@@ -111,7 +132,7 @@ class ThresholdEntitySerializer(serializers.Serializer[Any]):
     y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
-    rotation = serializers.IntegerField(max_value=359, default=0)
+    rotation = RotationField()
     threshold_label = serializers.CharField(
         max_length=64, required=False, allow_blank=True, default="", source="label"
     )
@@ -123,7 +144,7 @@ class PortalEntitySerializer(serializers.Serializer[Any]):
     y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
-    rotation = serializers.IntegerField(max_value=359, default=0)
+    rotation = RotationField()
     target_zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     portal_label = serializers.CharField(max_length=64, required=False, allow_blank=True, default="", source="label")
     zone_id = serializers.UUIDField()
