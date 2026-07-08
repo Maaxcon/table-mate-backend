@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from datetime import date as date_type
 from datetime import datetime, timedelta
 from datetime import time as time_type
-from typing import cast
+from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db.models import QuerySet
@@ -47,6 +47,22 @@ from .services import (
     reschedule_reservation,
     update_reservation_status,
 )
+
+
+def _non_none_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
+    """Narrow build_basic_type's Optional return (it's only None for a type
+    it doesn't recognize — OpenApiTypes.STR always resolves). A plain module-
+    level `assert` doesn't work here: mypy doesn't carry that narrowing into
+    the class body below, which references this constant from a decorator
+    argument (a separate scope). A real exception rather than `assert` since
+    the latter is stripped under `-O` (and bandit flags it either way).
+    """
+    if schema is None:
+        raise TypeError("build_basic_type(OpenApiTypes.STR) unexpectedly returned None")
+    return schema
+
+
+_STR_SCHEMA = _non_none_schema(build_basic_type(OpenApiTypes.STR))
 
 
 def _parse_time(value: str) -> time_type:
@@ -226,7 +242,7 @@ class ReservationViewSet(
         "Otherwise returns slots for the next 14 days.",
         responses=OpenApiResponse(
             response=build_object_type(
-                additionalProperties=build_array_type(build_basic_type(OpenApiTypes.STR)),
+                additionalProperties=build_array_type(_STR_SCHEMA),
                 description="date (YYYY-MM-DD) -> list of bookable HH:MM slot start times",
             ),
         ),
