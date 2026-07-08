@@ -1,8 +1,11 @@
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.db.models import QuerySet
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -14,6 +17,7 @@ from rest_framework.response import Response
 from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsFloor, IsKitchen, IsStaff
 from apps.orders.selectors import compute_avg_prep_time, get_kitchen_order_items, get_kitchen_tickets
+from apps.restaurants.models import RestaurantSettings
 from common.api import (
     RestaurantScopedViewSetMixin,
     get_restaurant_id_from_auth,
@@ -24,7 +28,7 @@ from common.hall_events import emit_hall_table_status_changed
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
 from .billing import close_visit_session, ensure_visit_session
-from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, VoidReason
+from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, TicketStatus, VoidReason
 from .serializers import (
     CreateOrderSerializer,
     OrderItemSerializer,
@@ -120,7 +124,7 @@ class SessionViewSet(
     )
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        session = close_visit_session(session=self.get_object())
+        session = close_visit_session(session=self.get_object(), actor=cast(User, request.user))
         serializer = self.get_serializer(session)
         return Response(serializer.data)
 
@@ -220,7 +224,26 @@ class TicketViewSet(
         restaurant_id = get_restaurant_id_from_auth(self.request)
         if restaurant_id is None:
             return qs.none()
-        return get_kitchen_tickets(restaurant_id)
+        qs = get_kitchen_tickets(restaurant_id)
+        status_filter = self.request.query_params.get("status")
+        if status_filter == TicketStatus.COMPLETED:
+            settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
+            tz = ZoneInfo(settings.timezone) if settings and settings.timezone else ZoneInfo("UTC")
+            local_now = timezone.now().astimezone(tz)
+            day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(ZoneInfo("UTC"))
+            day_end = day_start + timedelta(days=1)
+            qs = qs.filter(completed_at__gte=day_start, completed_at__lt=day_end)
+        return qs
+
+    def perform_update(self, serializer):  # type: ignore[no-untyped-def]
+        if serializer.validated_data.get("status") == TicketStatus.COMPLETED:
+            restaurant_id = serializer.instance.restaurant_id
+            settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
+            tz = ZoneInfo(settings.timezone) if settings and settings.timezone else ZoneInfo("UTC")
+            now_local = timezone.now().astimezone(tz)
+            serializer.save(completed_at=now_local)
+        else:
+            serializer.save()
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         instance = serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))

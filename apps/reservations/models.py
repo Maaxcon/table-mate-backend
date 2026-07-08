@@ -54,6 +54,7 @@ class Reservation(RestaurantScopedModel):
         choices=ReservationStatus.choices,
         default=ReservationStatus.PENDING,
     )
+    guest_name = models.CharField(max_length=255, null=True, blank=True)
     created_by_staff = models.BooleanField(default=False)
     notes = models.TextField(null=True, blank=True)
     participants = models.ManyToManyField(

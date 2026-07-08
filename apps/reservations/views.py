@@ -80,10 +80,26 @@ def _parse_time(value: str) -> time_type:
     return time_type(hour=int(parts[0]), minute=int(parts[1]))
 
 
+def _round_up_30(minutes: int) -> int:
+    return ((minutes + 29) // 30) * 30
+
+
+def _round_down_30(minutes: int) -> int:
+    return (minutes // 30) * 30
+
+
 def _day_window(day_config: object) -> tuple[int, int] | None:
     """Open minute and (overnight-aware) close minute for a working-hours day, or
     None if the day is closed or its stored config is malformed (missing or
-    non-HH:MM open/close). Keeps a bad stored config from raising a 500."""
+    non-HH:MM open/close). Keeps a bad stored config from raising a 500.
+
+    Open rounds up and close rounds down to the nearest 30-min boundary — a
+    stored time like "10:05" would otherwise seed the slot grid at :05/:35
+    instead of the usual :00/:30, and only rounding one side (or neither)
+    could offer a slot that starts before opening or ends after closing.
+    Shared by available_slots and availability so a rounded boundary can't
+    make them disagree the same way an un-rounded one used to.
+    """
     if not isinstance(day_config, dict):
         return None
     open_str = day_config.get("open")
@@ -95,8 +111,8 @@ def _day_window(day_config: object) -> tuple[int, int] | None:
         close_t = _parse_time(close_str)
     except (ValueError, IndexError):
         return None
-    open_minutes = open_t.hour * 60 + open_t.minute
-    close_minutes = close_t.hour * 60 + close_t.minute
+    open_minutes = _round_up_30(open_t.hour * 60 + open_t.minute)
+    close_minutes = _round_down_30(close_t.hour * 60 + close_t.minute)
     overnight = close_minutes <= open_minutes
     end_base = close_minutes + (24 * 60 if overnight else 0)
     return open_minutes, end_base
@@ -165,14 +181,14 @@ class ReservationViewSet(
         user = cast(User, request.user)
         guest_name = request.data.get("guest_name")
 
-        if guest_name and getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
+        if getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
             reservation = create_staff_reservation(
                 restaurant_id=restaurant_id,
                 table_id=str(serializer.validated_data["table"].public_id),
                 guest_count=serializer.validated_data["guest_count"],
                 start_at=serializer.validated_data["start_at"],
                 end_at=serializer.validated_data["end_at"],
-                guest_name=guest_name,
+                guest_name=guest_name or "",
                 guest_phone=request.data.get("guest_phone", ""),
                 notes=serializer.validated_data.get("notes"),
                 actor=user,
@@ -285,10 +301,14 @@ class ReservationViewSet(
     def available_slots(self, request: Request) -> Response:
         table_id = request.query_params.get("table")
         date_str = request.query_params.get("date")
-        exclude_ids = request.query_params.getlist("exclude")
+        exclude_raw = request.query_params.getlist("exclude")
 
         if not table_id:
             raise ValidationError("table query parameter is required.")
+
+        exclude_ids: list[str] = []
+        for val in exclude_raw:
+            exclude_ids.extend(v.strip() for v in val.split(",") if v.strip())
 
         try:
             table = Table.objects.get(public_id=table_id, active=True)

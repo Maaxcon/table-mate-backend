@@ -133,11 +133,13 @@ def test_guest_token_cannot_checkout_other_session(
     _active_reservation(restaurant, table)
     cart_a = ensure_active_cart_for_table(table=table)
 
+    _zone = Zone.objects.filter(restaurant=restaurant).first()
+    assert _zone is not None
     table_b = Table.objects.create(
         restaurant=restaurant,
         public_number="TB",
         capacity=4,
-        zone=Zone.objects.filter(restaurant=restaurant).first(),
+        zone=_zone,
         active=True,
     )
     _active_reservation(restaurant, table_b)

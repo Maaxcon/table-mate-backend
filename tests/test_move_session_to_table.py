@@ -21,12 +21,13 @@ class TestMoveSessionToTable:
         item: Any,
     ) -> None:
         auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
-
+        _zone = Zone.objects.filter(restaurant=restaurant).first()
+        assert _zone is not None
         table2 = Table.objects.create(
             restaurant=restaurant,
             public_number="T2",
             capacity=4,
-            zone=Zone.objects.filter(restaurant=restaurant).first(),
+            zone=_zone,
             active=True,
         )
 
@@ -91,11 +92,13 @@ class TestMoveSessionToTable:
         session.status = SessionStatus.CLOSED
         session.save(update_fields=["status"])
 
+        _zone2 = Zone.objects.filter(restaurant=restaurant).first()
+        assert _zone2 is not None
         table2 = Table.objects.create(
             restaurant=restaurant,
             public_number="T2",
             capacity=4,
-            zone=Zone.objects.filter(restaurant=restaurant).first(),
+            zone=_zone2,
             active=True,
         )
 
@@ -126,11 +129,13 @@ class TestMoveSessionToTable:
             actor=auth.user,
         )
 
+        _zone3 = Zone.objects.filter(restaurant=restaurant).first()
+        assert _zone3 is not None
         inactive_table = Table.objects.create(
             restaurant=restaurant,
             public_number="T2",
             capacity=4,
-            zone=Zone.objects.filter(restaurant=restaurant).first(),
+            zone=_zone3,
             active=False,
         )
 

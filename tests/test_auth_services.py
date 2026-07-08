@@ -167,7 +167,7 @@ class TestGoogleAuthenticate:
             patch("apps.authentication.services.urllib.request.urlopen") as mock_open,
             patch(
                 "apps.authentication.services.verify_oauth2_token",
-                side_effect=GoogleAuthError("Wrong issuer."),
+                side_effect=GoogleAuthError("Wrong issuer."),  # type: ignore[no-untyped-call]
             ),
         ):
             mock_open.return_value = _urlopen_mock({"id_token": "jwt"})

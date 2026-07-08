@@ -6,6 +6,7 @@ __all__ = [
 ]
 
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -23,6 +24,7 @@ from common.exceptions import (
     EmptyCartError,
     RestaurantClosedError,
 )
+from common.hall_events import emit_hall_table_status_changed
 from common.money import quantize_money
 from common.notification_events import emit_cart_checked_out, emit_kitchen_ticket_injected
 
@@ -132,7 +134,7 @@ def close_reservation_carts(reservation: Reservation) -> list[CartSession]:
     return carts
 
 
-def close_visit_session(*, session: Session) -> Session:
+def close_visit_session(*, session: Session, actor: User | None = None) -> Session:
     """End a visit and free the table.
 
     There is no payment step yet, so a waiter closing the check just ends the
@@ -150,8 +152,28 @@ def close_visit_session(*, session: Session) -> Session:
         if reservation is not None:
             if reservation.status == ReservationStatus.ACTIVE:
                 reservation.status = ReservationStatus.COMPLETED
-                reservation.save(update_fields=["status"])
+                # A check closed very soon after opening (or before its
+                # scheduled start) would otherwise leave end_at <= start_at,
+                # violating the reservation's end-after-start constraint.
+                now = timezone.now()
+                reservation.end_at = (
+                    now if now > reservation.start_at else reservation.start_at + timedelta(seconds=1)
+                )
+                reservation.save(update_fields=["status", "end_at"])
             close_reservation_carts(reservation)
+
+        if actor is not None:
+            table = session.table
+            transaction.on_commit(
+                lambda: emit_hall_table_status_changed(
+                    session.restaurant_id,
+                    table_id=str(table.public_id),
+                    previous_status="occupied",
+                    current_status="free",
+                    session_id=str(session.public_id),
+                    actor=actor,
+                )
+            )
 
     return session
 
@@ -253,6 +275,7 @@ def checkout_cart_session(
         order_tax = Decimal("0")
         # Build a map of guest_identity → display_name for this session.
         from apps.orders.models import GuestProfile
+
         guest_names = dict(
             GuestProfile.objects.filter(cart_session=cart_session).values_list("guest_identity", "display_name")
         )

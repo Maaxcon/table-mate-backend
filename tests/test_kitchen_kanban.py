@@ -23,6 +23,7 @@ from apps.orders.selectors import (
 )
 from apps.orders.services import create_order_with_items, open_session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table, Zone
+
 from .conftest import AuthContext
 
 ORDER_LIST_URL = reverse("order-list")
