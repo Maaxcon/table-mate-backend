@@ -259,13 +259,12 @@ class ReservationViewSet(
 
         # A currently open session may still occupy the table when a near-term
         # slot starts (overstaying guests, or seated after the booked start).
-        # Same grace logic the availability action and the booking-conflict
-        # check use, so a slot listed here doesn't 409 when actually booked.
-        # Grace period matches this endpoint's own slot granularity since the
-        # final booking duration isn't known yet.
-        session_cutoff = get_session_grace_cutoffs(
-            table.restaurant_id, [table.pk], now_utc, timedelta(minutes=30)
-        ).get(table.pk)
+        # Same fixed grace period the availability action and the
+        # booking-conflict check use, so a slot listed here doesn't 409 when
+        # actually booked.
+        session_cutoff = get_session_grace_cutoffs(table.restaurant_id, [table.pk], now_utc).get(
+            table.pk
+        )
 
         def day_slots(d: date_type) -> list[str]:
             day_name = _DAY_KEYS[d.weekday()]

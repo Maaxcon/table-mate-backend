@@ -96,24 +96,32 @@ def get_reservation_participant_ids(reservation: Reservation) -> list[int]:
     return list(ReservationParticipant.objects.filter(reservation=reservation).values_list("user_id", flat=True))
 
 
+# How long we assume a table with a currently open session will stay
+# occupied, measured from "right now" — fixed, not derived from whatever the
+# new booking being checked happens to request. Tying it to the requested
+# duration would make the same start time read as free for a short booking
+# but blocked for a long one, at the exact same instant: the table's actual
+# occupancy doesn't depend on what a prospective new guest wants.
+SESSION_GRACE_PERIOD = timedelta(minutes=30)
+
+
 def get_session_grace_cutoffs(
     restaurant_id: int,
     table_ids: Iterable[int] | None,
     now: datetime,
-    grace_period: timedelta,
     current_reservation_id: int | None = None,
 ) -> dict[int, datetime]:
     """For each table with a currently OPEN session, the instant it can be
     considered free again: whichever is later, its reservation's booked end,
-    or `now + grace_period` (they're seated right now and likely to stay at
-    least that long). Batchable — call once and reuse across many slots
-    instead of re-querying per slot.
+    or `now + SESSION_GRACE_PERIOD` (they're seated right now and likely to
+    stay at least that long). Batchable — call once and reuse across many
+    slots instead of re-querying per slot.
 
     `current_reservation_id` excludes that reservation's own session — a
     guest prolonging their own active (seated) reservation must not have
     their own session block the extension.
     """
-    grace_until = now + grace_period
+    grace_until = now + SESSION_GRACE_PERIOD
     qs = Session.objects.filter(status=SessionStatus.OPEN, reservation__restaurant_id=restaurant_id)
     if table_ids is not None:
         qs = qs.filter(table_id__in=table_ids)
@@ -164,7 +172,6 @@ def get_unavailable_table_ids(
         restaurant_id,
         table_ids,
         now or timezone.now(),
-        end_at - start_at,
         current_reservation_id,
     )
     unavailable.update(table_id for table_id, until in cutoffs.items() if start_at < until)
