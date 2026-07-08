@@ -126,7 +126,7 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
         if reservation is not None:
             if reservation.status == ReservationStatus.ACTIVE:
                 reservation.status = ReservationStatus.COMPLETED
-                reservation.end_at = timezone.now()
+                reservation.end_at = max(timezone.now(), reservation.start_at)
                 reservation.save(update_fields=["status", "end_at"])
             closed_carts = list(
                 CartSession.objects.select_for_update().filter(reservation=reservation, status=CartSessionStatus.ACTIVE)

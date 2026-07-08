@@ -533,7 +533,7 @@ def close_session(
     reservation = session.reservation
     if reservation.status == ReservationStatus.ACTIVE:
         reservation.status = ReservationStatus.COMPLETED
-        reservation.end_at = timezone.now()
+        reservation.end_at = max(timezone.now(), reservation.start_at)
         reservation.save(update_fields=["status", "end_at", "updated_at"])
 
     transaction.on_commit(
