@@ -206,7 +206,8 @@ def create_staff_reservation(
 
 
 @transaction.atomic
-def cancel_reservation(reservation: Reservation) -> Reservation:
+@transaction.atomic
+def cancel_reservation(reservation: Reservation, *, actor: User) -> Reservation:
     """Cancel a pending or active reservation. Rejects any other state.
 
     Mirrors reschedule/activate: the state-machine lives here, not in the view.
@@ -215,7 +216,19 @@ def cancel_reservation(reservation: Reservation) -> Reservation:
     if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
         raise ReservationCancelError("Only pending or active reservations can be cancelled.")
     locked.status = ReservationStatus.CANCELLED
-    locked.save(update_fields=["status"])
+    locked.save(update_fields=["status", "updated_at"])
+
+    if locked.table is not None:
+        table = locked.table
+        transaction.on_commit(
+            lambda: emit_hall_reservation_cancelled(
+                locked.restaurant_id,
+                reservation_id=str(locked.public_id),
+                table_id=str(table.public_id),
+                actor=actor,
+            )
+        )
+
     return locked
 
 
