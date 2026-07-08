@@ -21,7 +21,7 @@ from apps.orders.models import Session
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
 from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
-from common.channels import resolve_restaurant_pk
+from common.channels import resolve_restaurant_pk_sync
 
 from .filters import ReservationFilter
 from .models import Reservation, ReservationStatus
@@ -350,10 +350,13 @@ class ReservationViewSet(
             raise ValidationError("Invalid time format. Use HH:MM.") from None
 
         # Validate + resolve the public_id to an integer pk once (a raw UUID cast on
-        # a bad id would 500). resolve_restaurant_pk returns None for a malformed
-        # UUID or an unknown restaurant: a bad id is a client error, a valid-but-
-        # missing one simply has no floor to report.
-        restaurant_pk = resolve_restaurant_pk(restaurant_id)
+        # a bad id would 500). resolve_restaurant_pk_sync returns None for a
+        # malformed UUID or an unknown restaurant: a bad id is a client error, a
+        # valid-but-missing one simply has no floor to report. This view is a
+        # plain sync DRF view, so it uses the sync resolver directly — the async
+        # resolve_restaurant_pk (database_sync_to_async-wrapped, for WebSocket
+        # consumers) would return an unawaited coroutine here instead of an int.
+        restaurant_pk = resolve_restaurant_pk_sync(restaurant_id)
         if restaurant_pk is None:
             try:
                 uuid.UUID(str(restaurant_id))

@@ -79,9 +79,12 @@ def extract_ws_restaurant(scope: dict) -> str | None:  # type: ignore[type-arg]
     return values[0] if values else None
 
 
-@database_sync_to_async  # type: ignore[untyped-decorator]
-def resolve_restaurant_pk(public_id: str) -> int | None:
-    """Map a restaurant public_id to its integer pk, or None if it doesn't exist."""
+def resolve_restaurant_pk_sync(public_id: str) -> int | None:
+    """Map a restaurant public_id to its integer pk, or None if it doesn't exist.
+
+    Plain sync function — for synchronous callers (Django views). Async
+    callers (WebSocket consumers) use resolve_restaurant_pk below instead.
+    """
     from apps.restaurants.models import Restaurant
 
     try:
@@ -89,6 +92,9 @@ def resolve_restaurant_pk(public_id: str) -> int | None:
     except (ValueError, AttributeError, TypeError):
         return None
     return Restaurant.objects.filter(public_id=public_id).values_list("id", flat=True).first()
+
+
+resolve_restaurant_pk = database_sync_to_async(resolve_restaurant_pk_sync)
 
 
 async def authenticate_websocket_protocol(
