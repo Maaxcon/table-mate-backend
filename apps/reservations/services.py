@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.billing import ensure_visit_session
+from apps.orders.billing import close_reservation_carts, ensure_visit_session
 from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
 from apps.restaurants.models import Table
 from common.exceptions import ReservationCancelError, ReservationConflictError
@@ -204,6 +204,12 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
     would trip activate_pending_reservation's "table already has an active
     session" guard the next time this table's queue is worked.
 
+    Also closes any still-ACTIVE CartSession, mirroring close_visit_session's
+    fuller teardown — checkout_cart_session only checks the cart's own
+    status, not the reservation's, so leaving a cart open after cancelling a
+    seated booking would let the guest keep ordering/checking out (injecting
+    a kitchen ticket) against a reservation staff already ended.
+
     Emits the same real-time hall events close_session does, so the floor
     stays live instead of stale until a reload: HALL_TABLE_STATUS_CHANGED
     (occupied->free) when a session was actually closed, and
@@ -222,6 +228,8 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
     if session:
         session.status = SessionStatus.CLOSED
         session.save(update_fields=["status", "updated_at"])
+
+    close_reservation_carts(locked)
 
     table = locked.table
     if actor is not None and table is not None:

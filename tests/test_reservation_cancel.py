@@ -7,7 +7,8 @@ import pytest
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode
-from apps.orders.models import Session, SessionStatus
+from apps.orders.models import CartSessionStatus, Session, SessionStatus
+from apps.orders.services import ensure_active_cart_for_table
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.services import cancel_reservation
 from apps.restaurants.models import Restaurant, Table
@@ -206,3 +207,44 @@ def test_cancel_reservation_without_actor_skips_events(
 
     mock_status.assert_not_called()
     mock_cancelled.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_cancel_active_reservation_closes_its_active_cart(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+) -> None:
+    """Staff cancelling a seated booking must also close its guest cart —
+    checkout_cart_session only checks the CartSession's own status, not the
+    reservation's, so a cart left ACTIVE would let the guest keep
+    ordering/checking out (injecting a kitchen ticket) against a reservation
+    that's already cancelled. Mirrors close_visit_session's teardown.
+    """
+    customer = user_factory()
+    customer.save()
+    now = timezone.now()
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        customer=customer,
+        table=table,
+        guest_count=2,
+        start_at=now - timedelta(hours=1),
+        end_at=now + timedelta(hours=1),
+        status=ReservationStatus.ACTIVE,
+    )
+    Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        reservation=reservation,
+        guest_count=2,
+        status=SessionStatus.OPEN,
+        currency="UAH",
+        opened_at=reservation.start_at,
+    )
+    cart = ensure_active_cart_for_table(table=table)
+
+    cancel_reservation(reservation=reservation)
+
+    cart.refresh_from_db()
+    assert cart.status == CartSessionStatus.CLOSED
