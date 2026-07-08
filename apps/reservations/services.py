@@ -752,6 +752,19 @@ def _batch_end_date(c: dict[str, Any]) -> date:
     return cast(date, c["new_date"])
 
 
+def _batch_active_end_datetime(c: dict[str, Any], session: Session) -> datetime:
+    """End datetime for an ACTIVE row: anchored to session.opened_at.date().
+
+    Consistent with ignoring the client's ``new_start_time`` (and therefore
+    ``new_date``) for the start anchor — the seated party's actual times are
+    the ground truth.
+    """
+    end_date = session.opened_at.date()
+    if c["new_end_time"] <= c["new_start_time"]:
+        end_date += timedelta(days=1)
+    return timezone.make_aware(datetime.combine(end_date, c["new_end_time"]))
+
+
 @transaction.atomic
 def batch_update_reservations(
     *,
@@ -838,11 +851,12 @@ def batch_update_reservations(
     for c in changes:
         rid = str(c["reservation_id"])
         table_id = str(c["new_table_id"])
-        new_end = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
         if res_map[rid].status == ReservationStatus.ACTIVE:
             new_start = session_map[rid].opened_at
+            new_end = _batch_active_end_datetime(c, session_map[rid])
         else:
             new_start = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
+            new_end = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
         if new_end <= new_start:
             raise ReservationConflictError(
                 "Reservation end must be after its start.",
@@ -871,13 +885,14 @@ def batch_update_reservations(
         if table is None:
             raise NotFound(f"Table {c['new_table_id']} not found or inactive.")
 
-        end_at = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
         if res.status == ReservationStatus.ACTIVE:
             start_at = session_map[rid].opened_at
+            end_at = _batch_active_end_datetime(c, session_map[rid])
             if end_at <= start_at:
                 raise ReservationConflictError("End time must be after the party was seated.")
         else:
             start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
+            end_at = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
 
         _check_reservation_conflict(
             restaurant_id=restaurant_id,
@@ -914,13 +929,11 @@ def batch_update_reservations(
             restaurant_id=restaurant_id,
             active=True,
         )
-        new_end = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
-
         if res.status == ReservationStatus.ACTIVE:
             session = session_map[rid]
             old_table_id = str(session.table.public_id)
             affected_table_ids.update({old_table_id, str(c["new_table_id"])})
-            session.ends_at = new_end
+            session.ends_at = _batch_active_end_datetime(c, session)
             if old_table_id != str(c["new_table_id"]):
                 session.table = table
             session.save(update_fields=["ends_at", "table", "updated_at"])
@@ -928,7 +941,7 @@ def batch_update_reservations(
             affected_table_ids.update({str(res.table.public_id) if res.table else "", str(c["new_table_id"])})
             res.table = table
             res.start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
-            res.end_at = new_end
+            res.end_at = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
             res.save(update_fields=["table", "start_at", "end_at", "updated_at"])
 
     # Also broadcast table-status events for force-closed sessions
