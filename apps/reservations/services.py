@@ -206,7 +206,6 @@ def create_staff_reservation(
 
 
 @transaction.atomic
-@transaction.atomic
 def cancel_reservation(reservation: Reservation, *, actor: User) -> Reservation:
     """Cancel a pending or active reservation. Rejects any other state.
 
