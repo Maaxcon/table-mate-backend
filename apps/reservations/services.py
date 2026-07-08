@@ -80,8 +80,12 @@ def _check_reservation_conflict(
     )
     if current_reservation_id is not None:
         qs = qs.exclude(id=current_reservation_id)
-    if qs.exists():
-        raise ReservationConflictError("Table is not available during the requested time.")
+    conflict = qs.first()
+    if conflict is not None:
+        raise ReservationConflictError(
+            "Table is not available during the requested time.",
+            conflicting_reservation_id=str(conflict.public_id),
+        )
 
     # A new/edited reservation may not begin before a party already seated on this
     # table: pending bookings queue AFTER the active session, never before it. The
@@ -94,9 +98,11 @@ def _check_reservation_conflict(
     )
     if current_reservation_id is not None:
         seated = seated.exclude(reservation_id=current_reservation_id)
-    if seated.exists():
+    seated_session = seated.select_related("reservation").first()
+    if seated_session is not None:
         raise ReservationConflictError(
-            "Table is occupied; a new reservation must start after the seated party."
+            "Table is occupied; a new reservation must start after the seated party.",
+            conflicting_reservation_id=str(seated_session.reservation.public_id),
         )
 
 
