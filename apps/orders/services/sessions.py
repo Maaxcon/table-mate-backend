@@ -180,6 +180,21 @@ def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: i
             )
             if not batch:
                 break
+
+            # Re-validate staleness under the lock — a concurrent auto-extend
+            # may have pushed reservation__session__ends_at past now since the
+            # first SELECT.  Re-run the staleness filter (without FOR UPDATE,
+            # so outer joins in the filter are legal) to exclude rows that are
+            # no longer stale.
+            still_stale_ids = set(
+                base.filter(pk__in=[c.pk for c in batch]).values_list("pk", flat=True)
+            )
+            batch = [c for c in batch if c.pk in still_stale_ids]
+            if not batch:
+                if len(batch_ids) < batch_size:
+                    break
+                continue
+
             for cart in batch:
                 cart.status = CartSessionStatus.CLOSED
             CartSession.objects.bulk_update(batch, ["status"])
