@@ -2,12 +2,9 @@ from datetime import datetime, timedelta
 from datetime import time as time_type
 from zoneinfo import ZoneInfo
 
-from django.db import models as dm
-from django.db.models import OuterRef, QuerySet, Subquery
-from django.db.models.functions import Coalesce, Greatest
+from django.db.models import QuerySet
 
-from apps.orders.models import Session, SessionStatus
-from apps.reservations.models import Reservation, ReservationStatus
+from apps.reservations.selectors import get_unavailable_table_ids
 from apps.restaurants.models import RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
 
@@ -68,32 +65,17 @@ def get_available_tables(
     if settings and not is_within_working_hours(settings, end_at):
         return Table.objects.none()
 
-    active_session_subquery = (
-        Session.objects.filter(
-            reservation=OuterRef("pk"),
-            status=SessionStatus.OPEN,
-        )
-        .order_by("opened_at")
-        .values("opened_at")[:1]
-    )
-
-    reservations = Reservation.objects.filter(
+    unavailable_ids = get_unavailable_table_ids(
         restaurant_id=restaurant_id,
-        status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-    ).annotate(effective_start=Greatest("start_at", Coalesce(Subquery(active_session_subquery), "start_at")))
-
-    overlapping = reservations.filter(
-        effective_start__lt=end_at,
-        end_at__gt=start_at,
+        start_at=start_at,
+        end_at=end_at,
+        current_reservation_id=current_reservation_id,
     )
-    if current_reservation_id is not None:
-        overlapping = overlapping.exclude(id=current_reservation_id)
-    overlapping_table_ids = overlapping.values("table_id")
 
     qs = Table.objects.filter(
         restaurant_id=restaurant_id,
         active=True,
-    ).exclude(id__in=dm.Subquery(overlapping_table_ids))
+    ).exclude(id__in=unavailable_ids)
 
     if guest_count is not None:
         qs = qs.filter(capacity__gte=guest_count)

@@ -655,3 +655,46 @@ class TestPublishEndpoint:
             format="json",
         )
         assert response.status_code == 400
+
+    def test_rotation_360_is_accepted_and_normalized_to_zero(
+        self, restaurant: Any, zone: Any
+    ) -> None:
+        # 360 degrees is the same angle as 0 — a bare max_value=359 bound used
+        # to reject it outright even though it's a perfectly valid rotation.
+        zid = str(zone.public_id)
+        client = _admin_api(restaurant.id)
+        payload = {"tables": [_table(rotation=360, zone_id=zid)]}
+
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                payload,
+                format="json",
+            )
+
+        assert response.status_code == 201, response.json()
+        version = LayoutVersion.objects.get(public_id=response.json()["public_id"])
+        assert version.layout_json["tables"][0]["rotation"] == 0
+
+    def test_rotation_extreme_negative_is_normalized_not_stored_raw(
+        self, restaurant: Any, zone: Any
+    ) -> None:
+        # No min_value meant an unbounded negative like -1000000 sailed
+        # through un-normalized. Normalizing via modulo maps it to its
+        # canonical angle instead of storing nonsense.
+        zid = str(zone.public_id)
+        client = _admin_api(restaurant.id)
+        payload = {"tables": [_table(rotation=-1000000, zone_id=zid)]}
+
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                payload,
+                format="json",
+            )
+
+        assert response.status_code == 201, response.json()
+        version = LayoutVersion.objects.get(public_id=response.json()["public_id"])
+        rotation = version.layout_json["tables"][0]["rotation"]
+        assert rotation == -1000000 % 360
+        assert 0 <= rotation < 360

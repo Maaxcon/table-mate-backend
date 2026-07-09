@@ -148,7 +148,7 @@ def test_signal_creates_receipt_on_completion(
 
 
 @pytest.mark.django_db
-def test_no_receipt_without_customer(
+def test_receipt_falls_back_to_session_waiter_without_customer(
     restaurant: Restaurant,
     table: Table,
     item: MenuItem,
@@ -182,4 +182,6 @@ def test_no_receipt_without_customer(
         status=OrderStatus.SUBMITTED,
     )
 
-    assert create_receipt_from_order(order) is None
+    receipt = create_receipt_from_order(order)
+    assert receipt is not None
+    assert receipt.customer_id == waiter.pk

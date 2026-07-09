@@ -2720,13 +2720,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reservation'
           description: ''
-  /api/reservations/reservations/available-slots/:
+  /api/reservations/reservations/availability/:
     get:
-      operationId: reservations_reservations_available_slots_retrieve
-      description: Returns available 30-min time slots for a table. If date is provided,
-        returns slots for that date only. Otherwise returns slots for the next 14
-        days.
-      summary: Available time slots for a table
+      operationId: reservations_reservations_availability_retrieve
+      description: 'Given restaurant + date + time (+ optional duration in minutes,
+        default 120), returns each active table''s availability for that slot as {
+        availability: { ''<table_public_id>'': true|false } }. A table is free when
+        the slot is within working hours, in the future, and has no overlapping pending/active
+        reservation. Powers the time-aware floor plan.'
+      summary: Per-table availability for one slot
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: YYYY-MM-DD.
+        required: true
+      - in: query
+        name: duration
+        schema:
+          type: integer
+        description: Minutes, default 120, clamped to a minimum of 30.
+      - in: query
+        name: restaurant
+        schema:
+          type: string
+        description: Restaurant public ID.
+        required: true
+      - in: query
+        name: time
+        schema:
+          type: string
+        description: HH:MM, restaurant-local.
+        required: true
       tags:
       - Reservations
       security:
@@ -2737,7 +2763,52 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Reservation'
+                $ref: '#/components/schemas/TableAvailabilityResponse'
+          description: ''
+  /api/reservations/reservations/available-slots/:
+    get:
+      operationId: reservations_reservations_available_slots_retrieve
+      description: Returns available 30-min time slots for a table. If date is provided,
+        returns slots for that date only. Otherwise returns slots for the next 14
+        days.
+      summary: Available time slots for a table
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: YYYY-MM-DD. Omit to get the next 14 days.
+      - in: query
+        name: exclude
+        schema:
+          type: array
+          items:
+            type: string
+        description: Reservation public ID(s) to exclude, e.g. the booking currently
+          being rescheduled.
+      - in: query
+        name: table
+        schema:
+          type: string
+        description: Table public ID.
+        required: true
+      tags:
+      - Reservations
+      security:
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                description: date (YYYY-MM-DD) -> list of bookable HH:MM slot start
+                  times
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
           description: ''
   /api/reservations/reservations/my/:
     get:
@@ -4373,8 +4444,6 @@ components:
           minimum: 1
         rotation:
           type: integer
-          maximum: 359
-          minimum: 0
           default: 0
         zone_id:
           type: string
@@ -5884,6 +5953,9 @@ components:
         height:
           type: integer
           minimum: 1
+        rotation:
+          type: integer
+          default: 0
         target_zone_id:
           type: string
           format: uuid
@@ -6512,6 +6584,16 @@ components:
       - restaurant
       - updated_at
       - zone
+    TableAvailabilityResponse:
+      type: object
+      properties:
+        availability:
+          type: object
+          additionalProperties:
+            type: boolean
+          description: table public_id -> is it free for the requested slot
+      required:
+      - availability
     TableEntity:
       type: object
       properties:
@@ -6541,8 +6623,6 @@ components:
           minimum: 1
         rotation:
           type: integer
-          maximum: 359
-          minimum: 0
           default: 0
         shape:
           $ref: '#/components/schemas/ShapeEnum'
@@ -6598,6 +6678,9 @@ components:
         height:
           type: integer
           minimum: 1
+        rotation:
+          type: integer
+          default: 0
         threshold_label:
           type: string
           default: ''

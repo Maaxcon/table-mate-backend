@@ -2,13 +2,11 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.db import transaction
-from django.db.models import OuterRef, Subquery
-from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.billing import ensure_visit_session
+from apps.orders.billing import close_reservation_carts, ensure_visit_session
 from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
 from apps.restaurants.models import Table
 from common.exceptions import ReservationCancelError, ReservationConflictError
@@ -21,6 +19,7 @@ from common.notification_events import emit_hall_new_reservation_notification
 
 from ..editor.selectors import get_available_tables
 from .models import Reservation, ReservationStatus, ReservationType
+from .selectors import get_unavailable_table_ids
 
 
 def check_availability(
@@ -47,30 +46,14 @@ def _check_reservation_conflict(
     end_at: datetime,
     current_reservation_id: int | None = None,
 ) -> None:
-    active_session_subquery = (
-        Session.objects.filter(
-            reservation=OuterRef("pk"),
-            status=SessionStatus.OPEN,
-        )
-        .order_by("opened_at")
-        .values("opened_at")[:1]
+    unavailable = get_unavailable_table_ids(
+        restaurant_id=restaurant_id,
+        start_at=start_at,
+        end_at=end_at,
+        table_ids=[table.pk],
+        current_reservation_id=current_reservation_id,
     )
-
-    qs = (
-        Reservation.objects.filter(
-            restaurant_id=restaurant_id,
-            table=table,
-            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
-        )
-        .annotate(effective_start=Greatest("start_at", Coalesce(Subquery(active_session_subquery), "start_at")))
-        .filter(
-            effective_start__lt=end_at,
-            end_at__gt=start_at,
-        )
-    )
-    if current_reservation_id is not None:
-        qs = qs.exclude(id=current_reservation_id)
-    if qs.exists():
+    if table.pk in unavailable:
         raise ReservationConflictError("Table is not available during the requested time.")
 
 
@@ -206,10 +189,33 @@ def create_staff_reservation(
 
 
 @transaction.atomic
-def cancel_reservation(reservation: Reservation, *, actor: User) -> Reservation:
+def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -> Reservation:
     """Cancel a pending or active reservation. Rejects any other state.
 
     Mirrors reschedule/activate: the state-machine lives here, not in the view.
+    Staff can cancel an ACTIVE (seated) reservation directly — unlike the
+    normal checkout flow (close_session), this doesn't require order items to
+    be served/voided first, since the booking is being voided outright. Any
+    lingering OPEN session must still be closed here — not because it would
+    otherwise leave the table looking occupied (get_session_grace_cutoffs
+    already filters reservation__status=ACTIVE, so a cancelled reservation's
+    session never blocks availability), but because a dangling open session
+    would trip activate_pending_reservation's "table already has an active
+    session" guard the next time this table's queue is worked.
+
+    Also closes any still-ACTIVE CartSession, mirroring close_visit_session's
+    fuller teardown — checkout_cart_session only checks the cart's own
+    status, not the reservation's, so leaving a cart open after cancelling a
+    seated booking would let the guest keep ordering/checking out (injecting
+    a kitchen ticket) against a reservation staff already ended.
+
+    Emits the same real-time hall events close_session does, so the floor
+    stays live instead of stale until a reload: HALL_TABLE_STATUS_CHANGED
+    (occupied->free) when a session was actually closed, and
+    HALL_RESERVATION_CANCELLED whenever the reservation had a table —
+    including the PENDING case with no session, so the customer floor drops
+    it from "upcoming" and refreshes slot availability. actor is optional
+    (as with create_reservation) — omitting it just skips the events.
     """
     locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
     if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
@@ -217,8 +223,26 @@ def cancel_reservation(reservation: Reservation, *, actor: User) -> Reservation:
     locked.status = ReservationStatus.CANCELLED
     locked.save(update_fields=["status", "updated_at"])
 
-    if locked.table is not None:
-        table = locked.table
+    session = Session.objects.filter(reservation=locked, status=SessionStatus.OPEN).first()
+    if session:
+        session.status = SessionStatus.CLOSED
+        session.save(update_fields=["status", "updated_at"])
+
+    close_reservation_carts(locked)
+
+    table = locked.table
+    if actor is not None and table is not None:
+        if session is not None:
+            transaction.on_commit(
+                lambda: emit_hall_table_status_changed(
+                    locked.restaurant_id,
+                    table_id=str(table.public_id),
+                    previous_status="occupied",
+                    current_status="free",
+                    session_id=str(session.public_id),
+                    actor=actor,
+                )
+            )
         transaction.on_commit(
             lambda: emit_hall_reservation_cancelled(
                 locked.restaurant_id,

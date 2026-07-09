@@ -17,8 +17,9 @@ from common.api import (
     PublicRestaurantQueryMixin,
     RestaurantScopedViewSetMixin,
     get_restaurant_id_from_auth,
+    get_restaurant_public_id_from_auth,
     require_restaurant_id_from_auth,
-    require_restaurant_public_id_from_auth,
+    resolve_restaurant_public_id,
 )
 from common.permissions import HasAnyRole
 
@@ -48,7 +49,11 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
     @action(detail=False, methods=["post"], permission_classes=[IsAdmin])
     def publish(self, request: Request) -> Response:
         restaurant_id = require_restaurant_id_from_auth(request)
-        restaurant_public_id = require_restaurant_public_id_from_auth(request)
+        # Older tokens carry restaurant_id but not the public_id claim; derive it
+        # from the resolved restaurant instead of hard-failing on a stale token.
+        restaurant_public_id = get_restaurant_public_id_from_auth(request) or resolve_restaurant_public_id(
+            restaurant_id
+        )
         serializer = PublishLayoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
