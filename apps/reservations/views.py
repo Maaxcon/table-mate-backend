@@ -181,7 +181,17 @@ class ReservationViewSet(
         user = cast(User, request.user)
         guest_name = request.data.get("guest_name")
 
-        if getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
+        # Route to a walk-in/guest booking only when staff supply a guest name.
+        # Staff booking for themselves on the customer page (no name) falls
+        # through to create_reservation so it links to their account and shows
+        # up in "my reservations" — otherwise create_staff_reservation leaves
+        # customer=None and the booking is invisible to the person who made it.
+        staff_guest_booking = bool(guest_name and guest_name.strip()) and getattr(user, "role", None) in (
+            RoleCode.ADMIN,
+            RoleCode.WAITER,
+        )
+
+        if staff_guest_booking:
             reservation = create_staff_reservation(
                 restaurant_id=restaurant_id,
                 table_id=str(serializer.validated_data["table"].public_id),
