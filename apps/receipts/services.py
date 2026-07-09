@@ -17,7 +17,11 @@ def _money(value: Decimal) -> Decimal:
 
 def _resolve_customer(order: Order) -> User | None:
     """The customer a receipt belongs to: the reservation guest, or the
-    creator when they are a customer (e.g. a prepaid order)."""
+    creator when they are a customer (e.g. a prepaid order).
+
+    For staff-opened walk-ins there may be no guest account; in that case the
+    waiter who opened the session owns the cabinet history snapshot.
+    """
     session = order.session
     reservation = getattr(session, "reservation", None)
     if reservation is not None and reservation.customer_id:
@@ -25,6 +29,8 @@ def _resolve_customer(order: Order) -> User | None:
     creator = order.created_by
     if creator is not None and creator.role == RoleCode.CUSTOMER:
         return creator
+    if session.opened_by_id:
+        return cast(User, session.opened_by)
     return None
 
 

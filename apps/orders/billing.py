@@ -134,6 +134,30 @@ def close_reservation_carts(reservation: Reservation) -> list[CartSession]:
     return carts
 
 
+def _finalize_session_orders_for_history(session: Session) -> None:
+    """Mark non-cancelled session orders completed and snapshot receipts.
+
+    Close-check in waiter flow is the moment the visit is finalized. We mirror
+    that in persistence so cabinet history can immediately show the full check.
+    Idempotent: completed orders and existing receipts are reused.
+    """
+    from apps.receipts.services import create_receipt_from_order
+
+    orders = list(Order.objects.select_for_update().filter(session=session).exclude(status=OrderStatus.CANCELLED))
+    if not orders:
+        return
+
+    stale_ids = {order.pk for order in orders if order.status != OrderStatus.COMPLETED}
+    if stale_ids:
+        Order.objects.filter(pk__in=stale_ids).update(status=OrderStatus.COMPLETED)
+        for order in orders:
+            if order.pk in stale_ids:
+                order.status = OrderStatus.COMPLETED
+
+    for order in orders:
+        create_receipt_from_order(order)
+
+
 def close_visit_session(*, session: Session, actor: User | None = None) -> Session:
     """End a visit and free the table.
 
@@ -147,6 +171,8 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
         if session.status != SessionStatus.CLOSED:
             session.status = SessionStatus.CLOSED
             session.save(update_fields=["status"])
+
+        _finalize_session_orders_for_history(session)
 
         reservation = session.reservation
         if reservation is not None:
