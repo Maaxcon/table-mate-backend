@@ -82,6 +82,9 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
+    async def hall_event(self, message: dict[str, object]) -> None:
+        pass
+
     async def notification_event(self, message: dict[str, object]) -> None:
         await self.send(text_data=json.dumps(message["event"]))
 
