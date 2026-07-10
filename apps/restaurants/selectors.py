@@ -99,10 +99,16 @@ def get_working_hours_close_at(
         # Same-day close
         close_dt = local.replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
     else:
-        # Overnight window — close is the next day
-        close_dt = (local + timedelta_cls(days=1)).replace(
-            hour=close_hour, minute=close_minute, second=0, microsecond=0,
-        )
+        # Overnight window — close rolls into the next day only when `when` is
+        # on the evening side (>= open). In the after-midnight side (< close)
+        # the close is on the same calendar day (the end of the previous day's window).
+        now_min = local.hour * 60 + local.minute
+        if now_min >= open_min:
+            close_dt = (local + timedelta_cls(days=1)).replace(
+                hour=close_hour, minute=close_minute, second=0, microsecond=0,
+            )
+        else:
+            close_dt = local.replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
 
     return close_dt.astimezone(UTC)
 
