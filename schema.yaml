@@ -3702,6 +3702,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BatchUpdateItem'
+        cancellations:
+          type: array
+          items:
+            type: string
+            format: uuid
       required:
       - changes
     BatchUpdateItem:
