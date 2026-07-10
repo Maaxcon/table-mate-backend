@@ -187,15 +187,7 @@ def test_customer_can_prolong_active_reservation_with_open_session(
     customer = user_factory(role=RoleCode.CUSTOMER)
     customer.save()
     reservation = _active_reservation(restaurant, table, customer)
-    Session.objects.create(
-        restaurant=restaurant,
-        table=table,
-        reservation=reservation,
-        guest_count=reservation.guest_count,
-        status=SessionStatus.OPEN,
-        currency="UAH",
-        opened_at=reservation.start_at,
-    )
+    session = Session.objects.get(reservation=reservation, status=SessionStatus.OPEN)
     original_end = reservation.end_at
     client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
 
@@ -206,8 +198,8 @@ def test_customer_can_prolong_active_reservation_with_open_session(
     )
 
     assert response.status_code == status.HTTP_200_OK
-    reservation.refresh_from_db()
-    assert reservation.end_at == original_end + timedelta(minutes=30)
+    session.refresh_from_db()
+    assert session.ends_at == original_end + timedelta(minutes=30)
 
 
 @pytest.mark.django_db

@@ -50,8 +50,9 @@ class TestCreateStaffReservation:
         res = Reservation.objects.get(public_id=resp.data["public_id"])
         assert res.created_by_staff is True
         assert res.customer is None
-        assert "John Doe" in res.notes
+        assert res.guest_name == "John Doe"
         assert "+380501234567" in res.notes
+        assert "John Doe" not in res.notes
 
     def test_staff_creates_with_notes_formatted(
         self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
@@ -72,9 +73,10 @@ class TestCreateStaffReservation:
         )
         assert resp.status_code == status.HTTP_201_CREATED
         res = Reservation.objects.get(public_id=resp.data["public_id"])
-        assert "Jane Smith" in res.notes
+        assert res.guest_name == "Jane Smith"
         assert "Window seat please" in res.notes
         assert "Phone" not in res.notes
+        assert "Jane Smith" not in res.notes
 
     def test_customer_cannot_use_guest_name(
         self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings

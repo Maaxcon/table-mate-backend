@@ -435,8 +435,6 @@ class ReservationViewSet(
                 d = date_type.fromisoformat(date_str)
             except ValueError:
                 raise ValidationError("Invalid date format. Use YYYY-MM-DD.") from None
-            if d < today_local:
-                raise ValidationError("Cannot query slots for a past date.")
             result[date_str] = day_slots(d)
         else:
             for i in range(14):

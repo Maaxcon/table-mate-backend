@@ -95,7 +95,7 @@ class TestBatchUpdate:
             },
             format="json",
         )
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.status_code == status.HTTP_409_CONFLICT
 
     def test_overlapping_payload_items_rejected(
         self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
