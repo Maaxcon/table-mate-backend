@@ -155,7 +155,7 @@ class ReservationViewSet(
                     and instance.status == ReservationStatus.ACTIVE
                 ):
                     raise PermissionDenied("You cannot cancel an active reservation.")
-                reservation = cancel_reservation(reservation=instance)
+                reservation = cancel_reservation(reservation=instance, actor=request.user)  # type: ignore[arg-type]
             else:
                 reservation = update_reservation_status(
                     instance,

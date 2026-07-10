@@ -263,7 +263,7 @@ def create_staff_reservation(
 
 
 @transaction.atomic
-def cancel_reservation(reservation: Reservation) -> Reservation:
+def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -> Reservation:
     """Cancel a pending or active reservation. Rejects any other state.
 
     Mirrors reschedule/activate: the state-machine lives here, not in the view.
@@ -272,7 +272,25 @@ def cancel_reservation(reservation: Reservation) -> Reservation:
     if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
         raise ReservationCancelError("Only pending or active reservations can be cancelled.")
     locked.status = ReservationStatus.CANCELLED
-    locked.save(update_fields=["status"])
+    locked.save(update_fields=["status", "updated_at"])
+
+    restaurant_id = locked.restaurant_id
+    table = locked.table
+    if table is not None:
+        table_id = str(table.public_id)
+        if actor is not None:
+            transaction.on_commit(
+                lambda: emit_hall_reservation_cancelled(
+                    restaurant_id,
+                    reservation_id=str(locked.public_id),
+                    table_id=table_id,
+                    actor=actor,
+                )
+            )
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
+        )
+
     return locked
 
 
@@ -840,12 +858,19 @@ def batch_update_reservations(
     today = timezone.now().date()
     now_time = timezone.now().time().replace(second=0, microsecond=0)
     for c in changes:
-        if res_map[str(c["reservation_id"])].status == ReservationStatus.ACTIVE:
+        rid = str(c["reservation_id"])
+        if res_map[rid].status == ReservationStatus.ACTIVE:
             continue
         if c["new_date"] < today:
-            raise ValidationError("Cannot batch-update to a past date.")
+            raise ReservationConflictError(
+                "Cannot batch-update to a past date.",
+                conflicting_reservation_id=rid,
+            )
         if c["new_date"] == today and c["new_start_time"] < now_time:
-            raise ValidationError("Cannot schedule a reservation in the past.")
+            raise ReservationConflictError(
+                "Cannot schedule a reservation in the past.",
+                conflicting_reservation_id=rid,
+            )
 
     intervals: list[tuple[str, datetime, datetime, str]] = []
     for c in changes:
