@@ -1,18 +1,22 @@
 """Cart-session lifecycle: open, ensure-for-table, and stale cleanup."""
 
+from datetime import timedelta
+
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
+from apps.orders.billing import close_visit_session
 from apps.reservations.models import ReservationStatus
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import Table
 from common.exceptions import NoActiveReservationError, ReservationNotFoundError
 from common.notification_events import emit_cart_created
 
-from ..models import CartSession, CartSessionStatus
+from ..models import CartSession, CartSessionStatus, Session, SessionStatus
 from ..selectors import _resolve_allowed_reservation_participant_ids, get_reservation
 from .cart import _broadcast_cart_updated
 
@@ -129,6 +133,7 @@ def ensure_active_cart_for_table(
 
 
 _STALE_CART_BATCH_SIZE = 500
+_OVERDUE_VISIT_BATCH_SIZE = 200
 
 
 def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: int = _STALE_CART_BATCH_SIZE) -> int:
@@ -166,4 +171,33 @@ def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: i
         total_closed += len(batch)
         if len(batch) < batch_size:
             break
+    return total_closed
+
+
+def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE) -> int:
+    """Close OPEN sessions whose active reservation ended beyond the grace window."""
+    now = timezone.now()
+    grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
+    cutoff = now - timedelta(minutes=grace_minutes)
+    base = Session.objects.filter(
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+        reservation__end_at__lte=cutoff,
+    )
+
+    total_closed = 0
+    while True:
+        batch_ids = list(base.order_by("pk").values_list("pk", flat=True)[:batch_size])
+        if not batch_ids:
+            break
+
+        for session_id in batch_ids:
+            # Idempotent: if another worker closed it first, close_visit_session
+            # simply returns the already-closed visit.
+            close_visit_session(session=Session(pk=session_id), actor=None)
+            total_closed += 1
+
+        if len(batch_ids) < batch_size:
+            break
+
     return total_closed

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
@@ -420,10 +421,17 @@ def activate_pending_reservation(
     if table is None:
         raise ReservationConflictError("Reservation has no table assigned.")
 
-    if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+    now = timezone.now()
+    grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
+    occupancy_cutoff = now - timedelta(minutes=grace_minutes)
+    if Session.objects.filter(
+        table=table,
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+        reservation__end_at__gt=occupancy_cutoff,
+    ).exists():
         raise ReservationConflictError("Table already has an active session.")
 
-    now = timezone.now()
     earlier_pending = (
         Reservation.objects.filter(
             restaurant_id=reservation.restaurant_id,

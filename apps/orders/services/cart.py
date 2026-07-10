@@ -14,11 +14,12 @@ __all__ = [
 ]
 
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Final, cast
 
 from django.contrib.auth.models import AnonymousUser
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Sum
 from django.utils import timezone
@@ -26,6 +27,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
 from apps.orders.broadcast import cart_group_send
+from apps.reservations.models import ReservationStatus
 from apps.restaurants.models import Table
 from apps.restaurants.selectors import is_restaurant_open
 from common.exceptions import (
@@ -404,7 +406,15 @@ def open_session(
 ) -> Session:
     from common.exceptions import TableOccupiedError
 
-    if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+    now = timezone.now()
+    grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
+    occupancy_cutoff = now - timedelta(minutes=grace_minutes)
+    if Session.objects.filter(
+        table=table,
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+        reservation__end_at__gt=occupancy_cutoff,
+    ).exists():
         raise TableOccupiedError()
 
     reservation = create_walk_in_reservation(

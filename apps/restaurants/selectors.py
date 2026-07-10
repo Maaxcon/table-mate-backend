@@ -1,7 +1,9 @@
 from datetime import datetime as datetime_cls
+from datetime import timedelta
 from typing import Any, TypedDict
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.db.models import Exists, OuterRef, QuerySet
 from django.utils import timezone
 
@@ -75,11 +77,15 @@ def get_employee(employee_id: str, restaurant_id: int) -> User | None:
 
 
 def get_tables_with_occupancy(restaurant_id: int) -> QuerySet[Table]:
+    now = timezone.now()
+    grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
+    occupancy_cutoff = now - timedelta(minutes=grace_minutes)
     qs = Table.objects.select_related("zone").filter(restaurant_id=restaurant_id)
     occupied_subquery = Session.objects.filter(
         table=OuterRef("pk"),
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
+        reservation__end_at__gt=occupancy_cutoff,
     )
     return qs.annotate(is_occupied=Exists(occupied_subquery))
 
