@@ -36,27 +36,19 @@ def _to_jsonable(value: Any) -> Any:
 
 
 def _generate_public_number(restaurant_id: int) -> str:
-    active_nums: set[int] = set()
-    inactive_nums: set[int] = set()
-
-    for pn, active in (
-        Table.objects.filter(restaurant_id=restaurant_id)
-        .values_list("public_number", "active")
+    # Monotonic numbering: always one above the highest ``T<n>`` ever used,
+    # active or inactive. Reusing a dead table's number made a freshly created
+    # table silently reappear as a previously deleted one (the "ghost" T1 in two
+    # zones), so we never recycle numbers.
+    highest = 0
+    for (pn,) in (
+        Table.objects.filter(restaurant_id=restaurant_id).values_list("public_number")
     ):
         m = re.fullmatch(r"T(\d+)", str(pn))
         if m:
-            num = int(m.group(1))
-            if active:
-                active_nums.add(num)
-            else:
-                inactive_nums.add(num)
+            highest = max(highest, int(m.group(1)))
 
-    reusable = sorted(inactive_nums - active_nums)
-    if reusable:
-        return f"T{reusable[0]}"
-
-    max_num = max(active_nums | inactive_nums, default=0)
-    return f"T{max_num + 1}"
+    return f"T{highest + 1}"
 
 
 @transaction.atomic
@@ -76,6 +68,19 @@ def publish_layout(
     # the persisted layout geometry — pull them out so they never land in the stored payload.
     deleted_table_ids = layout_data.pop("deleted_table_ids", [])
     zones_data = layout_data.pop("zones", {})
+
+    # ------------------------------------------------------------------
+    # 0. Sweep orphan soft-deleted tables so editor churn (create -> delete
+    #    without ever booking) does not pile up inactive rows. Only tables with
+    #    no history are removed: ``sessions`` is PROTECT and ``reservations`` is
+    #    SET_NULL, so anything ever used is kept and its records stay intact.
+    # ------------------------------------------------------------------
+    Table.objects.filter(
+        restaurant_id=restaurant_id,
+        active=False,
+        sessions__isnull=True,
+        reservations__isnull=True,
+    ).delete()
 
     # ------------------------------------------------------------------
     # 1. Process zone creations (before entity processing so zones exist

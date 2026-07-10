@@ -1,10 +1,12 @@
 __all__ = [
     "checkout_cart_session",
+    "close_reservation_carts",
     "close_visit_session",
     "ensure_visit_session",
 ]
 
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -110,6 +112,53 @@ def ensure_visit_session(
     return session
 
 
+def close_reservation_carts(reservation: Reservation) -> list[CartSession]:
+    """Close every ACTIVE CartSession for `reservation` and notify each guest
+    cart that it has ended. Must run inside the caller's own
+    transaction.atomic() (uses select_for_update) — the broadcast defers via
+    _broadcast_cart_updated's own transaction.on_commit, so it's safe to call
+    from here regardless of when the outer transaction actually commits.
+
+    Without this, a guest whose reservation was cancelled/completed out from
+    under them keeps a live cart: checkout_cart_session only checks the
+    CartSession's own status, not the reservation's, so they could still
+    order/checkout and inject a kitchen ticket against a booking staff
+    already ended.
+    """
+    carts = list(
+        CartSession.objects.select_for_update().filter(reservation=reservation, status=CartSessionStatus.ACTIVE)
+    )
+    for cart in carts:
+        cart.status = CartSessionStatus.CLOSED
+    if carts:
+        CartSession.objects.bulk_update(carts, ["status"])
+    for cart in carts:
+        _broadcast_cart_updated(cart)
+    return carts
+
+
+def _finalize_session_orders_for_history(session: Session) -> None:
+    """Mark non-cancelled session orders completed and snapshot receipts.
+
+    Close-check in waiter flow is the moment the visit is finalized. We mirror
+    that in persistence so cabinet history can immediately show the full check.
+    Idempotent: completed orders and existing receipts are reused.
+    """
+    from apps.receipts.services import create_receipt_from_order
+
+    orders = list(Order.objects.select_for_update().filter(session=session).exclude(status=OrderStatus.CANCELLED))
+    if not orders:
+        return
+
+    stale_ids = {order.pk for order in orders if order.status != OrderStatus.COMPLETED}
+    if stale_ids:
+        Order.objects.filter(pk__in=stale_ids).update(status=OrderStatus.COMPLETED)
+        for order in orders:
+            if order.pk in stale_ids:
+                order.status = OrderStatus.COMPLETED
+
+    for order in orders:
+        create_receipt_from_order(order)
 def close_visit_session(*, session: Session, actor: User | None = None) -> Session:
     """End a visit and free the table.
 
@@ -118,7 +167,6 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
     Checks that all order items are served/voided before allowing close.
     Idempotent — safe to call on an already-closed session.
     """
-    closed_carts: list[CartSession] = []
     with transaction.atomic():
         session = Session.objects.select_for_update().select_related("reservation").get(pk=session.pk)
 
@@ -133,42 +181,35 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
             session.status = SessionStatus.CLOSED
             session.save(update_fields=["status"])
 
+        _finalize_session_orders_for_history(session)
+
         reservation = session.reservation
         if reservation is not None:
             if reservation.status == ReservationStatus.ACTIVE:
                 reservation.status = ReservationStatus.COMPLETED
-                reservation.end_at = timezone.now()
+                now = timezone.now()
+                reservation.end_at = (
+                    now if now > reservation.start_at else reservation.start_at + timedelta(seconds=1)
+                )
                 reservation.save(update_fields=["status", "end_at"])
-            closed_carts = list(
-                CartSession.objects.select_for_update().filter(reservation=reservation, status=CartSessionStatus.ACTIVE)
-            )
-            for cart in closed_carts:
-                cart.status = CartSessionStatus.CLOSED
-            if closed_carts:
-                CartSession.objects.bulk_update(closed_carts, ["status"])
+            close_reservation_carts(reservation)
 
-        if actor is not None and session.table is not None:
+        if actor is not None:
             table = session.table
-            sid = str(session.public_id)
-            restaurant_id = session.restaurant_id
-            table_id = str(table.public_id)
             transaction.on_commit(
                 lambda: emit_hall_table_status_changed(
-                    restaurant_id,
-                    table_id=table_id,
+                    session.restaurant_id,
+                    table_id=str(table.public_id),
                     previous_status="occupied",
                     current_status="free",
-                    session_id=sid,
+                    session_id=str(session.public_id),
                     actor=actor,
                 )
             )
             transaction.on_commit(
-                lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
+                lambda: emit_hall_reservations_updated(session.restaurant_id, table_ids=[str(table.public_id)])
             )
 
-    # Tell any open guest cart it has ended.
-    for cart in closed_carts:
-        _broadcast_cart_updated(cart)
     return session
 
 
@@ -269,6 +310,7 @@ def checkout_cart_session(
         order_tax = Decimal("0")
         # Build a map of guest_identity → display_name for this session.
         from apps.orders.models import GuestProfile
+
         guest_names = dict(
             GuestProfile.objects.filter(cart_session=cart_session).values_list("guest_identity", "display_name")
         )

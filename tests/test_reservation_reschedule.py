@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from apps.authentication.models import RoleCode
+from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.services import check_availability
 from apps.restaurants.models import Restaurant, Table
@@ -172,6 +173,44 @@ def test_customer_can_prolong_active_reservation(
 
 
 @pytest.mark.django_db
+def test_customer_can_prolong_active_reservation_with_open_session(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+    api_factory: Callable[..., AuthContext],
+) -> None:
+    """Activating a reservation always opens a Session on its table (see
+    activate_reservation). A guest prolonging that same reservation must not
+    have their own session's grace-cutoff block the extension as a false
+    self-conflict — regression test for that exact bug.
+    """
+    customer = user_factory(role=RoleCode.CUSTOMER)
+    customer.save()
+    reservation = _active_reservation(restaurant, table, customer)
+    Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        reservation=reservation,
+        guest_count=reservation.guest_count,
+        status=SessionStatus.OPEN,
+        currency="UAH",
+        opened_at=reservation.start_at,
+    )
+    original_end = reservation.end_at
+    client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
+
+    response = client.patch(
+        f"/api/reservations/reservations/{reservation.public_id}/",
+        {"end_at": (original_end + timedelta(minutes=30)).isoformat()},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    reservation.refresh_from_db()
+    assert reservation.end_at == original_end + timedelta(minutes=30)
+
+
+@pytest.mark.django_db
 def test_customer_cannot_reschedule_active_reservation_start_time(
     restaurant: Restaurant,
     table: Table,
@@ -263,3 +302,43 @@ def test_my_reservations_filters_active_records_and_supports_limit_offset(
     ]
     assert data[0]["restaurant_info"]["name"] == restaurant.name
     assert data[0]["table_info"]["public_number"] == table.public_number
+
+
+@pytest.mark.django_db
+def test_my_reservations_status_past_returns_history_newest_first(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+    api_factory: Callable[..., AuthContext],
+) -> None:
+    customer = user_factory(role=RoleCode.CUSTOMER)
+    customer.save()
+    base_start = timezone.now() - timedelta(days=10)
+    statuses = [
+        ReservationStatus.PENDING,
+        ReservationStatus.ACTIVE,
+        ReservationStatus.COMPLETED,
+        ReservationStatus.CANCELLED,
+    ]
+    for index, reservation_status in enumerate(statuses):
+        start_at = base_start + timedelta(days=index)
+        Reservation.objects.create(
+            restaurant=restaurant,
+            customer=customer,
+            table=table,
+            guest_count=2,
+            start_at=start_at,
+            end_at=start_at + timedelta(hours=2),
+            status=reservation_status,
+        )
+    client, _ = api_factory(user=customer, restaurant_id=restaurant.id)
+
+    response = client.get("/api/reservations/reservations/my/?status=past")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    # Only completed/cancelled, newest start_at first (cancelled is day 3, completed day 2).
+    assert [item["status"] for item in data] == [
+        ReservationStatus.CANCELLED,
+        ReservationStatus.COMPLETED,
+    ]

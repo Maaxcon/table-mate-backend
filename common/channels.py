@@ -58,14 +58,43 @@ async def authenticate_websocket(scope: dict) -> tuple[User | None, int | None]:
     if user is None:
         return None, None
 
+    # A valid token without a restaurant claim (e.g. a customer) still yields an
+    # authenticated user; the restaurant is just unknown and may be supplied
+    # another way (see extract_ws_restaurant for the public floor stream).
     claim = validated_token.get("restaurant_id")
     if claim is None:
-        return None, None
+        return user, None
 
     try:
         return user, int(claim)
     except (TypeError, ValueError):
-        return None, None
+        return user, None
+
+
+def extract_ws_restaurant(scope: dict) -> str | None:  # type: ignore[type-arg]
+    """Read the ``?restaurant=<public_id>`` query param from a WebSocket scope."""
+    raw_query_string = scope.get("query_string", b"")
+    query_string = raw_query_string.decode() if isinstance(raw_query_string, bytes) else str(raw_query_string)
+    values = parse_qs(query_string).get("restaurant")
+    return values[0] if values else None
+
+
+def resolve_restaurant_pk_sync(public_id: str) -> int | None:
+    """Map a restaurant public_id to its integer pk, or None if it doesn't exist.
+
+    Plain sync function — for synchronous callers (Django views). Async
+    callers (WebSocket consumers) use resolve_restaurant_pk below instead.
+    """
+    from apps.restaurants.models import Restaurant
+
+    try:
+        uuid.UUID(str(public_id))
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return Restaurant.objects.filter(public_id=public_id).values_list("id", flat=True).first()
+
+
+resolve_restaurant_pk = database_sync_to_async(resolve_restaurant_pk_sync)
 
 
 async def authenticate_websocket_protocol(

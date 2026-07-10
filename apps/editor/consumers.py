@@ -1,23 +1,25 @@
 from __future__ import annotations
 
 import json
-from urllib.parse import parse_qs
 
-from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
-from django.core.exceptions import ValidationError
 
 from apps.authentication.models import RoleCode
 from common.channels import (
     TOKEN_SUBPROTOCOL,
     authenticate_websocket,
+    extract_ws_restaurant,
     extract_ws_token,
     hall_group_name,
+    resolve_restaurant_pk,
     staff_group_name,
 )
 
 _HALL_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 _STAFF_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
+_FLOOR_ALLOWED_ROLES: frozenset[str] = frozenset(
+    {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER}
+)
 
 
 class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
@@ -159,20 +161,37 @@ class StaffReservationsConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
 class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
-        raw_query = self.scope.get("query_string", b"")
-        query_string = raw_query.decode() if isinstance(raw_query, bytes) else str(raw_query)
-        params = parse_qs(query_string)
-        public_id = params.get("restaurant_id", [None])[0]
+        # Auth is optional here, not required: the floor stream is public — only
+        # already-public table/reservation status leaks through (see
+        # _filter_event_for_floor) — so an anonymous guest browsing the booking
+        # page before logging in may still connect via ?restaurant=<public_id>,
+        # same as the guest-facing floor page itself. A malformed/expired token
+        # degrades to anonymous rather than rejecting the connection outright.
+        try:
+            user, restaurant_id = await authenticate_websocket(self.scope)
+        except Exception:
+            user, restaurant_id = None, None
 
-        if not public_id:
+        # An explicit ?restaurant=<public_id> wins over the token's restaurant
+        # claim. Otherwise a staff member of one restaurant viewing another's
+        # booking page would watch their *own* floor while the page shows
+        # someone else's tables. Customers and anonymous guests carry no claim
+        # and rely on the param entirely; fall back to the claim only when the
+        # param is missing or unresolvable.
+        public_id = extract_ws_restaurant(self.scope)
+        if public_id:
+            resolved = await resolve_restaurant_pk(public_id)
+            if resolved is not None:
+                restaurant_id = resolved
+
+        if restaurant_id is None:
             await self.accept()
             await self.close(code=4001)
             return
 
-        restaurant_id = await _resolve_restaurant_from_uuid(public_id)
-        if restaurant_id is None:
+        if user is not None and user.role not in _FLOOR_ALLOWED_ROLES:
             await self.accept()
-            await self.close(code=4001)
+            await self.close(code=4003)
             return
 
         self.group_name = hall_group_name(restaurant_id)

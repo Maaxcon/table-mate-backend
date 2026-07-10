@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -11,7 +11,7 @@ from rest_framework.test import APIClient
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
 from apps.editor.models import LayoutVersion
-from apps.restaurants.models import Table
+from apps.restaurants.models import Restaurant, Table
 from common.channels import hall_group_name
 from common.hall_events import emit_hall_layout_published, emit_hall_zone_updated
 from tests.conftest import RestaurantFactory, UserFactory
@@ -83,8 +83,14 @@ def _layout_c(zone_id: str) -> dict[str, Any]:
         "tables": [
             _table(x=15, y=25, zone_id=zone_id),
             _table(
-                x=100, y=200, width=800, height=400,
-                shape="rectangle", capacity=8, rotation=180, zone_id=zone_id,
+                x=100,
+                y=200,
+                width=800,
+                height=400,
+                shape="rectangle",
+                capacity=8,
+                rotation=180,
+                zone_id=zone_id,
             ),
         ]
     }
@@ -385,7 +391,10 @@ class TestPublishEndpoint:
 
         # Include the existing table in the layout so it doesn't get soft-deleted
         existing_table_entry = _table(
-            x=200, y=300, width=400, height=400,
+            x=200,
+            y=300,
+            width=400,
+            height=400,
             public_number=table.public_number,
             zone_id=str(zone.public_id),
         )
@@ -435,9 +444,7 @@ class TestPublishEndpoint:
             status=ReservationStatus.PENDING,
         )
 
-    def test_moved_table_with_reservation_does_not_conflict(
-        self, restaurant: Any, table: Any
-    ) -> None:
+    def test_moved_table_with_reservation_does_not_conflict(self, restaurant: Any, table: Any) -> None:
         """Moving a table (same id, new position) must never trigger the in-use 400."""
         reservation = self._make_reservation(restaurant, table)
 
@@ -458,9 +465,7 @@ class TestPublishEndpoint:
         reservation.refresh_from_db()
         assert reservation.table_id == table.pk
 
-    def test_table_omitted_without_delete_flag_stays_active(
-        self, restaurant: Any, table: Any
-    ) -> None:
+    def test_table_omitted_without_delete_flag_stays_active(self, restaurant: Any, table: Any) -> None:
         """A table absent from the layout but not explicitly deleted is left untouched."""
         self._make_reservation(restaurant, table)
 
@@ -476,9 +481,7 @@ class TestPublishEndpoint:
         table.refresh_from_db()
         assert table.active is True
 
-    def test_explicit_delete_with_reservation_conflicts(
-        self, restaurant: Any, table: Any
-    ) -> None:
+    def test_explicit_delete_with_reservation_conflicts(self, restaurant: Any, table: Any) -> None:
         self._make_reservation(restaurant, table)
 
         client = _admin_api(restaurant.id)
@@ -494,9 +497,7 @@ class TestPublishEndpoint:
         table.refresh_from_db()
         assert table.active is True
 
-    def test_explicit_delete_without_reservation_deactivates(
-        self, restaurant: Any, table: Any
-    ) -> None:
+    def test_explicit_delete_without_reservation_deactivates(self, restaurant: Any, table: Any) -> None:
         client = _admin_api(restaurant.id)
         with patch("apps.editor.services.emit_hall_layout_published"):
             response = client.post(
@@ -509,9 +510,7 @@ class TestPublishEndpoint:
         table.refresh_from_db()
         assert table.active is False
 
-    def test_deleted_table_ids_not_persisted_in_payload(
-        self, restaurant: Any, table: Any
-    ) -> None:
+    def test_deleted_table_ids_not_persisted_in_payload(self, restaurant: Any, table: Any) -> None:
         client = _admin_api(restaurant.id)
         with patch("apps.editor.services.emit_hall_layout_published"):
             response = client.post(
@@ -585,7 +584,7 @@ class TestPublishEndpoint:
     def test_cross_tenant_delete_isolation(self, restaurant: Any, zone: Any) -> None:
         from apps.restaurants.models import Zone
 
-        other_restaurant = RestaurantFactory()
+        other_restaurant = cast(Restaurant, RestaurantFactory())  # type: ignore[no-untyped-call]
         other_zone = Zone.objects.create(restaurant=other_restaurant, name="Main Hall")
         other_table = Table.objects.create(
             restaurant=other_restaurant,
@@ -627,9 +626,7 @@ class TestPublishEndpoint:
     def test_rejects_round_table_mismatched_dimensions(self, restaurant: Any, zone: Any) -> None:
         zid = str(zone.public_id)
         client = _admin_api(restaurant.id)
-        payload = {
-            "tables": [_table(width=400, height=200, shape="round", zone_id=zid)]
-        }
+        payload = {"tables": [_table(width=400, height=200, shape="round", zone_id=zid)]}
         response = client.post(
             "/api/editor/layouts/publish/",
             payload,
@@ -658,3 +655,46 @@ class TestPublishEndpoint:
             format="json",
         )
         assert response.status_code == 400
+
+    def test_rotation_360_is_accepted_and_normalized_to_zero(
+        self, restaurant: Any, zone: Any
+    ) -> None:
+        # 360 degrees is the same angle as 0 — a bare max_value=359 bound used
+        # to reject it outright even though it's a perfectly valid rotation.
+        zid = str(zone.public_id)
+        client = _admin_api(restaurant.id)
+        payload = {"tables": [_table(rotation=360, zone_id=zid)]}
+
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                payload,
+                format="json",
+            )
+
+        assert response.status_code == 201, response.json()
+        version = LayoutVersion.objects.get(public_id=response.json()["public_id"])
+        assert version.layout_json["tables"][0]["rotation"] == 0
+
+    def test_rotation_extreme_negative_is_normalized_not_stored_raw(
+        self, restaurant: Any, zone: Any
+    ) -> None:
+        # No min_value meant an unbounded negative like -1000000 sailed
+        # through un-normalized. Normalizing via modulo maps it to its
+        # canonical angle instead of storing nonsense.
+        zid = str(zone.public_id)
+        client = _admin_api(restaurant.id)
+        payload = {"tables": [_table(rotation=-1000000, zone_id=zid)]}
+
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = client.post(
+                "/api/editor/layouts/publish/",
+                payload,
+                format="json",
+            )
+
+        assert response.status_code == 201, response.json()
+        version = LayoutVersion.objects.get(public_id=response.json()["public_id"])
+        rotation = version.layout_json["tables"][0]["rotation"]
+        assert rotation == -1000000 % 360
+        assert 0 <= rotation < 360
