@@ -755,7 +755,7 @@ def move_session_to_table(
 def close_session(
     session: Session,
     *,
-    actor: User,
+    actor: User | None,
     force: bool = False,
 ) -> Session:
     if session.status != SessionStatus.OPEN:
@@ -780,21 +780,22 @@ def close_session(
         reservation.end_at = now if now > reservation.start_at else reservation.start_at + timedelta(seconds=1)
         reservation.save(update_fields=["status", "end_at", "updated_at"])
 
-    transaction.on_commit(
-        lambda: emit_hall_table_status_changed(
-            session.restaurant_id,
-            table_id=str(session.table.public_id),
-            previous_status="occupied",
-            current_status="free",
-            session_id=str(session.public_id),
-            actor=actor,
+    if actor is not None:
+        transaction.on_commit(
+            lambda: emit_hall_table_status_changed(
+                session.restaurant_id,
+                table_id=str(session.table.public_id),
+                previous_status="occupied",
+                current_status="free",
+                session_id=str(session.public_id),
+                actor=actor,
+            )
         )
-    )
 
-    table_id = str(session.table.public_id)
-    transaction.on_commit(
-        lambda: emit_hall_reservations_updated(session.restaurant_id, table_ids=[table_id])
-    )
+        table_id = str(session.table.public_id)
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(session.restaurant_id, table_ids=[table_id])
+        )
 
     return session
 

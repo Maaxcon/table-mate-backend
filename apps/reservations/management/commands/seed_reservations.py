@@ -171,7 +171,7 @@ class Command(BaseCommand):
                     table=table,
                     start_at=data["start_at"],
                     defaults={
-                        "customer_name": data["customer_name"],
+                        "guest_name": data["customer_name"],
                         "guest_count": data["guest_count"],
                         "end_at": data["end_at"],
                         "status": data["status"],
