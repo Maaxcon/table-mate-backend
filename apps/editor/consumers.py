@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 
+from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.core.exceptions import ValidationError
 
 from apps.authentication.models import RoleCode
 from common.channels import (
@@ -110,7 +112,7 @@ def _filter_event_for_floor(event: dict[str, object]) -> dict[str, object]:
     return {k: v for k, v in event.items() if k in allowed}
 
 
-@database_sync_to_async  # type: ignore[untyped-decorator]
+@sync_to_async
 def _resolve_restaurant_from_uuid(public_id: str) -> int | None:
     from apps.restaurants.models import Restaurant
 

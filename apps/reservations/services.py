@@ -24,7 +24,6 @@ from common.notification_events import emit_hall_new_reservation_notification
 
 from ..editor.selectors import get_available_tables
 from .models import Reservation, ReservationStatus, ReservationType
-from .selectors import get_unavailable_table_ids
 
 
 def check_availability(
