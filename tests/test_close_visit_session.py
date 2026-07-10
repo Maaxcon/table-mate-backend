@@ -20,8 +20,8 @@ from apps.orders.models import (
     OrderStatus,
     SessionStatus,
 )
-from apps.receipts.models import Receipt
 from apps.orders.services import ensure_active_cart_for_table
+from apps.receipts.models import Receipt
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import Restaurant, Table

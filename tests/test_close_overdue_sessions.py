@@ -39,9 +39,11 @@ def test_closes_session_overdue_beyond_grace(restaurant: Restaurant) -> None:
         table=_table(restaurant, "S1"),
         end_offset=timedelta(minutes=-25),
     )
+    table = reservation.table
+    assert table is not None
     session = Session.objects.create(
         restaurant=restaurant,
-        table=reservation.table,
+        table=table,
         reservation=reservation,
         guest_count=reservation.guest_count,
         status=SessionStatus.OPEN,
@@ -65,9 +67,11 @@ def test_keeps_session_within_overdue_grace(restaurant: Restaurant) -> None:
         table=_table(restaurant, "S2"),
         end_offset=timedelta(minutes=-5),
     )
+    table = reservation.table
+    assert table is not None
     session = Session.objects.create(
         restaurant=restaurant,
-        table=reservation.table,
+        table=table,
         reservation=reservation,
         guest_count=reservation.guest_count,
         status=SessionStatus.OPEN,

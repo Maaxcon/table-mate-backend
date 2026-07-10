@@ -18,8 +18,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Final, cast
 
-from django.contrib.auth.models import AnonymousUser
 from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Sum
 from django.utils import timezone
