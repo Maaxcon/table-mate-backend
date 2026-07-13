@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 from unittest.mock import ANY, AsyncMock, patch
 
@@ -9,6 +10,7 @@ import pytest
 from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
+from django.utils import timezone
 
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens, issue_tokens_with_restaurant
@@ -17,6 +19,9 @@ from apps.editor.consumers import (
     NotificationStreamConsumer,
     _filter_event_for_floor,
 )
+from apps.orders.models import Session, SessionStatus
+from apps.orders.services.cart import create_order_with_items
+from apps.reservations.models import Reservation, ReservationStatus
 from common.channels import staff_group_name
 from common.notification_events import (
     emit_cart_created,
@@ -197,6 +202,54 @@ def test_notification_consumer_replays_cached_events(restaurant: Any) -> None:
         await communicator.disconnect()
 
     asyncio.run(_test())
+
+
+# ── Waiter order flow emits kitchen notification ──
+
+
+@pytest.mark.django_db
+def test_waiter_order_emits_kitchen_ticket_notification(
+    restaurant: Any, table: Any, item: Any, restaurant_settings: Any
+) -> None:
+    waiter = UserFactory.build(role=RoleCode.WAITER, restaurant=restaurant)
+    waiter.save()
+
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        status=ReservationStatus.ACTIVE,
+        start_at=timezone.now(),
+        end_at=timezone.now() + timedelta(hours=2),
+    )
+
+    session = Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        opened_by=waiter,
+        guest_count=2,
+        status=SessionStatus.OPEN,
+        currency=restaurant_settings.currency,
+        opened_at=timezone.now(),
+        reservation=reservation,
+    )
+
+    def _run_immediately(func: Any, using: str | None = None) -> None:  # pragma: no cover - helper inside test
+        func()
+
+    with patch("django.db.transaction.on_commit", side_effect=_run_immediately):
+        with patch("apps.orders.services.cart.emit_kitchen_ticket_injected") as mock_emit:
+            create_order_with_items(
+                session=session,
+                items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+                actor=waiter,
+            )
+
+            mock_emit.assert_called_once()
+            call = mock_emit.call_args
+            assert call.args[0] == restaurant.id
+            assert call.kwargs["table_number"] == table.public_number
+            assert call.kwargs["items_count"] == 1
 
 
 # ── Tenant isolation (staff_A never receives staff_B) ──
