@@ -46,7 +46,9 @@ class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         self.group_name = hall_group_name(restaurant_id)
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
-        await self.accept()
+        _, via_subprotocol = extract_ws_token(self.scope)
+        subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
+        await self.accept(subprotocol=subprotocol)
 
     async def disconnect(self, code: int) -> None:
         if hasattr(self, "group_name"):
