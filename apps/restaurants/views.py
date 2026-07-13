@@ -175,6 +175,9 @@ class RestaurantViewSet(
         restaurant = self.get_object()
         file = request.FILES.get("cover_image")
         if file is not None:
+            from common.validators import ImageFileValidator
+
+            ImageFileValidator(max_size_mb=5)(file)
             restaurant.cover_image = file
         elif "cover_image" in request.data:
             restaurant.cover_image = None

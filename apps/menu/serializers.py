@@ -158,6 +158,12 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         value = getattr(obj, "likes_count", None)
         return value if value is not None else 0
 
+    def validate_image(self, value: object) -> object:
+        from common.validators import ImageFileValidator
+
+        ImageFileValidator(max_size_mb=5)(value)
+        return value
+
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         menu = attrs.get("menu") or getattr(self.instance, "menu", None)
         # Fall back to the existing category when the PATCH doesn't touch it, so
