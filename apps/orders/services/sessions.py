@@ -388,7 +388,7 @@ def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE)
     base = Session.objects.filter(
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__lte=cutoff,
+        ends_at__lte=cutoff,
     )
 
     total_closed = 0

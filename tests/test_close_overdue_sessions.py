@@ -49,6 +49,7 @@ def test_closes_session_overdue_beyond_grace(restaurant: Restaurant) -> None:
         status=SessionStatus.OPEN,
         currency="UAH",
         opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
     )
 
     closed = close_overdue_visit_sessions()
@@ -77,6 +78,7 @@ def test_keeps_session_within_overdue_grace(restaurant: Restaurant) -> None:
         status=SessionStatus.OPEN,
         currency="UAH",
         opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
     )
 
     closed = close_overdue_visit_sessions()
@@ -86,3 +88,31 @@ def test_keeps_session_within_overdue_grace(restaurant: Restaurant) -> None:
     assert closed == 0
     assert session.status == SessionStatus.OPEN
     assert reservation.status == ReservationStatus.ACTIVE
+
+
+@pytest.mark.django_db
+def test_keeps_auto_extended_session_alive(restaurant: Restaurant) -> None:
+    """Session whose ends_at was extended past reservation.end_at survives cleanup."""
+    reservation = _active_reservation(
+        restaurant=restaurant,
+        table=_table(restaurant, "S3"),
+        end_offset=timedelta(minutes=-25),
+    )
+    table = reservation.table
+    assert table is not None
+    Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        reservation=reservation,
+        guest_count=reservation.guest_count,
+        status=SessionStatus.OPEN,
+        currency="UAH",
+        opened_at=reservation.start_at,
+        ends_at=timezone.now() + timedelta(minutes=10),
+    )
+
+    closed = close_overdue_visit_sessions()
+
+    session = Session.objects.get(reservation=reservation)
+    assert closed == 0
+    assert session.status == SessionStatus.OPEN
