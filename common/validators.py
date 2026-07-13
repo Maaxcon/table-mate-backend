@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.utils.deconstruct import deconstructible
 from django.utils.translation import gettext_lazy as _
@@ -37,7 +39,7 @@ class MaxFileSizeValidator:
     def __init__(self, max_size_mb: int = 5) -> None:
         self.limit = max_size_mb * 1024 * 1024
 
-    def __call__(self, file: object) -> None:
+    def __call__(self, file: Any) -> None:
         if hasattr(file, "size") and file.size is not None and file.size > self.limit:
             raise ValidationError(
                 _("File size must be under %(limit)s MB. Current size: %(size)s MB.")
@@ -69,7 +71,7 @@ class ImageFileValidator:
         self.max_size = max_size_mb * 1024 * 1024
         self.size_validator = MaxFileSizeValidator(max_size_mb)
 
-    def __call__(self, value: object) -> None:
+    def __call__(self, value: Any) -> None:
         if hasattr(value, "content_type") and value.content_type not in self.allowed_mimes:
             raise ValidationError(
                 _("Invalid file type. Allowed: %(types)s.")

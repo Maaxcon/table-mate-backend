@@ -140,7 +140,7 @@ class CartSessionItemViewSet(
     lookup_url_kwarg = "pk"  # type: ignore[misc]
 
     def get_serializer_context(self) -> dict[str, object]:
-        ctx = super().get_serializer_context()
+        ctx = dict(super().get_serializer_context())
         session_pk = self.kwargs.get("session_pk")
         if session_pk is not None:
             ctx["guest_profiles"] = dict(
