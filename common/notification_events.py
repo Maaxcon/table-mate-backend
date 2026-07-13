@@ -8,11 +8,17 @@ from channels.layers import get_channel_layer
 from django.utils import timezone
 
 from .channels import staff_group_name
+from .notification_store import store_notification_event
 
 logger = logging.getLogger(__name__)
 
 
 def _broadcast_staff_event(restaurant_id: int, event: dict[str, object]) -> None:
+    try:
+        store_notification_event(restaurant_id, event)
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to persist staff notification for restaurant %s", restaurant_id)
+
     channel_layer = get_channel_layer()
     if channel_layer is None:
         logger.warning("Channel layer unavailable; skipping staff broadcast for restaurant %s", restaurant_id)

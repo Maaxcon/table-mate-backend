@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 from asgiref.sync import sync_to_async
 from channels.testing import WebsocketCommunicator
+from django.core.cache import cache
 
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens, issue_tokens_with_restaurant
@@ -21,6 +23,7 @@ from common.notification_events import (
     emit_kitchen_ticket_injected,
     emit_order_item_status_changed,
 )
+from common.notification_store import store_notification_event
 from core.routing import application
 from tests.conftest import RestaurantFactory, UserFactory
 
@@ -32,6 +35,18 @@ def _inmemory_channel_layer(settings: Any) -> None:
             "BACKEND": "channels.layers.InMemoryChannelLayer",
         }
     }
+
+
+@pytest.fixture(autouse=True)
+def _locmem_cache(settings: Any) -> Iterator[None]:
+    settings.CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
+    cache.clear()
+    yield
+    cache.clear()
 
 
 # ── NotificationStreamConsumer auth / role gates ──
@@ -138,6 +153,47 @@ def test_notification_consumer_allows_cook(restaurant: Any) -> None:
         )
         connected, _ = await communicator.connect()
         assert connected
+        await communicator.disconnect()
+
+    asyncio.run(_test())
+
+
+@pytest.mark.django_db
+def test_notification_consumer_replays_cached_events(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [
+            {"type": "CART_CREATED", "data": {"id": "1", "table_number": "T1"}},
+            {"type": "CART_CHECKED_OUT", "data": {"id": "2", "table_number": "T1"}},
+        ]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+        connected, _ = await communicator.connect()
+        assert connected
+
+        first = await communicator.receive_json_from(timeout=3)
+        assert first == historical[0]
+        second = await communicator.receive_json_from(timeout=3)
+        assert second == historical[1]
+
+        await sync_to_async(emit_cart_created)(
+            restaurant.id,
+            session_id="session-live",
+            table_number="T1",
+            guest_name="Bob",
+        )
+        live = await communicator.receive_json_from(timeout=3)
+        assert live["type"] == "CART_CREATED"
+
         await communicator.disconnect()
 
     asyncio.run(_test())
@@ -341,7 +397,10 @@ def test_floor_consumer_allows_waiter(restaurant: Any) -> None:
 
 @pytest.mark.django_db
 def test_emit_cart_created_sends_to_staff_group(restaurant: Any) -> None:
-    with patch("common.notification_events.get_channel_layer") as mock_get_layer:
+    with (
+        patch("common.notification_events.get_channel_layer") as mock_get_layer,
+        patch("common.notification_events.store_notification_event") as mock_store,
+    ):
         mock_layer = AsyncMock()
         mock_get_layer.return_value = mock_layer
 
@@ -360,11 +419,15 @@ def test_emit_cart_created_sends_to_staff_group(restaurant: Any) -> None:
         assert event["data"]["session_id"] == "test-session"
         assert event["data"]["table_number"] == "T1"
         assert event["data"]["guest_name"] == "Alice"
+        mock_store.assert_called_once_with(restaurant.id, ANY)
 
 
 @pytest.mark.django_db
 def test_emit_kitchen_ticket_injected_sends_to_staff_group(restaurant: Any) -> None:
-    with patch("common.notification_events.get_channel_layer") as mock_get_layer:
+    with (
+        patch("common.notification_events.get_channel_layer") as mock_get_layer,
+        patch("common.notification_events.store_notification_event") as mock_store,
+    ):
         mock_layer = AsyncMock()
         mock_get_layer.return_value = mock_layer
 
@@ -382,11 +445,15 @@ def test_emit_kitchen_ticket_injected_sends_to_staff_group(restaurant: Any) -> N
         assert event["type"] == "KITCHEN_TICKET_INJECTED"
         assert event["data"]["ticket_id"] == "test-ticket"
         assert event["data"]["items_count"] == 3
+        mock_store.assert_called_once_with(restaurant.id, ANY)
 
 
 @pytest.mark.django_db
 def test_emit_order_item_status_changed_sends_to_staff_group(restaurant: Any) -> None:
-    with patch("common.notification_events.get_channel_layer") as mock_get_layer:
+    with (
+        patch("common.notification_events.get_channel_layer") as mock_get_layer,
+        patch("common.notification_events.store_notification_event") as mock_store,
+    ):
         mock_layer = AsyncMock()
         mock_get_layer.return_value = mock_layer
 
@@ -406,3 +473,4 @@ def test_emit_order_item_status_changed_sends_to_staff_group(restaurant: Any) ->
         assert event["data"]["order_item_id"] == "test-item"
         assert event["data"]["status"] == "ready"
         assert event["data"]["menu_item_name"] == "Burger"
+        mock_store.assert_called_once_with(restaurant.id, ANY)

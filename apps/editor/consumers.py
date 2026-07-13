@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from apps.authentication.models import RoleCode
@@ -14,12 +15,11 @@ from common.channels import (
     resolve_restaurant_pk,
     staff_group_name,
 )
+from common.notification_store import get_notification_history
 
 _HALL_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 _STAFF_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
-_FLOOR_ALLOWED_ROLES: frozenset[str] = frozenset(
-    {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER}
-)
+_FLOOR_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER})
 
 
 class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
@@ -80,12 +80,19 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
         await self.accept(subprotocol=subprotocol)
 
+        await self._send_cached_notifications(restaurant_id)
+
     async def disconnect(self, code: int) -> None:
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def notification_event(self, message: dict[str, object]) -> None:
         await self.send(text_data=json.dumps(message["event"]))
+
+    async def _send_cached_notifications(self, restaurant_id: int) -> None:
+        history = await sync_to_async(get_notification_history)(restaurant_id)
+        for event in history:
+            await self.send(text_data=json.dumps(event))
 
 
 _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {

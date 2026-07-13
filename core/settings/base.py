@@ -177,6 +177,9 @@ CACHES = {
     }
 }
 
+NOTIFICATION_HISTORY_LIMIT = env.int("NOTIFICATION_HISTORY_LIMIT", default=50)
+NOTIFICATION_HISTORY_TTL_SECONDS = env.int("NOTIFICATION_HISTORY_TTL_SECONDS", default=60 * 60 * 6)
+
 # Celery: background/periodic tasks. Reuses Redis as the broker. Beat schedules
 # are stored in the DB (django_celery_beat) and seeded from CELERY_BEAT_SCHEDULE.
 CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", default=REDIS_URL)
