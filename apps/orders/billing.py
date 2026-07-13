@@ -12,6 +12,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
 from apps.reservations.models import Reservation, ReservationStatus
@@ -266,6 +267,12 @@ def checkout_cart_session(
     cart is left open and CartChangedError is raised so the guest can review the
     change and confirm again.
     """
+    if user is not None:
+        from .selectors import is_cart_participant
+
+        if not is_cart_participant(user, cart_session):
+            raise PermissionDenied("You are not a participant in this cart session.")
+
     removed = _prune_unavailable_cart_items(cart_session)
     if removed:
         raise CartChangedError(removed=removed)

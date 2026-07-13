@@ -283,12 +283,17 @@ def _visit_session_for_cart(cart_session: CartSession) -> Session | None:
     return Session.objects.filter(reservation_id=cart_session.reservation_id).first()
 
 
-def get_bill_order_items(*, cart_session: CartSession) -> list[OrderItem]:
+def get_bill_order_items(*, cart_session: CartSession, user: User | None = None) -> list[OrderItem]:
     """Ordered (already-submitted) items for this table's visit — the bill.
 
     Pulls every non-voided OrderItem across the visit Session's orders, grouped
     later by ``guest_slot``. This is what the guest pays for, not the cart.
     """
+    if user is not None:
+        from ..selectors import is_cart_participant
+
+        if not is_cart_participant(user, cart_session):
+            raise PermissionDenied("You are not a participant in this cart session.")
     session = _visit_session_for_cart(cart_session)
     if session is None:
         return []
@@ -319,6 +324,7 @@ def pay_order_items(
     cart_session: CartSession,
     order_item_ids: list[str],
     client_id: str | None = None,
+    user: User | None = None,
 ) -> list[OrderItem]:
     """Mark the given ordered items as paid (simulated — no money moves).
 
@@ -326,6 +332,11 @@ def pay_order_items(
     touched; unknown/already-paid ids are ignored (idempotent). An order flips to
     PAID once all its non-voided items are paid. Returns the full updated bill.
     """
+    if user is not None:
+        from ..selectors import is_cart_participant
+
+        if not is_cart_participant(user, cart_session):
+            raise PermissionDenied("You are not a participant in this cart session.")
     with transaction.atomic():
         session = _visit_session_for_cart(cart_session)
         if session is None:

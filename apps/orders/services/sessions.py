@@ -95,14 +95,19 @@ def ensure_active_cart_for_table(
     two active sessions for the same reservation.
 
     NOTE: unlike create_cart_session, this intentionally does NOT gate on
-    reservation participants. It backs the public QR/GuestInit (AllowAny) flow,
-    where the issued guest token is already scoped to one cart_session_id. Any
-    future *authenticated* caller would bypass participant gating here — add an
-    explicit participant check before reusing this from an authenticated path.
+    reservation participants when called from the guest flow (user=None), because
+    the issued guest token is already scoped to one cart_session_id. When an
+    authenticated user calls this, we verify they are a participant.
     """
     reservation = get_active_reservation_for_table(table)
     if reservation is None:
         raise NoActiveReservationError(f"Table {table.public_id} has no active reservation.")
+
+    if user is not None:
+        from apps.orders.selectors import _resolve_allowed_reservation_participant_ids
+
+        if user.id not in _resolve_allowed_reservation_participant_ids(reservation):
+            raise PermissionDenied("You are not a participant in this reservation.")
 
     with transaction.atomic():
         existing = (
