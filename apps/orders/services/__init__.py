@@ -26,7 +26,6 @@ from .walk_in import create_walk_in_reservation
 if TYPE_CHECKING:
     from apps.authentication.models import User
     from apps.orders.models import CartSession, Session
-    from apps.reservations.models import Reservation
     from apps.restaurants.models import Table
 
 
