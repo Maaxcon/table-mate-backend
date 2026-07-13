@@ -53,3 +53,20 @@ def test_qr_not_found_for_other_restaurants_admin(api: Callable[..., AuthContext
     response = ctx.client.get(_qr_url(table))
 
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_qr_rejects_public_restaurant_param_when_token_has_no_claim(
+    api: Callable[..., AuthContext], restaurant: Restaurant, table: Table
+) -> None:
+    """An admin token without a restaurant_id claim (e.g. a superuser account)
+    must not reach another restaurant's table via the public ?restaurant= param.
+
+    That query param is meant for anonymous browsing; falling back to it here
+    would let a claim-less admin token borrow it to read any restaurant's data.
+    """
+    ctx = api(role=RoleCode.ADMIN)  # no restaurant_id -> token carries no claim
+
+    response = ctx.client.get(_qr_url(table), {"restaurant": str(restaurant.public_id)})
+
+    assert response.status_code == 403

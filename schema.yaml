@@ -3329,7 +3329,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            image/png:
               schema:
                 type: string
                 format: binary

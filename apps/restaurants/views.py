@@ -2,10 +2,10 @@ from io import BytesIO
 from typing import Any, cast
 
 import qrcode
-from django.conf import settings
 from django.db import transaction
 from django.db.models import ProtectedError, QuerySet
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
@@ -390,8 +390,7 @@ class TableViewSet(
     @extend_schema(
         summary="Tables layout with upcoming reservations",
         description=(
-            "Returns all active tables, the latest layout JSON, "
-            "and today's PENDING reservations for the floor plan."
+            "Returns all active tables, the latest layout JSON, and today's PENDING reservations for the floor plan."
         ),
         responses=LayoutResponseSerializer,
     )
@@ -407,9 +406,7 @@ class TableViewSet(
         from apps.editor.models import LayoutVersion
 
         latest_layout = (
-            LayoutVersion.objects.filter(restaurant_id=restaurant_id)
-            .order_by("-published_at", "-id")
-            .first()
+            LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
         )
         layout_payload = latest_layout.layout_json if latest_layout else None
 
@@ -426,12 +423,27 @@ class TableViewSet(
     @extend_schema(
         summary="QR code image for a table",
         description="Returns a PNG QR code. Scanning it opens this table's menu page.",
-        responses={200: OpenApiTypes.BINARY},
+        # Keyed by (status, media_type): the plain `200: ...` form documents
+        # whatever the view's renderer_classes says, which is JSON here — this
+        # endpoint returns raw bytes via HttpResponse for the 200 case only, so
+        # errors (403/404) still render as normal JSON through DRF's default
+        # exception handling.
+        responses={(200, "image/png"): OpenApiTypes.BINARY},
     )
     @action(detail=True, methods=["get"])
     def qr(self, request: Request, *args: Any, **kwargs: Any) -> HttpResponse:
-        table = self.get_object()
-        url = f"{settings.FRONTEND_BASE_URL}/menu/{table.restaurant.public_id}?table={table.public_id}"
+        # Deliberately bypasses get_object()/get_queryset(): those fall back to
+        # the public `?restaurant=` query param when the caller's JWT has no
+        # restaurant_id claim (e.g. a superuser account), which would let this
+        # admin-only action serve another restaurant's table. Require the
+        # claim directly instead, so scoping can't be steered by the request.
+        restaurant_id = require_restaurant_id_from_auth(request)
+        table = get_object_or_404(
+            Table.objects.select_related("restaurant"),
+            public_id=kwargs["public_id"],
+            restaurant_id=restaurant_id,
+        )
+        url = services.build_table_menu_url(table)
         image = qrcode.make(url)
         buffer = BytesIO()
         image.save(buffer, format="PNG")
