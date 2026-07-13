@@ -1,6 +1,7 @@
 # mypy: disable-error-code="no-untyped-call"
 from datetime import datetime, time, timedelta
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
@@ -96,6 +97,35 @@ class TestBatchUpdate:
             format="json",
         )
         assert resp.status_code == status.HTTP_409_CONFLICT
+
+    def test_modified_and_cancelled_same_batch_returns_structured_conflict(
+        self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
+    ) -> None:
+        res = _reservation(restaurant=restaurant, table=table)
+        ctx: AuthContext = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+
+        tomorrow = (timezone.now() + timedelta(days=1)).date()
+        resp = ctx.client.post(
+            _url(),
+            {
+                "changes": [
+                    {
+                        "reservation_id": str(res.public_id),
+                        "new_table_id": str(table.public_id),
+                        "new_date": tomorrow.isoformat(),
+                        "new_start_time": "12:00",
+                        "new_end_time": "13:00",
+                    }
+                ],
+                "cancellations": [str(res.public_id)],
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_409_CONFLICT
+        assert resp.json() == {
+            "detail": "A reservation cannot be both modified and cancelled in the same batch.",
+            "code": "reservation_conflict",
+        }
 
     def test_overlapping_payload_items_rejected(
         self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
@@ -280,6 +310,52 @@ class TestBatchUpdate:
         # The cross-tenant reservation must be untouched.
         other_res.refresh_from_db()
         assert other_res.table_id == other_table.pk
+
+    def test_batch_cancellations_emit_cancelled_and_refresh_events(
+        self,
+        api: Any,
+        restaurant: Restaurant,
+        table: Table,
+        restaurant_settings: RestaurantSettings,
+        django_capture_on_commit_callbacks: Any,
+    ) -> None:
+        pending_res = _reservation(restaurant=restaurant, table=table)
+        other_res = _reservation(restaurant=restaurant, table=table, start_offset_hours=5)
+
+        ctx: AuthContext = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+
+        with (
+            patch("apps.reservations.services.emit_hall_reservation_cancelled") as mock_cancelled,
+            patch("apps.reservations.services.emit_hall_reservations_updated") as mock_updated,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
+            resp = ctx.client.post(
+                _url(),
+                {
+                    "changes": [
+                        {
+                            "reservation_id": str(other_res.public_id),
+                            "new_table_id": str(table.public_id),
+                            "new_date": (timezone.now() + timedelta(days=1)).date().isoformat(),
+                            "new_start_time": "12:00",
+                            "new_end_time": "13:00",
+                        }
+                    ],
+                    "cancellations": [str(pending_res.public_id)],
+                },
+                format="json",
+            )
+
+        assert resp.status_code == status.HTTP_200_OK
+        pending_res.refresh_from_db()
+        assert pending_res.status == ReservationStatus.CANCELLED
+        mock_cancelled.assert_called_once_with(
+            restaurant.id,
+            reservation_id=str(pending_res.public_id),
+            table_id=str(table.public_id),
+            actor=ctx.user,
+        )
+        mock_updated.assert_called_once_with(restaurant.id, table_ids=[str(table.public_id)])
 
     def test_conflict_with_existing_rolls_back_whole_batch(
         self, api: Any, restaurant: Restaurant, table: Table, zone: Any, restaurant_settings: RestaurantSettings

@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import OuterRef, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied
 
 from apps.authentication.models import RoleCode, User
 from apps.orders.billing import close_reservation_carts, close_visit_session, ensure_visit_session
@@ -838,7 +838,8 @@ def _batch_active_end_datetime(c: dict[str, Any], session: Session) -> datetime:
     the ground truth.
     """
     end_date = session.opened_at.date()
-    if c["new_end_time"] <= c["new_start_time"]:
+    opened_time = session.opened_at.time().replace(second=0, microsecond=0)
+    if c["new_end_time"] <= opened_time:
         end_date += timedelta(days=1)
     return timezone.make_aware(datetime.combine(end_date, c["new_end_time"]))
 
@@ -883,7 +884,7 @@ def batch_update_reservations(
     change_ids = {c["reservation_id"] for c in changes}
     cancel_ids = set(cancellations or [])
     if change_ids & cancel_ids:
-        raise ValidationError("A reservation cannot be both modified and cancelled in the same batch.")
+        raise ReservationConflictError("A reservation cannot be both modified and cancelled in the same batch.")
 
     # 2. Lock sessions for ACTIVE reservations (both changes and cancellations)
     session_map: dict[str, Session] = {}
@@ -1005,6 +1006,19 @@ def batch_update_reservations(
                 res.status = ReservationStatus.CANCELLED
                 res.save(update_fields=["status", "updated_at"])
 
+            table = res.table
+            if table is None and rid in session_map:
+                table = session_map[rid].table
+            if actor is not None and table is not None:
+                transaction.on_commit(
+                    lambda reservation_id=str(res.public_id), table_id=str(table.public_id): emit_hall_reservation_cancelled(
+                        restaurant_id,
+                        reservation_id=reservation_id,
+                        table_id=table_id,
+                        actor=actor,
+                    )
+                )
+
     # Process moves/resizes
     for c in changes:
         rid = str(c["reservation_id"])
@@ -1029,5 +1043,5 @@ def batch_update_reservations(
             res.end_at = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
             res.save(update_fields=["table", "start_at", "end_at", "updated_at"])
 
-    # Also broadcast table-status events for force-closed sessions
+    # Aggregate refresh for affected tables after the batch lands.
     transaction.on_commit(lambda: emit_hall_reservations_updated(restaurant_id, table_ids=list(affected_table_ids)))
