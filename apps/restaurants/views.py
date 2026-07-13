@@ -6,6 +6,7 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import ProtectedError, QuerySet
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
@@ -430,7 +431,17 @@ class TableViewSet(
     )
     @action(detail=True, methods=["get"])
     def qr(self, request: Request, *args: Any, **kwargs: Any) -> HttpResponse:
-        table = self.get_object()
+        # Deliberately bypasses get_object()/get_queryset(): those fall back to
+        # the public `?restaurant=` query param when the caller's JWT has no
+        # restaurant_id claim (e.g. a superuser account), which would let this
+        # admin-only action serve another restaurant's table. Require the
+        # claim directly instead, so scoping can't be steered by the request.
+        restaurant_id = require_restaurant_id_from_auth(request)
+        table = get_object_or_404(
+            Table.objects.select_related("restaurant"),
+            public_id=kwargs["public_id"],
+            restaurant_id=restaurant_id,
+        )
         url = f"{settings.FRONTEND_BASE_URL}/menu/{table.restaurant.public_id}?table={table.public_id}"
         image = qrcode.make(url)
         buffer = BytesIO()
