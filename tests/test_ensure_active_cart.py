@@ -12,6 +12,7 @@ from apps.orders.models import CartSession, CartSessionStatus
 from apps.orders.services import ensure_active_cart_for_table
 from apps.reservations.models import (
     Reservation,
+    ReservationParticipant,
     ReservationStatus,
     ReservationType,
 )
@@ -123,7 +124,8 @@ def test_optional_user_becomes_creator_and_participant(
 ) -> None:
     user = user_factory(role=RoleCode.CUSTOMER)
     user.save()
-    _make_reservation(restaurant=restaurant, table=table)
+    reservation = _make_reservation(restaurant=restaurant, table=table)
+    ReservationParticipant.objects.create(reservation=reservation, user=user)
 
     session = ensure_active_cart_for_table(table=table, user=user)
 
