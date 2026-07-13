@@ -96,6 +96,42 @@ class TestActivatePendingReservation:
         with pytest.raises(ReservationConflictError, match="active session"):
             activate_pending_reservation(res, actor=actor)
 
+    def test_rejects_if_prolonged_open_session_exists(
+        self, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
+    ) -> None:
+        actor = user_factory(role=RoleCode.WAITER)
+        actor.save()
+        now = timezone.now()
+        res = _reservation(restaurant=restaurant, table=table)
+
+        other_res = Reservation.objects.create(
+            restaurant=restaurant,
+            table=table,
+            guest_count=2,
+            start_at=now - timedelta(hours=1),
+            end_at=now - timedelta(minutes=5),
+            status=ReservationStatus.ACTIVE,
+        )
+        session = Session.objects.create(
+            restaurant=restaurant,
+            table=table,
+            reservation=other_res,
+            opened_by=actor,
+            guest_count=2,
+            currency="UAH",
+            status=SessionStatus.OPEN,
+            opened_at=timezone.now() - timedelta(hours=1),
+            ends_at=now + timedelta(minutes=30),
+        )
+        original_ends_at = session.ends_at
+
+        with pytest.raises(ReservationConflictError, match="active session"):
+            activate_pending_reservation(res, actor=actor)
+
+        session.refresh_from_db()
+        assert session.status == SessionStatus.OPEN
+        assert session.ends_at == original_ends_at
+
     def test_rejects_if_earlier_pending_exists(
         self, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
     ) -> None:

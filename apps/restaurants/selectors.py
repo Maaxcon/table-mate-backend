@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db.models import Exists, OuterRef, QuerySet
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode, User
@@ -132,7 +133,10 @@ def get_tables_with_occupancy(restaurant_id: int) -> QuerySet[Table]:
         table=OuterRef("pk"),
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__gt=occupancy_cutoff,
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__gt=occupancy_cutoff,
     )
     return qs.annotate(is_occupied=Exists(occupied_subquery))
 

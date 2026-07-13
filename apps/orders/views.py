@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.db import transaction
 from django.db.models import QuerySet
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -78,7 +79,10 @@ class SessionViewSet(
             table=table,
             status=SessionStatus.OPEN,
             reservation__status=ReservationStatus.ACTIVE,
-            reservation__end_at__gt=occupancy_cutoff,
+        ).annotate(
+            effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+        ).filter(
+            effective_end_at__gt=occupancy_cutoff,
         )
         if non_stale.exists():
             raise TableOccupiedError()
@@ -86,7 +90,10 @@ class SessionViewSet(
             table=table,
             status=SessionStatus.OPEN,
             reservation__status=ReservationStatus.ACTIVE,
-            reservation__end_at__lte=occupancy_cutoff,
+        ).annotate(
+            effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+        ).filter(
+            effective_end_at__lte=occupancy_cutoff,
         )
         guest_count = serializer.validated_data["guest_count"]
         with transaction.atomic():

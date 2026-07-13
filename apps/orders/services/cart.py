@@ -22,6 +22,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -414,7 +415,10 @@ def open_session(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__gt=occupancy_cutoff,
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__gt=occupancy_cutoff,
     )
     if non_stale.exists():
         raise TableOccupiedError()
@@ -422,7 +426,10 @@ def open_session(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__lte=occupancy_cutoff,
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__lte=occupancy_cutoff,
     )
     for stale_session in stale:
         _close_visit_session(session=stale_session, actor=None)
