@@ -80,6 +80,8 @@ class TestActivatePendingReservation:
 
         # Create an existing open session (needs a reservation)
         other_res = _reservation(restaurant=restaurant, table=table, start_offset_hours=5)
+        other_res.status = ReservationStatus.ACTIVE
+        other_res.save(update_fields=["status"])
         Session.objects.create(
             restaurant=restaurant,
             table=table,
