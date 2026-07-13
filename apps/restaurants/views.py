@@ -4,6 +4,7 @@ from typing import Any, cast
 import qrcode
 from django.db import transaction
 from django.db.models import ProtectedError, QuerySet
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -33,7 +34,6 @@ from common.hall_events import (
     emit_hall_zone_deleted,
     emit_hall_zone_updated,
 )
-from common.renderers import PNGRenderer
 
 from . import selectors, services
 from .models import Restaurant, RestaurantSettings, Table, Zone
@@ -423,10 +423,15 @@ class TableViewSet(
     @extend_schema(
         summary="QR code image for a table",
         description="Returns a PNG QR code. Scanning it opens this table's menu page.",
-        responses={200: OpenApiTypes.BINARY},
+        # Keyed by (status, media_type): the plain `200: ...` form documents
+        # whatever the view's renderer_classes says, which is JSON here — this
+        # endpoint returns raw bytes via HttpResponse for the 200 case only, so
+        # errors (403/404) still render as normal JSON through DRF's default
+        # exception handling.
+        responses={(200, "image/png"): OpenApiTypes.BINARY},
     )
-    @action(detail=True, methods=["get"], renderer_classes=[PNGRenderer])
-    def qr(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+    @action(detail=True, methods=["get"])
+    def qr(self, request: Request, *args: Any, **kwargs: Any) -> HttpResponse:
         # Deliberately bypasses get_object()/get_queryset(): those fall back to
         # the public `?restaurant=` query param when the caller's JWT has no
         # restaurant_id claim (e.g. a superuser account), which would let this
@@ -442,4 +447,4 @@ class TableViewSet(
         image = qrcode.make(url)
         buffer = BytesIO()
         image.save(buffer, format="PNG")
-        return Response(buffer.getvalue(), content_type="image/png")
+        return HttpResponse(buffer.getvalue(), content_type="image/png")
