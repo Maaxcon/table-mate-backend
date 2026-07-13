@@ -7,7 +7,11 @@ re-exports the API so the split into cart/sessions/walk_in is internal only.
 from __future__ import annotations
 
 from importlib import import_module
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
+
+from apps.authentication.models import User
+from apps.orders.models import CartSession, Session
+from apps.restaurants.models import Table
 
 from .cart import (
     add_item_to_cart,
@@ -22,11 +26,6 @@ from .cart import (
     void_order_item,
 )
 from .walk_in import create_walk_in_reservation
-
-if TYPE_CHECKING:
-    from apps.authentication.models import User
-    from apps.orders.models import CartSession, Session
-    from apps.restaurants.models import Table
 
 
 def _sessions_module() -> Any:
