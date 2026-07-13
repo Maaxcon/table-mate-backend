@@ -138,6 +138,8 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
+FRONTEND_BASE_URL = env.str("FRONTEND_BASE_URL", default="http://localhost:5173")
+
 GOOGLE_CLIENT_ID = env.str("GOOGLE_CLIENT_ID", default="")
 GOOGLE_CLIENT_SECRET = env.str("GOOGLE_CLIENT_SECRET", default="")
 GOOGLE_ALLOWED_REDIRECT_URIS = env.list(

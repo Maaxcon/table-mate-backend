@@ -1,7 +1,12 @@
+from io import BytesIO
 from typing import Any, cast
 
+import qrcode
+from django.conf import settings
 from django.db import transaction
 from django.db.models import ProtectedError, QuerySet
+from django.http import HttpResponse
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -371,6 +376,11 @@ class TableViewSet(
     serializer_class = TableSerializer
     filterset_fields = ["capacity", "zone__public_id"]
 
+    def get_permissions(self) -> list[BasePermission]:
+        if self.action == "qr":
+            return [IsAdmin()]
+        return [AllowAny()]
+
     def get_queryset(self) -> QuerySet[Table]:
         restaurant_id = self.get_restaurant_id()
         if restaurant_id is None:
@@ -412,3 +422,17 @@ class TableViewSet(
                 "upcoming_reservations": layout_data["upcoming_reservations"],
             }
         )
+
+    @extend_schema(
+        summary="QR code image for a table",
+        description="Returns a PNG QR code. Scanning it opens this table's menu page.",
+        responses={200: OpenApiTypes.BINARY},
+    )
+    @action(detail=True, methods=["get"])
+    def qr(self, request: Request, *args: Any, **kwargs: Any) -> HttpResponse:
+        table = self.get_object()
+        url = f"{settings.FRONTEND_BASE_URL}/menu/{table.restaurant.public_id}?table={table.public_id}"
+        image = qrcode.make(url)
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return HttpResponse(buffer.getvalue(), content_type="image/png")
