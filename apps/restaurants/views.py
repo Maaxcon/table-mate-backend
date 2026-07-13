@@ -2,10 +2,8 @@ from io import BytesIO
 from typing import Any, cast
 
 import qrcode
-from django.conf import settings
 from django.db import transaction
 from django.db.models import ProtectedError, QuerySet
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
@@ -35,6 +33,7 @@ from common.hall_events import (
     emit_hall_zone_deleted,
     emit_hall_zone_updated,
 )
+from common.renderers import PNGRenderer
 
 from . import selectors, services
 from .models import Restaurant, RestaurantSettings, Table, Zone
@@ -391,8 +390,7 @@ class TableViewSet(
     @extend_schema(
         summary="Tables layout with upcoming reservations",
         description=(
-            "Returns all active tables, the latest layout JSON, "
-            "and today's PENDING reservations for the floor plan."
+            "Returns all active tables, the latest layout JSON, and today's PENDING reservations for the floor plan."
         ),
         responses=LayoutResponseSerializer,
     )
@@ -408,9 +406,7 @@ class TableViewSet(
         from apps.editor.models import LayoutVersion
 
         latest_layout = (
-            LayoutVersion.objects.filter(restaurant_id=restaurant_id)
-            .order_by("-published_at", "-id")
-            .first()
+            LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
         )
         layout_payload = latest_layout.layout_json if latest_layout else None
 
@@ -429,8 +425,8 @@ class TableViewSet(
         description="Returns a PNG QR code. Scanning it opens this table's menu page.",
         responses={200: OpenApiTypes.BINARY},
     )
-    @action(detail=True, methods=["get"])
-    def qr(self, request: Request, *args: Any, **kwargs: Any) -> HttpResponse:
+    @action(detail=True, methods=["get"], renderer_classes=[PNGRenderer])
+    def qr(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         # Deliberately bypasses get_object()/get_queryset(): those fall back to
         # the public `?restaurant=` query param when the caller's JWT has no
         # restaurant_id claim (e.g. a superuser account), which would let this
@@ -442,8 +438,8 @@ class TableViewSet(
             public_id=kwargs["public_id"],
             restaurant_id=restaurant_id,
         )
-        url = f"{settings.FRONTEND_BASE_URL}/menu/{table.restaurant.public_id}?table={table.public_id}"
+        url = services.build_table_menu_url(table)
         image = qrcode.make(url)
         buffer = BytesIO()
         image.save(buffer, format="PNG")
-        return HttpResponse(buffer.getvalue(), content_type="image/png")
+        return Response(buffer.getvalue(), content_type="image/png")
