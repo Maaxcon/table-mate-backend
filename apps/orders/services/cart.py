@@ -14,10 +14,11 @@ __all__ = [
 ]
 
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Final, cast
 
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Sum
@@ -26,6 +27,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
 from apps.orders.broadcast import cart_group_send
+from apps.reservations.models import ReservationStatus
 from apps.restaurants.models import Table
 from apps.restaurants.selectors import is_restaurant_open
 from common.exceptions import (
@@ -402,10 +404,28 @@ def open_session(
     opened_at: str | datetime,
     actor: User,
 ) -> Session:
+    from apps.orders.billing import close_visit_session as _close_visit_session
     from common.exceptions import TableOccupiedError
 
-    if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+    now = timezone.now()
+    grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
+    occupancy_cutoff = now - timedelta(minutes=grace_minutes)
+    non_stale = Session.objects.filter(
+        table=table,
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+        reservation__end_at__gt=occupancy_cutoff,
+    )
+    if non_stale.exists():
         raise TableOccupiedError()
+    stale = Session.objects.filter(
+        table=table,
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+        reservation__end_at__lte=occupancy_cutoff,
+    )
+    for stale_session in stale:
+        _close_visit_session(session=stale_session, actor=None)
 
     reservation = create_walk_in_reservation(
         table=table,

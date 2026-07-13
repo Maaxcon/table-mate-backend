@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import OuterRef, Subquery
 from django.db.models.functions import Coalesce
@@ -9,7 +10,7 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.billing import close_reservation_carts, ensure_visit_session
+from apps.orders.billing import close_reservation_carts, close_visit_session, ensure_visit_session
 from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
 from apps.restaurants.models import RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS, _hhmm_to_minutes
@@ -610,10 +611,26 @@ def activate_pending_reservation(
     # (orders_one_open_session_per_table) is the final backstop.
     Table.objects.select_for_update().get(pk=table.pk)
 
-    if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
-        raise ReservationConflictError("Table already has an active session.")
-
     now = timezone.now()
+    grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
+    occupancy_cutoff = now - timedelta(minutes=grace_minutes)
+    non_stale = Session.objects.filter(
+        table=table,
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+        reservation__end_at__gt=occupancy_cutoff,
+    )
+    if non_stale.exists():
+        raise ReservationConflictError("Table already has an active session.")
+    stale = Session.objects.filter(
+        table=table,
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+        reservation__end_at__lte=occupancy_cutoff,
+    )
+    for stale_session in stale:
+        close_visit_session(session=stale_session, actor=None)
+
     earlier_pending = (
         Reservation.objects.filter(
             restaurant_id=reservation.restaurant_id,

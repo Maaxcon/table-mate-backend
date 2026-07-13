@@ -3,6 +3,7 @@ from datetime import timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
@@ -17,6 +18,7 @@ from rest_framework.response import Response
 from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsFloor, IsKitchen, IsStaff
 from apps.orders.selectors import compute_avg_prep_time, get_kitchen_order_items, get_kitchen_tickets
+from apps.reservations.models import ReservationStatus
 from apps.restaurants.models import RestaurantSettings
 from common.api import (
     RestaurantScopedViewSetMixin,
@@ -69,14 +71,28 @@ class SessionViewSet(
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         table = serializer.validated_data["table"]
-        if Session.objects.filter(table=table, status=SessionStatus.OPEN).exists():
+        now = timezone.now()
+        grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
+        occupancy_cutoff = now - timedelta(minutes=grace_minutes)
+        non_stale = Session.objects.filter(
+            table=table,
+            status=SessionStatus.OPEN,
+            reservation__status=ReservationStatus.ACTIVE,
+            reservation__end_at__gt=occupancy_cutoff,
+        )
+        if non_stale.exists():
             raise TableOccupiedError()
+        stale = Session.objects.filter(
+            table=table,
+            status=SessionStatus.OPEN,
+            reservation__status=ReservationStatus.ACTIVE,
+            reservation__end_at__lte=occupancy_cutoff,
+        )
         guest_count = serializer.validated_data["guest_count"]
         with transaction.atomic():
+            for stale_session in stale:
+                close_visit_session(session=stale_session, actor=None)
             reservation = create_walk_in_reservation(table=table, guest_count=guest_count)
-            # ensure_visit_session owns currency/opened_at resolution for every
-            # open-table path (walk-in, scan, activate), so it stays in one place.
-            # IsFloor guarantees an authenticated staff user here.
             serializer.instance = ensure_visit_session(reservation, opened_by=cast(User, self.request.user))
             restaurant_id = get_restaurant_id_from_auth(self.request)
             if restaurant_id is not None:

@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import cast
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
@@ -11,6 +12,7 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
+from apps.orders.billing import close_visit_session
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import Table
@@ -141,6 +143,7 @@ def ensure_active_cart_for_table(
 
 
 _STALE_CART_BATCH_SIZE = 500
+_OVERDUE_VISIT_BATCH_SIZE = 200
 
 
 def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: int = _STALE_CART_BATCH_SIZE) -> int:
@@ -375,3 +378,32 @@ def auto_extend_all_sessions(restaurant_id: int | None = None) -> list[dict[str,
         results.append(result)
 
     return results
+
+
+def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE) -> int:
+    """Close OPEN sessions whose active reservation ended beyond the grace window."""
+    now = timezone.now()
+    grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
+    cutoff = now - timedelta(minutes=grace_minutes)
+    base = Session.objects.filter(
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+        reservation__end_at__lte=cutoff,
+    )
+
+    total_closed = 0
+    while True:
+        batch_ids = list(base.order_by("pk").values_list("pk", flat=True)[:batch_size])
+        if not batch_ids:
+            break
+
+        for session_id in batch_ids:
+            # Idempotent: if another worker closed it first, close_visit_session
+            # simply returns the already-closed visit.
+            close_visit_session(session=Session(pk=session_id), actor=None)
+            total_closed += 1
+
+        if len(batch_ids) < batch_size:
+            break
+
+    return total_closed

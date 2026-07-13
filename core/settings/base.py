@@ -183,6 +183,8 @@ CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env.str("CELERY_RESULT_BACKEND", default="")
 CELERY_TASK_IGNORE_RESULT = True
 CELERY_TIMEZONE = TIME_ZONE
+# Grace window after reservation end before an OPEN visit is auto-closed.
+SESSION_OVERDUE_AUTO_CLOSE_MINUTES = env.int("SESSION_OVERDUE_AUTO_CLOSE_MINUTES", default=20)
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {
     "close-stale-carts": {
@@ -192,6 +194,10 @@ CELERY_BEAT_SCHEDULE = {
     "auto-extend-sessions": {
         "task": "orders.auto_extend_sessions",
         "schedule": float(env.int("AUTO_EXTEND_SESSIONS_INTERVAL_SECONDS", default=300)),
+    },
+    "close-overdue-sessions": {
+        "task": "orders.close_overdue_sessions",
+        "schedule": float(env.int("CLOSE_OVERDUE_SESSIONS_INTERVAL_SECONDS", default=60)),
     },
 }
 

@@ -1,14 +1,16 @@
 # mypy: disable-error-code="no-untyped-call"
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 
 from apps.authentication.models import RoleCode
 from apps.orders.models import Session, SessionStatus
+from apps.reservations.models import Reservation, ReservationStatus
 from apps.restaurants.models import Table, Zone
 
 from .conftest import AuthContext
@@ -66,6 +68,74 @@ class TestSessionCreate:
         assert response.status_code == status.HTTP_409_CONFLICT
         data = response.json()
         assert data["code"] == "table_occupied"
+
+    def test_stale_open_session_does_not_block_new_walk_in(
+        self,
+        api: Callable[..., AuthContext],
+        table: Table,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
+        now = timezone.now()
+        stale_reservation = Reservation.objects.create(
+            restaurant=table.restaurant,
+            table=table,
+            guest_count=2,
+            start_at=now - timedelta(days=1, hours=2),
+            end_at=now - timedelta(days=1),
+            status=ReservationStatus.ACTIVE,
+        )
+        Session.objects.create(
+            restaurant=table.restaurant,
+            table=table,
+            reservation=stale_reservation,
+            guest_count=2,
+            status=SessionStatus.OPEN,
+            currency="UAH",
+            opened_at=stale_reservation.start_at,
+        )
+        payload = {
+            "table": str(table.public_id),
+            "guest_count": 2,
+            "opened_at": datetime.now(UTC).isoformat(),
+            "currency": "UAH",
+        }
+
+        response = auth.client.post(URL, payload, content_type="application/json")
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_recently_overdue_open_session_still_blocks_new_walk_in(
+        self,
+        api: Callable[..., AuthContext],
+        table: Table,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
+        now = timezone.now()
+        recent_reservation = Reservation.objects.create(
+            restaurant=table.restaurant,
+            table=table,
+            guest_count=2,
+            start_at=now - timedelta(hours=2),
+            end_at=now - timedelta(minutes=10),
+            status=ReservationStatus.ACTIVE,
+        )
+        Session.objects.create(
+            restaurant=table.restaurant,
+            table=table,
+            reservation=recent_reservation,
+            guest_count=2,
+            status=SessionStatus.OPEN,
+            currency="UAH",
+            opened_at=recent_reservation.start_at,
+        )
+        payload = {
+            "table": str(table.public_id),
+            "guest_count": 2,
+            "opened_at": datetime.now(UTC).isoformat(),
+            "currency": "UAH",
+        }
+
+        response = auth.client.post(URL, payload, content_type="application/json")
+        assert response.status_code == status.HTTP_409_CONFLICT
 
     def test_returns_403_for_customer(
         self,
