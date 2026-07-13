@@ -133,10 +133,22 @@ class CartSessionItemViewSet(
     RestaurantScopedViewSetMixin[CartItem],
     viewsets.ModelViewSet[CartItem],
 ):
+    throttle_scope = "cart"
     permission_classes = [IsActiveTableGuest]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     queryset = CartItem.objects.all()
     lookup_url_kwarg = "pk"  # type: ignore[misc]
+
+    def get_serializer_context(self) -> dict[str, object]:
+        ctx = super().get_serializer_context()
+        session_pk = self.kwargs.get("session_pk")
+        if session_pk is not None:
+            ctx["guest_profiles"] = dict(
+                GuestProfile.objects.filter(cart_session__public_id=session_pk).values_list(
+                    "guest_identity", "display_name"
+                )
+            )
+        return ctx
 
     def get_serializer_class(self) -> type[Serializer[Any]]:
         if self.action == "create":
@@ -282,6 +294,7 @@ def _resolve_checkout_session(request: Request, session_pk: str) -> CartSession:
 
 @extend_schema(tags=["Cart"])
 class CartCheckoutView(GuestFallbackAuthMixin, APIView):
+    throttle_scope = "checkout"
     permission_classes = [IsActiveTableGuest]
     serializer_class = None
 
@@ -361,6 +374,7 @@ class SetGuestNameView(GuestFallbackAuthMixin, APIView):
 class CartBillView(GuestFallbackAuthMixin, APIView):
     """Ordered (already-submitted) items for this table's visit — the bill."""
 
+    throttle_scope = "checkout"
     permission_classes = [IsActiveTableGuest]
     serializer_class = BillItemSerializer
 
@@ -375,6 +389,7 @@ class CartBillView(GuestFallbackAuthMixin, APIView):
 class CartPayView(GuestFallbackAuthMixin, APIView):
     """Mark selected ordered items as paid (simulated). Returns the updated bill."""
 
+    throttle_scope = "checkout"
     permission_classes = [IsActiveTableGuest]
     serializer_class = PayOrderItemsSerializer
 

@@ -130,6 +130,8 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth": "10/min",  # login / Google sign-in (anti brute-force, per IP)
         "me_write": "30/min",  # profile updates
+        "cart": "60/min",  # add/remove/update cart items
+        "checkout": "10/min",  # submit order, pay items
     },
 }
 
@@ -180,8 +182,9 @@ CACHES = {
 # Celery: background/periodic tasks. Reuses Redis as the broker. Beat schedules
 # are stored in the DB (django_celery_beat) and seeded from CELERY_BEAT_SCHEDULE.
 CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", default=REDIS_URL)
-CELERY_RESULT_BACKEND = env.str("CELERY_RESULT_BACKEND", default="")
+CELERY_RESULT_BACKEND = env.str("CELERY_RESULT_BACKEND", default=REDIS_URL)
 CELERY_TASK_IGNORE_RESULT = True
+CELERY_TASK_TRACK_STARTED = True
 CELERY_TIMEZONE = TIME_ZONE
 # Grace window after reservation end before an OPEN visit is auto-closed.
 SESSION_OVERDUE_AUTO_CLOSE_MINUTES = env.int("SESSION_OVERDUE_AUTO_CLOSE_MINUTES", default=20)
