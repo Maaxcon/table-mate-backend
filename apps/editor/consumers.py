@@ -160,6 +160,11 @@ class StaffReservationsConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def hall_event(self, message: dict[str, object]) -> None:
         await self.send(text_data=json.dumps(message["event"]))
 
+    async def notification_event(self, message: dict[str, object]) -> None:
+        # Staff reservation sockets share the same group as notification streams,
+        # but they only surface hall-style payloads.
+        pass
+
 
 class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
