@@ -1,7 +1,7 @@
 from typing import Any, cast
 
 from django.db import transaction
-from django.db.models import ProtectedError, QuerySet
+from django.db.models import Count, ProtectedError, Q, QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -68,19 +68,32 @@ class AdminOverviewView(APIView):
                 }
             )
 
-        menus = Menu.objects.filter(restaurant_id=restaurant_id)
-        items = MenuItem.objects.filter(restaurant_id=restaurant_id)
-        categories = MenuCategory.objects.filter(menu__restaurant_id=restaurant_id)
-        staff = User.objects.filter(restaurant_id=restaurant_id).exclude(role=RoleCode.CUSTOMER)
+        menu_counts = Menu.objects.filter(restaurant_id=restaurant_id).aggregate(
+            total=Count("id"),
+            active=Count("id", filter=Q(is_active=True)),
+        )
+        item_counts = MenuItem.objects.filter(restaurant_id=restaurant_id).aggregate(
+            total=Count("id"),
+            hidden=Count("id", filter=Q(is_available=False)),
+        )
+        categories_total = MenuCategory.objects.filter(menu__restaurant_id=restaurant_id).count()
+        staff_counts = (
+            User.objects.filter(restaurant_id=restaurant_id)
+            .exclude(role=RoleCode.CUSTOMER)
+            .aggregate(
+                total=Count("id"),
+                active=Count("id", filter=Q(is_active=True)),
+            )
+        )
 
         data = {
-            "menus_total": menus.count(),
-            "menus_active": menus.filter(is_active=True).count(),
-            "dishes_total": items.count(),
-            "dishes_hidden": items.filter(is_available=False).count(),
-            "categories_total": categories.count(),
-            "staff_total": staff.count(),
-            "staff_active": staff.filter(is_active=True).count(),
+            "menus_total": menu_counts["total"],
+            "menus_active": menu_counts["active"],
+            "dishes_total": item_counts["total"],
+            "dishes_hidden": item_counts["hidden"],
+            "categories_total": categories_total,
+            "staff_total": staff_counts["total"],
+            "staff_active": staff_counts["active"],
         }
         return Response(AdminOverviewSerializer(data).data)
 
