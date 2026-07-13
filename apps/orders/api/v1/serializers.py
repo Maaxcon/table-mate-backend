@@ -93,6 +93,9 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
     def get_display_name(self, obj: CartItem) -> str | None:
         if obj.guest_identity is None:
             return None
+        profiles: dict[str, str] | None = self.context.get("guest_profiles")
+        if profiles is not None:
+            return profiles.get(obj.guest_identity)
         profile = GuestProfile.objects.filter(
             cart_session=obj.cart_session,
             guest_identity=obj.guest_identity,
