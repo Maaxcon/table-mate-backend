@@ -7,6 +7,7 @@ import pytest
 from django.utils import timezone
 
 from apps.orders.services import add_item_to_cart, ensure_active_cart_for_table
+from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.management.commands.seed_restaurants import DEFAULT_WORKING_HOURS
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table, validate_working_hours
@@ -105,7 +106,7 @@ def test_respects_timezone(restaurant: Restaurant) -> None:
 
 def _active_reservation(restaurant: Restaurant, table: Table) -> Reservation:
     now = timezone.now()
-    return Reservation.objects.create(
+    reservation = Reservation.objects.create(
         restaurant=restaurant,
         table=table,
         guest_count=2,
@@ -114,6 +115,17 @@ def _active_reservation(restaurant: Restaurant, table: Table) -> Reservation:
         status=ReservationStatus.ACTIVE,
         type=ReservationType.PRE_BOOKED,
     )
+    Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        reservation=reservation,
+        guest_count=reservation.guest_count,
+        status=SessionStatus.OPEN,
+        currency="UAH",
+        opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
+    )
+    return reservation
 
 
 @pytest.mark.django_db

@@ -38,6 +38,7 @@ from common.exceptions import (
     CartSessionClosedError,
     DomainError,
     EmptyCartError,
+    NoActiveReservationError,
     RestaurantClosedError,
 )
 
@@ -58,7 +59,7 @@ def _restaurant_open() -> Iterator[None]:
 
 def _active_reservation(restaurant: Restaurant, table: Table) -> Reservation:
     now = timezone.now()
-    return Reservation.objects.create(
+    reservation = Reservation.objects.create(
         restaurant=restaurant,
         table=table,
         guest_count=2,
@@ -67,6 +68,17 @@ def _active_reservation(restaurant: Restaurant, table: Table) -> Reservation:
         status=ReservationStatus.ACTIVE,
         type=ReservationType.PRE_BOOKED,
     )
+    Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        reservation=reservation,
+        guest_count=reservation.guest_count,
+        status=SessionStatus.OPEN,
+        currency="UAH",
+        opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
+    )
+    return reservation
 
 
 def _open_cart_with_item(table: Table, item: Any, quantity: int = 1) -> Any:
@@ -255,9 +267,8 @@ def test_pay_rejected_on_closed_visit(
     session.status = SessionStatus.CLOSED
     session.save(update_fields=["status"])
 
-    next_cart = ensure_active_cart_for_table(table=table)
-    with pytest.raises(DomainError):
-        pay_order_items(cart_session=next_cart, order_item_ids=[str(order_item.public_id)])
+    with pytest.raises(NoActiveReservationError):
+        ensure_active_cart_for_table(table=table)
 
     order_item.refresh_from_db()
     assert order_item.is_paid is False
@@ -372,7 +383,7 @@ def test_checkout_is_atomic_on_failure(
     cart.refresh_from_db()
     assert cart.status == CartSessionStatus.ACTIVE
     assert not Order.objects.exists()
-    assert not Session.objects.exists()
+    assert Session.objects.filter(status=SessionStatus.OPEN).count() == 1
 
 
 def _add_unavailable_item(cart: Any, item: Any) -> MenuItem:

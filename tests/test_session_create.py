@@ -92,6 +92,7 @@ class TestSessionCreate:
             status=SessionStatus.OPEN,
             currency="UAH",
             opened_at=stale_reservation.start_at,
+            ends_at=stale_reservation.end_at,
         )
         payload = {
             "table": str(table.public_id),
@@ -126,6 +127,7 @@ class TestSessionCreate:
             status=SessionStatus.OPEN,
             currency="UAH",
             opened_at=recent_reservation.start_at,
+            ends_at=recent_reservation.end_at + timedelta(hours=2),
         )
         payload = {
             "table": str(table.public_id),

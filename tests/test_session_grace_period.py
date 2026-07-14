@@ -11,7 +11,14 @@ from apps.reservations.selectors import get_unavailable_table_ids
 from apps.restaurants.models import Restaurant, Table
 
 
-def _seated_reservation(restaurant: Restaurant, table: Table, customer: Any, now: Any) -> Reservation:
+def _seated_reservation(
+    restaurant: Restaurant,
+    table: Table,
+    customer: Any,
+    now: Any,
+    *,
+    session_end_offset: timedelta | None = None,
+) -> Reservation:
     """An active reservation with an open session — a party currently seated,
     booked end 5 minutes from now (soon overstaying)."""
     reservation = Reservation.objects.create(
@@ -31,6 +38,7 @@ def _seated_reservation(restaurant: Restaurant, table: Table, customer: Any, now
         status=SessionStatus.OPEN,
         currency="UAH",
         opened_at=reservation.start_at,
+        ends_at=now + session_end_offset if session_end_offset is not None else reservation.end_at,
     )
     return reservation
 
@@ -134,3 +142,31 @@ def test_dangling_open_session_on_cancelled_reservation_does_not_block_table(
     )
 
     assert table.pk not in unavailable
+
+
+@pytest.mark.django_db
+def test_extended_session_end_keeps_table_blocked_past_booked_end(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+) -> None:
+    customer = user_factory()
+    customer.save()
+    now = timezone.now()
+    _seated_reservation(
+        restaurant,
+        table,
+        customer,
+        now,
+        session_end_offset=timedelta(hours=2),
+    )
+
+    unavailable = get_unavailable_table_ids(
+        restaurant_id=restaurant.id,
+        start_at=now + timedelta(minutes=80),
+        end_at=now + timedelta(minutes=110),
+        table_ids=[table.pk],
+        now=now,
+    )
+
+    assert table.pk in unavailable

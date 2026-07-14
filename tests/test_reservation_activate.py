@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from apps.authentication.models import RoleCode
-from apps.orders.models import CartSessionStatus, Session
+from apps.orders.models import CartSessionStatus, Session, SessionStatus
 from apps.orders.services import ensure_active_cart_for_table
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.restaurants.models import Restaurant, Table
@@ -52,7 +52,9 @@ def test_staff_activates_pending_reservation(
     reservation.refresh_from_db()
     assert reservation.status == ReservationStatus.ACTIVE
     # Variant 2: activation opens the visit Session (bill) right away.
-    assert Session.objects.filter(reservation=reservation).count() == 1
+    session = Session.objects.get(reservation=reservation)
+    assert session.status == SessionStatus.OPEN
+    assert session.ends_at == reservation.end_at
 
 
 @pytest.mark.django_db
@@ -120,6 +122,8 @@ def test_staff_can_activate_far_future_reservation(
     assert resp.status_code == status.HTTP_200_OK
     reservation.refresh_from_db()
     assert reservation.status == ReservationStatus.ACTIVE
+    session = Session.objects.get(reservation=reservation)
+    assert session.status == SessionStatus.OPEN
 
 
 @pytest.mark.django_db

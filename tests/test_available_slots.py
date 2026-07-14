@@ -172,6 +172,7 @@ def test_available_slots_excludes_own_session_from_grace_cutoff(
         status=SessionStatus.OPEN,
         currency="UAH",
         opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
     )
 
     with patch("apps.reservations.views.timezone.now", return_value=fixed_now):
@@ -220,6 +221,7 @@ def test_available_slots_without_exclude_still_blocks_others_sessions(
         status=SessionStatus.OPEN,
         currency="UAH",
         opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
     )
 
     with patch("apps.reservations.views.timezone.now", return_value=fixed_now):

@@ -45,7 +45,8 @@ class TestActivatePendingReservation:
         result = activate_pending_reservation(res, actor=actor)
         result.refresh_from_db()
         assert result.status == ReservationStatus.ACTIVE
-        assert Session.objects.filter(reservation=result, status=SessionStatus.OPEN).exists()
+        session = Session.objects.get(reservation=result, status=SessionStatus.OPEN)
+        assert session.ends_at == result.end_at
 
     def test_rejects_non_pending(
         self, restaurant: Restaurant, table: Table, user_factory: Any
@@ -91,6 +92,7 @@ class TestActivatePendingReservation:
             currency="UAH",
             status=SessionStatus.OPEN,
             opened_at=timezone.now(),
+            ends_at=timezone.now() + timedelta(hours=5),
         )
 
         with pytest.raises(ReservationConflictError, match="active session"):

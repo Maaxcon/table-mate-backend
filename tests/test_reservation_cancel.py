@@ -177,6 +177,7 @@ def test_cancel_reservation_closes_its_open_session(
         status=SessionStatus.OPEN,
         currency="UAH",
         opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
     )
 
     cancel_reservation(reservation=reservation)
@@ -240,6 +241,7 @@ def test_cancel_active_reservation_emits_table_freed_and_cancelled_events(
         status=SessionStatus.OPEN,
         currency="UAH",
         opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
     )
 
     with (
@@ -352,6 +354,7 @@ def test_cancel_active_reservation_closes_its_active_cart(
         status=SessionStatus.OPEN,
         currency="UAH",
         opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
     )
     cart = ensure_active_cart_for_table(table=table)
 

@@ -381,6 +381,7 @@ class TestPublishEndpoint:
             status=SessionStatus.OPEN,
             currency="UAH",
             opened_at=timezone.now(),
+            ends_at=reservation.end_at,
         )
 
         # Capture pre-publish FK values for comparison

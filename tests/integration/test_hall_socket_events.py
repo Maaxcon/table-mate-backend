@@ -301,6 +301,7 @@ def test_session_close_emits_table_status_changed(restaurant: Any, table: Any) -
         status=SessionStatus.OPEN,
         currency="UAH",
         opened_at=timezone.now(),
+        ends_at=reservation.end_at,
     )
 
     with patch("apps.orders.services.cart.emit_hall_table_status_changed") as mock_emit:
@@ -468,6 +469,7 @@ async def test_session_close_broadcasts_to_hall_subscriber(restaurant: Any, tabl
             status=SessionStatus.OPEN,
             currency="UAH",
             opened_at=timezone.now(),
+            ends_at=reservation.end_at,
         )
 
     session = await sync_to_async(_create_session)()

@@ -8,7 +8,7 @@ from django.db import connection
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode
-from apps.orders.models import CartSession, CartSessionStatus
+from apps.orders.models import CartSession, CartSessionStatus, Session, SessionStatus
 from apps.orders.services import ensure_active_cart_for_table
 from apps.reservations.models import (
     Reservation,
@@ -28,9 +28,10 @@ def _make_reservation(
     res_type: str = ReservationType.PRE_BOOKED,
     start_offset: timedelta = timedelta(minutes=-30),
     end_offset: timedelta = timedelta(hours=1),
+    open_session: bool = False,
 ) -> Reservation:
     now = timezone.now()
-    return Reservation.objects.create(
+    reservation = Reservation.objects.create(
         restaurant=restaurant,
         table=table,
         guest_count=2,
@@ -39,11 +40,23 @@ def _make_reservation(
         status=status,
         type=res_type,
     )
+    if open_session:
+        Session.objects.create(
+            restaurant=restaurant,
+            table=table,
+            reservation=reservation,
+            guest_count=reservation.guest_count,
+            status=SessionStatus.OPEN,
+            currency="UAH",
+            opened_at=reservation.start_at,
+            ends_at=reservation.end_at,
+        )
+    return reservation
 
 
 @pytest.mark.django_db
 def test_returns_cart_for_active_reservation(restaurant: Restaurant, table: Table) -> None:
-    _make_reservation(restaurant=restaurant, table=table)
+    _make_reservation(restaurant=restaurant, table=table, open_session=True)
 
     session = ensure_active_cart_for_table(table=table)
 
@@ -52,9 +65,10 @@ def test_returns_cart_for_active_reservation(restaurant: Restaurant, table: Tabl
 
 
 @pytest.mark.django_db
-def test_active_reservation_with_future_start_still_yields_cart(restaurant: Restaurant, table: Table) -> None:
-    # Guest seated/scanned a few minutes early: reservation is ACTIVE but start is
-    # still ahead. The cart must open anyway (active = table is open).
+def test_active_reservation_without_open_session_does_not_yield_cart(
+    restaurant: Restaurant,
+    table: Table,
+) -> None:
     _make_reservation(
         restaurant=restaurant,
         table=table,
@@ -62,14 +76,13 @@ def test_active_reservation_with_future_start_still_yields_cart(restaurant: Rest
         end_offset=timedelta(hours=2),
     )
 
-    session = ensure_active_cart_for_table(table=table)
-
-    assert session.status == CartSessionStatus.ACTIVE
+    with pytest.raises(NoActiveReservationError):
+        ensure_active_cart_for_table(table=table)
 
 
 @pytest.mark.django_db
 def test_second_call_returns_same_session(restaurant: Restaurant, table: Table) -> None:
-    _make_reservation(restaurant=restaurant, table=table)
+    _make_reservation(restaurant=restaurant, table=table, open_session=True)
 
     first = ensure_active_cart_for_table(table=table)
     second = ensure_active_cart_for_table(table=table)
@@ -103,12 +116,40 @@ def test_expired_reservation_gives_no_cart(restaurant: Restaurant, table: Table)
 
 
 @pytest.mark.django_db
+def test_extended_session_keeps_table_available_even_if_booked_end_is_past(
+    restaurant: Restaurant,
+    table: Table,
+) -> None:
+    reservation = _make_reservation(
+        restaurant=restaurant,
+        table=table,
+        start_offset=timedelta(hours=-3),
+        end_offset=timedelta(minutes=-30),
+    )
+    Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        reservation=reservation,
+        guest_count=reservation.guest_count,
+        status=SessionStatus.OPEN,
+        currency="UAH",
+        opened_at=reservation.start_at,
+        ends_at=timezone.now() + timedelta(minutes=15),
+    )
+
+    session = ensure_active_cart_for_table(table=table)
+
+    assert session.status == CartSessionStatus.ACTIVE
+    assert session.reservation_id == reservation.id
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     "res_type",
     [ReservationType.PRE_BOOKED, ReservationType.WALK_IN],
 )
 def test_walk_in_and_pre_booked_handled_the_same(restaurant: Restaurant, table: Table, res_type: str) -> None:
-    _make_reservation(restaurant=restaurant, table=table, res_type=res_type)
+    _make_reservation(restaurant=restaurant, table=table, res_type=res_type, open_session=True)
 
     session = ensure_active_cart_for_table(table=table)
 
@@ -124,7 +165,7 @@ def test_optional_user_becomes_creator_and_participant(
 ) -> None:
     user = user_factory(role=RoleCode.CUSTOMER)
     user.save()
-    reservation = _make_reservation(restaurant=restaurant, table=table)
+    reservation = _make_reservation(restaurant=restaurant, table=table, open_session=True)
     ReservationParticipant.objects.create(reservation=reservation, user=user)
 
     session = ensure_active_cart_for_table(table=table, user=user)
@@ -135,7 +176,7 @@ def test_optional_user_becomes_creator_and_participant(
 
 @pytest.mark.django_db
 def test_guest_call_leaves_creator_null(restaurant: Restaurant, table: Table) -> None:
-    _make_reservation(restaurant=restaurant, table=table)
+    _make_reservation(restaurant=restaurant, table=table, open_session=True)
 
     session = ensure_active_cart_for_table(table=table)
 
@@ -144,7 +185,7 @@ def test_guest_call_leaves_creator_null(restaurant: Restaurant, table: Table) ->
 
 @pytest.mark.django_db(transaction=True)
 def test_concurrent_scans_create_exactly_one_session(restaurant: Restaurant, table: Table) -> None:
-    _make_reservation(restaurant=restaurant, table=table)
+    _make_reservation(restaurant=restaurant, table=table, open_session=True)
     attempts = 50
 
     def _attempt() -> int:
