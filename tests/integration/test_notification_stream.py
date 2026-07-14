@@ -158,17 +158,17 @@ def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any
         channel_layer = get_channel_layer()
         assert channel_layer is not None
 
-        original_send = NotificationStreamConsumer._send_cached_notifications
+        original_catch_up = NotificationStreamConsumer._catch_up_new_notifications
         replay_started = asyncio.Event()
 
-        async def slow_send(self: NotificationStreamConsumer, restaurant_pk: int) -> None:
+        async def slow_catch_up(self: NotificationStreamConsumer, restaurant_pk: int) -> None:
             replay_started.set()
             await asyncio.sleep(0.05)
-            await original_send(self, restaurant_pk)
+            await original_catch_up(self, restaurant_pk)
 
         live_event = {"type": "KITCHEN_TICKET_INJECTED", "data": {"id": "live-1", "table_number": "T1"}}
 
-        with patch.object(NotificationStreamConsumer, "_send_cached_notifications", new=slow_send):
+        with patch.object(NotificationStreamConsumer, "_catch_up_new_notifications", new=slow_catch_up):
             connect_task = asyncio.create_task(communicator.connect())
             await asyncio.wait_for(replay_started.wait(), timeout=1)
             await channel_layer.group_send(
@@ -182,6 +182,130 @@ def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any
             received = [await communicator.receive_json_from(timeout=3) for _ in range(3)]
             ids = [event["data"]["id"] for event in received]
             assert ids == ["hist-1", "hist-2", "live-1"]
+
+            await communicator.disconnect()
+
+    asyncio.run(_test())
+
+
+@pytest.mark.django_db
+def test_notification_consumer_deduplicates_history_and_live_events(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [
+            {"type": "CART_CREATED", "data": {"id": "hist-1", "table_number": "T1"}},
+            {"type": "CART_CHECKED_OUT", "data": {"id": "hist-2", "table_number": "T1"}},
+        ]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+
+        channel_layer = get_channel_layer()
+        assert channel_layer is not None
+
+        original_catch_up = NotificationStreamConsumer._catch_up_new_notifications
+        catch_up_started = asyncio.Event()
+        release_catch_up = asyncio.Event()
+
+        async def paused_catch_up(self: NotificationStreamConsumer, restaurant_pk: int) -> None:
+            catch_up_started.set()
+            await release_catch_up.wait()
+            await original_catch_up(self, restaurant_pk)
+
+        live_event = {
+            "type": "KITCHEN_TICKET_INJECTED",
+            "data": {"id": "live-dedupe", "table_number": "T1", "ticket_id": "abc", "items_count": 1},
+        }
+
+        with patch.object(NotificationStreamConsumer, "_catch_up_new_notifications", new=paused_catch_up):
+            connect_task = asyncio.create_task(communicator.connect())
+            await asyncio.wait_for(catch_up_started.wait(), timeout=1)
+
+            await sync_to_async(store_notification_event)(restaurant.id, live_event)
+            await channel_layer.group_send(
+                staff_group_name(restaurant.id),
+                {"type": "notification.event", "event": live_event},
+            )
+
+            release_catch_up.set()
+
+            connected, _ = await connect_task
+            assert connected
+
+            received = [await communicator.receive_json_from(timeout=3) for _ in range(3)]
+            ids = [event["data"]["id"] for event in received]
+            assert ids[:2] == ["hist-1", "hist-2"]
+            assert ids[2] == "live-dedupe"
+
+            await communicator.disconnect()
+
+    asyncio.run(_test())
+
+
+@pytest.mark.django_db
+def test_notification_consumer_replays_events_emitted_before_group_join(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [
+            {"type": "CART_CREATED", "data": {"id": "hist-1", "table_number": "T1"}},
+            {"type": "CART_CHECKED_OUT", "data": {"id": "hist-2", "table_number": "T1"}},
+        ]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+
+        channel_layer = get_channel_layer()
+        assert channel_layer is not None
+
+        group_add_called = asyncio.Event()
+        release_group_add = asyncio.Event()
+        original_group_add = channel_layer.group_add
+
+        async def blocked_group_add(group: str, channel: str) -> None:
+            group_add_called.set()
+            await release_group_add.wait()
+            await original_group_add(group, channel)
+
+        gap_event = {
+            "type": "ORDER_ITEM_STATUS_CHANGED",
+            "data": {
+                "id": "gap-event",
+                "table_number": "T1",
+                "order_item_id": "xyz",
+                "status": "ready",
+            },
+        }
+
+        with patch.object(channel_layer, "group_add", new=blocked_group_add):
+            connect_task = asyncio.create_task(communicator.connect())
+            await asyncio.wait_for(group_add_called.wait(), timeout=1)
+
+            await sync_to_async(store_notification_event)(restaurant.id, gap_event)
+
+            release_group_add.set()
+
+            connected, _ = await connect_task
+            assert connected
+
+            received = [await communicator.receive_json_from(timeout=3) for _ in range(3)]
+            ids = [event["data"]["id"] for event in received]
+            assert ids == ["hist-1", "hist-2", "gap-event"]
 
             await communicator.disconnect()
 
