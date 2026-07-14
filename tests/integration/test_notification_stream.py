@@ -155,9 +155,6 @@ def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any
             subprotocols=["access_token", access],
         )
 
-        channel_layer = get_channel_layer()
-        assert channel_layer is not None
-
         original_catch_up = NotificationStreamConsumer._catch_up_new_notifications
         replay_started = asyncio.Event()
 
@@ -166,14 +163,14 @@ def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any
             await asyncio.sleep(0.05)
             await original_catch_up(self, restaurant_pk)
 
-        live_event = {"type": "KITCHEN_TICKET_INJECTED", "data": {"id": "live-1", "table_number": "T1"}}
-
         with patch.object(NotificationStreamConsumer, "_catch_up_new_notifications", new=slow_catch_up):
             connect_task = asyncio.create_task(communicator.connect())
             await asyncio.wait_for(replay_started.wait(), timeout=1)
-            await channel_layer.group_send(
-                staff_group_name(restaurant.id),
-                {"type": "notification.event", "event": live_event},
+            await sync_to_async(emit_kitchen_ticket_injected)(
+                restaurant.id,
+                ticket_id="live-1-ticket",
+                table_number="T1",
+                items_count=2,
             )
 
             connected, _ = await connect_task
@@ -181,7 +178,9 @@ def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any
 
             received = [await communicator.receive_json_from(timeout=3) for _ in range(3)]
             ids = [event["data"]["id"] for event in received]
-            assert ids == ["hist-1", "hist-2", "live-1"]
+            assert ids[:2] == ["hist-1", "hist-2"]
+            assert received[2]["type"] == "KITCHEN_TICKET_INJECTED"
+            assert received[2]["data"]["ticket_id"] == "live-1-ticket"
 
             await communicator.disconnect()
 
@@ -329,9 +328,6 @@ def test_notification_consumer_flushes_events_added_after_initial_drain(restaura
             subprotocols=["access_token", access],
         )
 
-        channel_layer = get_channel_layer()
-        assert channel_layer is not None
-
         original_drain = NotificationStreamConsumer._drain_pending_notifications
         drain_calls = 0
 
@@ -340,15 +336,11 @@ def test_notification_consumer_flushes_events_added_after_initial_drain(restaura
             drain_calls += 1
             await original_drain(self)
             if drain_calls == 1:
-                await channel_layer.group_send(
-                    staff_group_name(restaurant.id),
-                    {
-                        "type": "notification.event",
-                        "event": {
-                            "type": "KITCHEN_TICKET_INJECTED",
-                            "data": {"id": "live-after", "table_number": "T9"},
-                        },
-                    },
+                await sync_to_async(emit_kitchen_ticket_injected)(
+                    restaurant.id,
+                    ticket_id="live-after-ticket",
+                    table_number="T9",
+                    items_count=3,
                 )
                 await asyncio.sleep(0)
 
@@ -359,7 +351,8 @@ def test_notification_consumer_flushes_events_added_after_initial_drain(restaura
             first = await communicator.receive_json_from(timeout=3)
             assert first == historical[0]
             live = await communicator.receive_json_from(timeout=3)
-            assert live["data"]["id"] == "live-after"
+            assert live["type"] == "KITCHEN_TICKET_INJECTED"
+            assert live["data"]["ticket_id"] == "live-after-ticket"
 
             await communicator.disconnect()
 
