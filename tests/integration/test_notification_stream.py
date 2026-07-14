@@ -147,8 +147,10 @@ def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any
         assert channel_layer is not None
 
         original_send = NotificationStreamConsumer._send_cached_notifications
+        replay_started = asyncio.Event()
 
         async def slow_send(self: NotificationStreamConsumer, restaurant_pk: int) -> None:
+            replay_started.set()
             await asyncio.sleep(0.05)
             await original_send(self, restaurant_pk)
 
@@ -156,7 +158,7 @@ def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any
 
         with patch.object(NotificationStreamConsumer, "_send_cached_notifications", new=slow_send):
             connect_task = asyncio.create_task(communicator.connect())
-            await asyncio.sleep(0.01)
+            await asyncio.wait_for(replay_started.wait(), timeout=1)
             await channel_layer.group_send(
                 staff_group_name(restaurant.id),
                 {"type": "notification.event", "event": live_event},

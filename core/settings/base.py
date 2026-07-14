@@ -171,8 +171,11 @@ CHANNEL_LAYERS = {
 # hard dependency (channels), so reuse it as a process-shared cache.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
         "KEY_PREFIX": "tablemate",
     }
 }
