@@ -63,12 +63,14 @@ class ImageFileValidator:
     allowed_extensions: set[str]
     allowed_mimes: set[str]
     max_size: int
+    max_dimensions: tuple[int, int] | None
     size_validator: MaxFileSizeValidator
 
-    def __init__(self, max_size_mb: int = 5) -> None:
+    def __init__(self, max_size_mb: int = 5, max_dimensions: tuple[int, int] | None = (2048, 2048)) -> None:
         self.allowed_extensions = ALLOWED_IMAGE_EXTENSIONS
         self.allowed_mimes = ALLOWED_IMAGE_MIMES
         self.max_size = max_size_mb * 1024 * 1024
+        self.max_dimensions = max_dimensions
         self.size_validator = MaxFileSizeValidator(max_size_mb)
 
     def __call__(self, value: Any) -> None:
@@ -90,23 +92,52 @@ class ImageFileValidator:
 
         if hasattr(value, "read") and callable(value.read):
             original_pos = value.tell()
-            content = value.read(32)
-            value.seek(original_pos)
-            if content:
-                try:
-                    validate_image_magic(content)
-                except ValidationError as exc:
-                    raise ValidationError(
-                        _("File content does not match an allowed image type."),
-                        code="invalid_image_content",
-                    ) from exc
+            try:
+                content = value.read()
+            finally:
+                value.seek(original_pos)
+
+            if not content:
+                raise ValidationError(_("Empty file."), code="empty_file")
+
+            try:
+                validate_image_magic(content[:32])
+            except ValidationError as exc:
+                raise ValidationError(
+                    _("File content does not match an allowed image type."),
+                    code="invalid_image_content",
+                ) from exc
+
+            try:
+                import io
+
+                from PIL import Image as PILImage
+
+                image = PILImage.open(io.BytesIO(content))
+                if self.max_dimensions is not None:
+                    w, h = image.size
+                    max_w, max_h = self.max_dimensions
+                    if w > max_w or h > max_h:
+                        raise ValidationError(
+                            _("Image dimensions %(w)dx%(h)d exceed the limit of %(max_w)dx%(max_h)d.")
+                            % {"w": w, "h": h, "max_w": max_w, "max_h": max_h},
+                            code="image_dimensions_exceeded",
+                        )
+                image.verify()
+            except ValidationError:
+                raise
+            except Exception as exc:
+                raise ValidationError(
+                    _("File could not be decoded as a valid image."),
+                    code="invalid_image_content",
+                ) from exc
 
         self.size_validator(value)
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, ImageFileValidator):
-            return self.max_size == other.max_size
+            return self.max_size == other.max_size and self.max_dimensions == other.max_dimensions
         return False
 
     def __hash__(self) -> int:
-        return hash(self.max_size)
+        return hash((self.max_size, self.max_dimensions))
