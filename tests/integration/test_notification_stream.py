@@ -13,6 +13,7 @@ from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
 from django.utils import timezone
 
+import common.notification_store as notification_store_module
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens, issue_tokens_with_restaurant
 from apps.editor.consumers import (
@@ -95,6 +96,31 @@ def test_store_notification_event_falls_back_when_lock_unavailable(
     assert len(history) == 1
     assert history[0]["data"]["id"] == "lock-fallback"
     assert any("lock" in record.message for record in caplog.records)
+
+
+@pytest.mark.django_db
+def test_store_notification_event_truncates_large_payloads(restaurant: Any) -> None:
+    long_text = "x" * (notification_store_module._MAX_FIELD_LENGTH + 100)
+    event: dict[str, Any] = {
+        "type": "TEST_EVENT",
+        "data": {
+            "comment": long_text,
+            "items": [
+                {"note": long_text, "index": idx} for idx in range(notification_store_module._MAX_LIST_LENGTH + 5)
+            ],
+        },
+    }
+
+    store_notification_event(restaurant.id, event)
+
+    history = get_notification_history(restaurant.id)
+    stored = history[0]
+
+    assert stored["data"]["comment"].endswith("...")
+    assert len(stored["data"]["comment"]) == notification_store_module._MAX_FIELD_LENGTH
+    assert len(stored["data"]["items"]) == notification_store_module._MAX_LIST_LENGTH
+    assert stored["data"]["items"][0]["note"].endswith("...")
+    assert event["data"]["comment"] == long_text  # original payload untouched
 
 
 @pytest.mark.django_db
