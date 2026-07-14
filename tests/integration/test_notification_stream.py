@@ -10,7 +10,8 @@ import pytest
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
 from channels.testing import WebsocketCommunicator
-from django.core.cache import cache
+from django.core.cache import cache, caches
+from django.test.utils import override_settings
 from django.utils import timezone
 
 import common.notification_store as notification_store_module
@@ -45,15 +46,26 @@ def _inmemory_channel_layer(settings: Any) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _locmem_cache(settings: Any) -> Iterator[None]:
-    settings.CACHES = {
+def _locmem_cache() -> Iterator[None]:
+    locmem_settings = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         }
     }
-    cache.clear()
-    yield
-    cache.clear()
+
+    def _reset_cache_handler() -> None:
+        cache_store = getattr(caches, "_caches", None)
+        if isinstance(cache_store, dict):
+            cache_store.clear()
+
+    with override_settings(CACHES=locmem_settings):
+        _reset_cache_handler()
+        cache.clear()
+        try:
+            yield
+        finally:
+            cache.clear()
+            _reset_cache_handler()
 
 
 # ── Notification history persistence ──
