@@ -26,28 +26,28 @@ _FLOOR_ALLOWED_ROLES: frozenset[str] = frozenset(
 
 class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
+        _, via_subprotocol = extract_ws_token(self.scope)
+        subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
         try:
             user, restaurant_id = await authenticate_websocket(self.scope)
         except Exception:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4001)
             return
 
         if user is None or restaurant_id is None:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4001)
             return
 
         if user.role not in _HALL_ALLOWED_ROLES:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4003)
             return
 
         self.group_name = hall_group_name(restaurant_id)
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
-        _, via_subprotocol = extract_ws_token(self.scope)
-        subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
         await self.accept(subprotocol=subprotocol)
 
     async def disconnect(self, code: int) -> None:
@@ -60,28 +60,28 @@ class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
 class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
+        _, via_subprotocol = extract_ws_token(self.scope)
+        subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
         try:
             user, restaurant_id = await authenticate_websocket(self.scope)
         except Exception:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4001)
             return
 
         if user is None or restaurant_id is None:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4001)
             return
 
         if user.role not in _STAFF_ALLOWED_ROLES:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4003)
             return
 
         self.group_name = staff_group_name(restaurant_id)
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
-        _, via_subprotocol = extract_ws_token(self.scope)
-        subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
         await self.accept(subprotocol=subprotocol)
 
     async def disconnect(self, code: int) -> None:
@@ -133,27 +133,29 @@ class StaffReservationsConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     """
 
     async def connect(self) -> None:
+        _, via_subprotocol = extract_ws_token(self.scope)
+        subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
         try:
             user, restaurant_id = await authenticate_websocket(self.scope)
         except Exception:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4001)
             return
 
         if user is None or restaurant_id is None:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4001)
             return
 
         if user.role not in _HALL_ALLOWED_ROLES:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4003)
             return
 
         self.group_name = staff_group_name(restaurant_id)
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
-        await self.accept()
+        await self.accept(subprotocol=subprotocol)
 
     async def disconnect(self, code: int) -> None:
         if hasattr(self, "group_name"):
@@ -165,6 +167,9 @@ class StaffReservationsConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
 class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
+        _, via_subprotocol = extract_ws_token(self.scope)
+        subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
+
         # Auth is optional here, not required: the floor stream is public — only
         # already-public table/reservation status leaks through (see
         # _filter_event_for_floor) — so an anonymous guest browsing the booking
@@ -189,19 +194,19 @@ class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
                 restaurant_id = resolved
 
         if restaurant_id is None:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4001)
             return
 
         if user is not None and user.role not in _FLOOR_ALLOWED_ROLES:
-            await self.accept()
+            await self.accept(subprotocol=subprotocol)
             await self.close(code=4003)
             return
 
         self.group_name = hall_group_name(restaurant_id)
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
-        await self.accept()
+        await self.accept(subprotocol=subprotocol)
 
     async def disconnect(self, code: int) -> None:
         if hasattr(self, "group_name"):
