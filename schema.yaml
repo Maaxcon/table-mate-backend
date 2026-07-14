@@ -2847,7 +2847,11 @@ paths:
         '200':
           description: No response body
         '409':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchUpdateError'
+          description: ''
   /api/reservations/reservations/my/:
     get:
       operationId: reservations_reservations_my_list
@@ -3780,6 +3784,17 @@ components:
             format: uuid
       required:
       - changes
+    BatchUpdateError:
+      type: object
+      properties:
+        detail:
+          type: string
+        code:
+          type: string
+        conflicting_reservation_id:
+          type: string
+      required:
+      - detail
     BatchUpdateItem:
       type: object
       properties:
