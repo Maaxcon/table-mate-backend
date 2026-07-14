@@ -74,25 +74,47 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
             return
 
         self.group_name = staff_group_name(restaurant_id)
+        self._pending_notifications: list[dict[str, object]] = []
+        self._history_replay_complete = False
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         _, via_subprotocol = extract_ws_token(self.scope)
         subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
         await self.accept(subprotocol=subprotocol)
 
-        await self._send_cached_notifications(restaurant_id)
+        try:
+            await self._send_cached_notifications(restaurant_id)
+        finally:
+            await self._flush_pending_notifications()
+            self._history_replay_complete = True
 
     async def disconnect(self, code: int) -> None:
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def notification_event(self, message: dict[str, object]) -> None:
-        await self.send(text_data=json.dumps(message["event"]))
+        event = message.get("event")
+        if not isinstance(event, dict):
+            return
+
+        if not getattr(self, "_history_replay_complete", True):
+            self._pending_notifications.append(event)
+            return
+
+        await self.send(text_data=json.dumps(event))
 
     async def _send_cached_notifications(self, restaurant_id: int) -> None:
         history = await sync_to_async(get_notification_history)(restaurant_id)
         for event in history:
             await self.send(text_data=json.dumps(event))
+
+    async def _flush_pending_notifications(self) -> None:
+        pending = getattr(self, "_pending_notifications", None)
+        if not pending:
+            return
+        for event in pending:
+            await self.send(text_data=json.dumps(event))
+        pending.clear()
 
 
 _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {

@@ -8,6 +8,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from asgiref.sync import sync_to_async
+from channels.layers import get_channel_layer
 from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
 from django.utils import timezone
@@ -94,6 +95,57 @@ def test_store_notification_event_falls_back_when_lock_unavailable(
     assert len(history) == 1
     assert history[0]["data"]["id"] == "lock-fallback"
     assert any("lock" in record.message for record in caplog.records)
+
+
+@pytest.mark.django_db
+def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [
+            {"type": "CART_CREATED", "data": {"id": "hist-1", "table_number": "T1"}},
+            {"type": "CART_CHECKED_OUT", "data": {"id": "hist-2", "table_number": "T1"}},
+        ]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+
+        channel_layer = get_channel_layer()
+        assert channel_layer is not None
+
+        original_send = NotificationStreamConsumer._send_cached_notifications
+
+        async def slow_send(self: NotificationStreamConsumer, restaurant_pk: int) -> None:
+            await asyncio.sleep(0.05)
+            await original_send(self, restaurant_pk)
+
+        live_event = {"type": "KITCHEN_TICKET_INJECTED", "data": {"id": "live-1", "table_number": "T1"}}
+
+        with patch.object(NotificationStreamConsumer, "_send_cached_notifications", new=slow_send):
+            connect_task = asyncio.create_task(communicator.connect())
+            await asyncio.sleep(0.01)
+            await channel_layer.group_send(
+                staff_group_name(restaurant.id),
+                {"type": "notification.event", "event": live_event},
+            )
+
+            connected, _ = await connect_task
+            assert connected
+
+            received = [await communicator.receive_json_from(timeout=3) for _ in range(3)]
+            ids = [event["data"]["id"] for event in received]
+            assert ids == ["hist-1", "hist-2", "live-1"]
+
+            await communicator.disconnect()
+
+    asyncio.run(_test())
 
 
 # ── NotificationStreamConsumer auth / role gates ──
