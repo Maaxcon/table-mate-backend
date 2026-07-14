@@ -5,6 +5,7 @@ from uuid import uuid4
 from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics, status
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -20,8 +21,10 @@ from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 from common.exceptions import NoActiveReservationError, ReservationNotYetActiveError
 
+from .authentication import GuestJWTAuthentication, TokenVersionJWTAuthentication
 from .models import RoleCode, User
 from .serializers import (
+    CartAwareTokenRefreshSerializer,
     CustomerContextSerializer,
     CustomTokenObtainPairSerializer,
     GoogleAuthResponseSerializer,
@@ -214,6 +217,8 @@ def _reject_if_token_version_stale(refresh_token: str) -> None:
 
 
 class CookieTokenRefreshView(TokenRefreshView):
+    serializer_class = CartAwareTokenRefreshSerializer
+
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         refresh_token = request.COOKIES.get("refresh_token")
         if not refresh_token:
@@ -255,15 +260,29 @@ class LogoutView(APIView):
         return response
 
 
-class GuestInitView(APIView):
+class _GuestInitAuthMixin:
+    """Accepts regular JWT, guest JWT, or no token — never 401s."""
+
+    authentication_classes = [TokenVersionJWTAuthentication]
+
+    def perform_authentication(self, request: Request) -> None:
+        try:
+            super().perform_authentication(request)  # type: ignore[misc]
+        except AuthenticationFailed:
+            guest = GuestJWTAuthentication()
+            result = guest.authenticate(request)
+            if result is not None:
+                request.user, request.auth = result
+
+
+class GuestInitView(_GuestInitAuthMixin, APIView):
     permission_classes = [AllowAny]
-    authentication_classes: list[type] = []
     throttle_scope = "auth"
 
     @extend_schema(
         request=GuestInitSerializer,
         responses={
-            200: OpenApiResponse(description="Guest JWT issued."),
+            200: OpenApiResponse(description="JWT issued."),
             400: OpenApiResponse(description="Invalid request."),
         },
     )
@@ -274,19 +293,19 @@ class GuestInitView(APIView):
         reservation_id = serializer.validated_data.get("reservation_id")
         table_id = serializer.validated_data.get("table_id")
 
+        user = request.user if request.user.is_authenticated else None
+
         session: CartSession | None
         if table_id:
-            # Scan flow: create the cart if the table has an active reservation.
-            # Raises NoActiveReservationError (-> 404 NO_ACTIVE_RESERVATION) otherwise.
             try:
-                session = _ensure_session_for_table(str(table_id))
+                session = _ensure_session_for_table(str(table_id), user=user)
             except ReservationNotYetActiveError as exc:
                 return Response(
                     {"detail": exc.default_detail, "code": exc.default_code, "start_at": exc.start_at},
                     status=status.HTTP_404_NOT_FOUND,
                 )
         else:
-            session = _find_active_session_for_reservation(reservation_id)
+            session = _find_active_session_for_reservation(reservation_id, user=user)
             if session is None:
                 return Response(
                     {"detail": "No active cart session found for this reservation."},
@@ -294,31 +313,30 @@ class GuestInitView(APIView):
                 )
 
         cart_session_id = str(session.public_id)
+        if user is not None:
+            access, _refresh = issue_tokens(user, cart_session_id=cart_session_id)
+            return Response({"access": access})
         guest_id = _carry_forward_guest_id(request)
         token = _issue_guest_token(cart_session_id=cart_session_id, guest_id=guest_id)
         return Response({"access": token})
 
 
-def _ensure_session_for_table(table_id: str) -> CartSession:
+def _ensure_session_for_table(table_id: str, user: User | None = None) -> CartSession:
     from apps.reservations.selectors import get_upcoming_pending_reservation_for_table
 
     table = Table.objects.filter(public_id=table_id, active=True).first()
     if table is None:
         raise NoActiveReservationError("This table has no active reservation.")
     try:
-        return ensure_active_cart_for_table(table=table)
+        return ensure_active_cart_for_table(table=table, user=user)
     except NoActiveReservationError:
-        # A pending booking exists but is not active yet: tell the guest when it
-        # starts instead of "no booking".
         upcoming = get_upcoming_pending_reservation_for_table(table)
         if upcoming is not None:
             raise ReservationNotYetActiveError(start_at=upcoming.start_at.isoformat()) from None
         raise
 
 
-def _find_active_session_for_reservation(reservation_id: Any) -> CartSession | None:
-    # Reuse the open cart if one exists; otherwise open a fresh one for the
-    # reservation's table (e.g. the round after a checkout closed the last cart).
+def _find_active_session_for_reservation(reservation_id: Any, user: User | None = None) -> CartSession | None:
     session = (
         CartSession.objects.filter(
             reservation__public_id=reservation_id,
@@ -334,7 +352,7 @@ def _find_active_session_for_reservation(reservation_id: Any) -> CartSession | N
     if reservation is None or reservation.table is None:
         return None
     try:
-        return ensure_active_cart_for_table(table=reservation.table)
+        return ensure_active_cart_for_table(table=reservation.table, user=user)
     except NoActiveReservationError:
         return None
 
