@@ -374,7 +374,7 @@ class SetGuestNameView(GuestFallbackAuthMixin, APIView):
 class CartBillView(GuestFallbackAuthMixin, APIView):
     """Ordered (already-submitted) items for this table's visit — the bill."""
 
-    throttle_scope = "checkout"
+    throttle_scope = "bill"
     permission_classes = [IsActiveTableGuest]
     serializer_class = BillItemSerializer
 
