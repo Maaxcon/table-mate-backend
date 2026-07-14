@@ -197,13 +197,11 @@ class TestCustomerContextView:
         assert "access" in response.data
         assert "refresh_token" in response.cookies
 
-    def test_reservation_participant_gets_token(self) -> None:
+    def test_reservation_customer_gets_token(self) -> None:
         restaurant = Restaurant.objects.create(name="Test Restaurant")
         owner = UserFactory.create(role=RoleCode.CUSTOMER)
-        participant = UserFactory.create(role=RoleCode.CUSTOMER)
         reservation = self._create_reservation(restaurant=restaurant, customer=owner)
-        reservation.participants.add(participant)
-        access, _ = issue_tokens(participant)
+        access, _ = issue_tokens(owner)
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
 

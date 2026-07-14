@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from django.db.models import Q, QuerySet
+from django.db.models import QuerySet
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
@@ -99,11 +99,7 @@ class CartSessionViewSet(
                 return qs.filter(public_id=session_id)
             return qs.none()
         user = cast(User, self.request.user)
-        return (
-            qs.filter(Q(participants=user) | Q(reservation__participants=user) | Q(reservation__customer=user))
-            .prefetch_related("participants")
-            .distinct()
-        )
+        return qs.filter(participants=user).prefetch_related("participants").distinct()
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = self.get_serializer(data=request.data)
@@ -163,11 +159,7 @@ class CartSessionItemViewSet(
             qs = qs.filter(cart_session__public_id=session_pk) if session_pk else qs
         else:
             user = cast(User, self.request.user)
-            qs = qs.filter(
-                Q(cart_session__participants=user)
-                | Q(cart_session__reservation__participants=user)
-                | Q(cart_session__reservation__customer=user)
-            )
+            qs = qs.filter(cart_session__participants=user)
             if session_pk:
                 qs = qs.filter(cart_session__public_id=session_pk)
         return qs.select_related("menu_item", "cart_session").distinct()

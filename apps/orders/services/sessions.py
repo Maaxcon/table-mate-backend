@@ -9,7 +9,6 @@ from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
 from apps.orders.billing import close_visit_session
@@ -22,7 +21,7 @@ from common.hall_events import emit_hall_reservations_updated, emit_hall_session
 from common.notification_events import emit_cart_created
 
 from ..models import CartSession, CartSessionStatus, Session, SessionStatus
-from ..selectors import _resolve_allowed_reservation_participant_ids, get_reservation
+from ..selectors import get_reservation
 from .cart import _broadcast_cart_updated
 
 logger = logging.getLogger(__name__)
@@ -41,10 +40,6 @@ def create_cart_session(
     if reservation is None:
         raise ReservationNotFoundError(f"Reservation {reservation_id} not found.")
 
-    allowed_participants = _resolve_allowed_reservation_participant_ids(reservation)
-    if not allowed_participants or user.id not in allowed_participants:
-        raise PermissionDenied("Only reservation participants may open a cart session.")
-
     with transaction.atomic():
         existing = (
             CartSession.objects.select_for_update()
@@ -52,7 +47,7 @@ def create_cart_session(
             .first()
         )
         if existing is not None:
-            existing.participants.add(*allowed_participants)
+            existing.participants.add(user)
             return existing
 
         created = False
@@ -78,7 +73,7 @@ def create_cart_session(
                 )
             )
 
-        session.participants.add(*allowed_participants)
+        session.participants.add(user)
     return session
 
 
@@ -94,20 +89,14 @@ def ensure_active_cart_for_table(
     one_active_per_reservation unique constraint so two callers can never create
     two active sessions for the same reservation.
 
-    NOTE: unlike create_cart_session, this intentionally does NOT gate on
-    reservation participants when called from the guest flow (user=None), because
-    the issued guest token is already scoped to one cart_session_id. When an
-    authenticated user calls this, we verify they are a participant.
+    NOTE: unlike create_cart_session, this intentionally does not depend on any
+    reservation-level participant relation. Guest access is already scoped to a
+    single cart_session_id, and authenticated users are admitted through the
+    live cart session membership instead.
     """
     reservation = get_active_reservation_for_table(table)
     if reservation is None:
         raise NoActiveReservationError(f"Table {table.public_id} has no active reservation.")
-
-    if user is not None:
-        from apps.orders.selectors import _resolve_allowed_reservation_participant_ids
-
-        if user.id not in _resolve_allowed_reservation_participant_ids(reservation):
-            raise PermissionDenied("You are not a participant in this reservation.")
 
     with transaction.atomic():
         existing = (

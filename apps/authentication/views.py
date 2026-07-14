@@ -177,11 +177,9 @@ class CustomerContextView(APIView):
             )
 
         reservation = serializer.validated_data["reservation"]
-        is_customer = reservation.customer_id == user.id
-        is_participant = reservation.participants.filter(id=user.id).exists()
-        if not (is_customer or is_participant):
+        if reservation.customer_id != user.id:
             return Response(
-                {"detail": "You are not a participant in this reservation."},
+                {"detail": "You are not the customer for this reservation."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 

@@ -10,12 +10,7 @@ from django.utils import timezone
 from apps.authentication.models import RoleCode
 from apps.orders.models import CartSession, CartSessionStatus, Session, SessionStatus
 from apps.orders.services import ensure_active_cart_for_table
-from apps.reservations.models import (
-    Reservation,
-    ReservationParticipant,
-    ReservationStatus,
-    ReservationType,
-)
+from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
 from common.exceptions import NoActiveReservationError
 
@@ -166,7 +161,22 @@ def test_optional_user_becomes_creator_and_participant(
     user = user_factory(role=RoleCode.CUSTOMER)
     user.save()
     reservation = _make_reservation(restaurant=restaurant, table=table, open_session=True)
-    ReservationParticipant.objects.create(reservation=reservation, user=user)
+
+    session = ensure_active_cart_for_table(table=table, user=user)
+
+    assert session.created_by_id == user.id
+    assert session.participants.filter(id=user.id).exists()
+
+
+@pytest.mark.django_db
+def test_user_does_not_need_reservation_membership_to_join(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+) -> None:
+    user = user_factory(role=RoleCode.CUSTOMER)
+    user.save()
+    _make_reservation(restaurant=restaurant, table=table, open_session=True)
 
     session = ensure_active_cart_for_table(table=table, user=user)
 

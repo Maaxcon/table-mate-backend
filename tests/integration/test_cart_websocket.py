@@ -12,7 +12,7 @@ from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
 from apps.orders.models import CartSession
 from apps.orders.services import add_item_to_cart, remove_item_from_cart, update_cart_item_quantity
-from apps.reservations.models import Reservation, ReservationParticipant
+from apps.reservations.models import Reservation
 from core.routing import application
 
 pytestmark = pytest.mark.django_db(databases=["default"], transaction=True)
@@ -45,7 +45,6 @@ def cart_context(restaurant, reservation, user_factory):  # type: ignore[no-unty
     owner.save()
     reservation.customer = owner
     reservation.save()
-    ReservationParticipant.objects.create(reservation=reservation, user=owner)
     session = CartSession.objects.create(restaurant=restaurant, reservation=reservation, created_by=owner)
     session.participants.add(owner)
     return {"session": session, "owner": owner, "restaurant": restaurant}

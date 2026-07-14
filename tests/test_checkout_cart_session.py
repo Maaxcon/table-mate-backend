@@ -31,7 +31,7 @@ from apps.orders.services import (
     pay_order_items,
     void_order_item,
 )
-from apps.reservations.models import Reservation, ReservationParticipant, ReservationStatus, ReservationType
+from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
 from common.exceptions import (
     CartChangedError,
@@ -453,9 +453,9 @@ def test_checkout_sets_created_by_for_user(
 ) -> None:
     user = user_factory()
     user.save()
-    reservation = _active_reservation(restaurant, table)
-    ReservationParticipant.objects.create(reservation=reservation, user=user)
-    cart = _open_cart_with_item(table, item)
+    _active_reservation(restaurant, table)
+    cart = ensure_active_cart_for_table(table=table, user=user)
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1, user=user)
 
     order = checkout_cart_session(cart_session=cart, user=user)
 

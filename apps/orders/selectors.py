@@ -10,7 +10,6 @@ from django.db.models.functions import Coalesce, Concat, Extract, Trim
 from apps.authentication.models import User
 from apps.menu.models import MenuItem
 from apps.reservations.models import Reservation
-from apps.reservations.selectors import get_reservation_participant_ids
 
 from .models import CartItem, CartSession, OrderItem, OrderItemStatus, Session, Ticket, TicketStatus
 
@@ -145,13 +144,6 @@ __all__ = [
 ]
 
 
-def _resolve_allowed_reservation_participant_ids(reservation: Reservation) -> set[int]:
-    participant_ids = set(get_reservation_participant_ids(reservation))
-    if reservation.customer_id:
-        participant_ids.add(reservation.customer_id)
-    return participant_ids
-
-
 def is_cart_participant(user: User, session: CartSession) -> bool:
     cache = cast(MutableMapping[int, bool], session.__dict__.setdefault("_participant_cache", {}))
 
@@ -161,10 +153,6 @@ def is_cart_participant(user: User, session: CartSession) -> bool:
         return cached_value
 
     is_participant = session.participants.filter(id=user_id).exists()
-    if not is_participant:
-        reservation = session.reservation
-        allowed_participants = _resolve_allowed_reservation_participant_ids(reservation)
-        is_participant = user_id in allowed_participants
 
     cache[user_id] = is_participant
     return is_participant

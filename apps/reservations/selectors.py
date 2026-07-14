@@ -7,7 +7,7 @@ from django.utils import timezone
 from apps.orders.models import Session, SessionStatus
 from apps.restaurants.models import Table
 
-from .models import Reservation, ReservationParticipant, ReservationStatus
+from .models import Reservation, ReservationStatus
 
 
 def get_active_reservation_for_table(table: Table) -> Reservation | None:
@@ -90,10 +90,6 @@ def get_customer_global_reservations(
 
 def get_reservation_by_id(reservation_id: str, restaurant_id: int) -> Reservation | None:
     return Reservation.objects.filter(public_id=reservation_id, restaurant_id=restaurant_id).first()
-
-
-def get_reservation_participant_ids(reservation: Reservation) -> list[int]:
-    return list(ReservationParticipant.objects.filter(reservation=reservation).values_list("user_id", flat=True))
 
 
 # How long we assume a table with a currently open session will stay
