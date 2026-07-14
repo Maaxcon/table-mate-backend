@@ -381,7 +381,7 @@ class CartBillView(GuestFallbackAuthMixin, APIView):
     @extend_schema(responses={200: BillItemSerializer(many=True)})
     def get(self, request: Request, session_pk: str) -> Response:
         session = _resolve_checkout_session(request, session_pk)
-        items = get_bill_order_items(cart_session=session)
+        items = get_bill_order_items(cart_session=session, user=_request_user_or_none(request))
         return Response(BillItemSerializer(items, many=True).data, status=status.HTTP_200_OK)
 
 
@@ -405,5 +405,6 @@ class CartPayView(GuestFallbackAuthMixin, APIView):
             cart_session=session,
             order_item_ids=[str(i) for i in serializer.validated_data["order_item_ids"]],
             client_id=_get_client_id_from_request(request),
+            user=_request_user_or_none(request),
         )
         return Response(BillItemSerializer(items, many=True).data, status=status.HTTP_200_OK)
