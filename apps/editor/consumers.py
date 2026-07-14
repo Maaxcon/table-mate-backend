@@ -117,12 +117,12 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         await self._send_event(event)
 
     async def _send_cached_notifications(self, restaurant_id: int) -> None:
-        history = await sync_to_async(get_notification_history)(restaurant_id)
+        history = await sync_to_async(get_notification_history, thread_sensitive=False)(restaurant_id)
         for event in history:
             await self._send_event(event)
 
     async def _catch_up_new_notifications(self, restaurant_id: int) -> None:
-        history = await sync_to_async(get_notification_history)(restaurant_id)
+        history = await sync_to_async(get_notification_history, thread_sensitive=False)(restaurant_id)
         for event in history:
             if self._has_sent_event(event):
                 continue

@@ -136,6 +136,54 @@ def test_store_notification_event_truncates_large_payloads(restaurant: Any) -> N
 
 
 @pytest.mark.django_db
+def test_store_notification_event_prefers_redis_pipeline(restaurant: Any) -> None:
+    pipeline = MagicMock()
+    pipeline.lpush.return_value = pipeline
+    pipeline.ltrim.return_value = pipeline
+    pipeline.expire.return_value = pipeline
+    pipeline.execute.return_value = None
+
+    redis_conn = MagicMock()
+    redis_conn.pipeline.return_value = pipeline
+    redis_conn.lrange.return_value = []
+
+    with (
+        patch("common.notification_store.get_redis_connection", return_value=redis_conn),
+        patch.object(cache, "set") as mock_cache_set,
+        patch.object(cache, "get") as mock_cache_get,
+    ):
+        store_notification_event(restaurant.id, {"type": "TEST_EVENT", "data": {"id": "redis-case"}})
+        stored_payload = pipeline.lpush.call_args[0][1]
+        redis_conn.lrange.return_value = [stored_payload]
+        history = get_notification_history(restaurant.id)
+
+    assert mock_cache_set.call_count == 0
+    assert mock_cache_get.call_count == 0
+    assert history[0]["data"]["id"] == "redis-case"
+    redis_conn.pipeline.assert_called_once()
+    redis_conn.lrange.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_get_notification_history_falls_back_to_cache_when_redis_missing_key(restaurant: Any) -> None:
+    cached_event = {"type": "CACHED", "data": {"id": "cached"}}
+    redis_conn = MagicMock()
+    redis_conn.lrange.return_value = []
+    redis_conn.exists.return_value = 0
+
+    with (
+        patch("common.notification_store.get_redis_connection", return_value=redis_conn),
+        patch.object(cache, "get", return_value=[cached_event]) as mock_cache_get,
+    ):
+        history = get_notification_history(restaurant.id)
+
+    assert history == [cached_event]
+    mock_cache_get.assert_called_once()
+    redis_conn.lrange.assert_called_once()
+    redis_conn.exists.assert_called_once()
+
+
+@pytest.mark.django_db
 def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any) -> None:
     async def _test() -> None:
         user = UserFactory.build(role=RoleCode.WAITER)

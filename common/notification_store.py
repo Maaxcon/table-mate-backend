@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import AbstractContextManager, nullcontext
 from typing import Any, cast
 
 from django.conf import settings
 from django.core.cache import cache
+from django_redis import get_redis_connection
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +97,83 @@ def store_notification_event(restaurant_id: int, event: dict[str, Any]) -> None:
     are sanitized/truncated to cap untrusted data volume before persistence.
     """
 
+    sanitized_event = _sanitize_event(event)
+    if _persist_history_via_redis(restaurant_id, sanitized_event):
+        return
+
+    _persist_history_via_cache(restaurant_id, sanitized_event)
+
+
+def get_notification_history(restaurant_id: int, limit: int | None = None) -> list[dict[str, Any]]:
+    """Return the stored notifications for a restaurant, oldest-first."""
+
+    slice_limit = limit if isinstance(limit, int) and limit > 0 else _DEFAULT_LIMIT
+    history = _load_history_via_redis(restaurant_id, slice_limit)
+    if history is not None:
+        return history
+
+    return _load_history_via_cache(restaurant_id, slice_limit)
+
+
+def _persist_history_via_redis(restaurant_id: int, event: dict[str, Any]) -> bool:
+    try:
+        conn = get_redis_connection("default")
+    except Exception:
+        return False
+
+    serialized = json.dumps(event, separators=(",", ":"), ensure_ascii=False)
+    key = _history_key(restaurant_id)
+
+    try:
+        pipeline = conn.pipeline()
+        pipeline.lpush(key, serialized)
+        pipeline.ltrim(key, 0, _DEFAULT_LIMIT - 1)
+        if _DEFAULT_TTL > 0:
+            pipeline.expire(key, _DEFAULT_TTL)
+        pipeline.execute()
+        return True
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to persist notification history via Redis for restaurant %s", restaurant_id)
+        return False
+
+
+def _load_history_via_redis(restaurant_id: int, slice_limit: int) -> list[dict[str, Any]] | None:
+    try:
+        conn = get_redis_connection("default")
+    except Exception:
+        return None
+
+    key = _history_key(restaurant_id)
+    try:
+        raw_events = conn.lrange(key, 0, max(slice_limit - 1, 0))
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Failed to load notification history via Redis for restaurant %s", restaurant_id)
+        return None
+
+    if not raw_events:
+        try:
+            key_exists = bool(conn.exists(key))
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to check Redis history key existence for restaurant %s", restaurant_id)
+            return None
+
+        if not key_exists:
+            return None
+        return []
+
+    decoded: list[dict[str, Any]] = []
+    for payload in reversed(raw_events):
+        try:
+            text = payload.decode("utf-8") if isinstance(payload, (bytes, bytearray)) else str(payload)
+            event = json.loads(text)
+            if isinstance(event, dict):
+                decoded.append(event)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to decode notification history payload for restaurant %s", restaurant_id)
+    return decoded
+
+
+def _persist_history_via_cache(restaurant_id: int, event: dict[str, Any]) -> None:
     key = _history_key(restaurant_id)
 
     def _persist() -> None:
@@ -107,8 +186,7 @@ def store_notification_event(restaurant_id: int, event: dict[str, Any]) -> None:
         if not isinstance(history, list):
             history = []
 
-        sanitized_event = _sanitize_event(event)
-        history.insert(0, sanitized_event)
+        history.insert(0, event)
         if len(history) > _DEFAULT_LIMIT:
             del history[_DEFAULT_LIMIT:]
 
@@ -135,9 +213,7 @@ def store_notification_event(restaurant_id: int, event: dict[str, Any]) -> None:
     _persist()
 
 
-def get_notification_history(restaurant_id: int, limit: int | None = None) -> list[dict[str, Any]]:
-    """Return the stored notifications for a restaurant, oldest-first."""
-
+def _load_history_via_cache(restaurant_id: int, slice_limit: int) -> list[dict[str, Any]]:
     key = _history_key(restaurant_id)
     try:
         history = cache.get(key)
@@ -148,7 +224,5 @@ def get_notification_history(restaurant_id: int, limit: int | None = None) -> li
     if not isinstance(history, list) or not history:
         return []
 
-    slice_limit = limit if isinstance(limit, int) and limit > 0 else _DEFAULT_LIMIT
     recent = history[:slice_limit]
-    # Stored newest-first, so replay oldest-first.
     return list(reversed(recent))
