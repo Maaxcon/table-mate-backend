@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Iterator
 from datetime import timedelta
 from typing import Any
-from unittest.mock import ANY, AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from asgiref.sync import sync_to_async
@@ -28,7 +28,7 @@ from common.notification_events import (
     emit_kitchen_ticket_injected,
     emit_order_item_status_changed,
 )
-from common.notification_store import store_notification_event
+from common.notification_store import get_notification_history, store_notification_event
 from core.routing import application
 from tests.conftest import RestaurantFactory, UserFactory
 
@@ -52,6 +52,48 @@ def _locmem_cache(settings: Any) -> Iterator[None]:
     cache.clear()
     yield
     cache.clear()
+
+
+# ── Notification history persistence ──
+
+
+@pytest.mark.django_db
+def test_store_notification_event_uses_cache_lock(restaurant: Any) -> None:
+    event = {"type": "TEST_EVENT", "data": {"id": "lock-guard"}}
+    lock_cm = MagicMock()
+    lock_cm.__enter__.return_value = None
+    lock_cm.__exit__.return_value = None
+    lock_factory = MagicMock(return_value=lock_cm)
+
+    with patch.object(cache, "lock", lock_factory, create=True):
+        store_notification_event(restaurant.id, event)
+
+    lock_factory.assert_called_once()
+    lock_cm.__enter__.assert_called_once()
+    lock_cm.__exit__.assert_called_once()
+
+    history = get_notification_history(restaurant.id)
+    assert len(history) == 1
+    assert history[0]["type"] == "TEST_EVENT"
+
+
+@pytest.mark.django_db
+def test_store_notification_event_falls_back_when_lock_unavailable(
+    restaurant: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("ERROR", logger="common.notification_store")
+    event = {"type": "TEST_EVENT", "data": {"id": "lock-fallback"}}
+    lock_cm = MagicMock()
+    lock_cm.__enter__.side_effect = TimeoutError("busy")
+    lock_cm.__exit__.return_value = None
+
+    with patch.object(cache, "lock", return_value=lock_cm, create=True):
+        store_notification_event(restaurant.id, event)
+
+    history = get_notification_history(restaurant.id)
+    assert len(history) == 1
+    assert history[0]["data"]["id"] == "lock-fallback"
+    assert any("lock" in record.message for record in caplog.records)
 
 
 # ── NotificationStreamConsumer auth / role gates ──

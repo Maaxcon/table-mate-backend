@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any
+from contextlib import AbstractContextManager, nullcontext
+from typing import Any, cast
 
 from django.conf import settings
 from django.core.cache import cache
@@ -11,10 +12,32 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_LIMIT = getattr(settings, "NOTIFICATION_HISTORY_LIMIT", 50)
 _DEFAULT_TTL = getattr(settings, "NOTIFICATION_HISTORY_TTL_SECONDS", 60 * 60 * 6)
+_LOCK_TIMEOUT = getattr(settings, "NOTIFICATION_HISTORY_LOCK_TIMEOUT_SECONDS", 5)
+_LOCK_BLOCKING_TIMEOUT = getattr(settings, "NOTIFICATION_HISTORY_LOCK_BLOCKING_TIMEOUT_SECONDS", 2)
+_NULL_CONTEXT: AbstractContextManager[None] = nullcontext()
 
 
 def _history_key(restaurant_id: int) -> str:
     return f"notifications:history:{restaurant_id}"
+
+
+def _history_lock_key(restaurant_id: int) -> str:
+    return f"notifications:history-lock:{restaurant_id}"
+
+
+def _history_lock(restaurant_id: int) -> AbstractContextManager[None]:
+    lock_factory = getattr(cache, "lock", None)
+    if callable(lock_factory):
+        try:
+            lock = lock_factory(
+                _history_lock_key(restaurant_id),
+                timeout=_LOCK_TIMEOUT,
+                blocking_timeout=_LOCK_BLOCKING_TIMEOUT,
+            )
+            return cast(AbstractContextManager[None], lock)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to create notification history lock for restaurant %s", restaurant_id)
+    return _NULL_CONTEXT
 
 
 def store_notification_event(restaurant_id: int, event: dict[str, Any]) -> None:
@@ -25,23 +48,42 @@ def store_notification_event(restaurant_id: int, event: dict[str, Any]) -> None:
     """
 
     key = _history_key(restaurant_id)
+
+    def _persist() -> None:
+        try:
+            history = cache.get(key)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to load notification history for restaurant %s", restaurant_id)
+            history = None
+
+        if not isinstance(history, list):
+            history = []
+
+        history.insert(0, copy.deepcopy(event))
+        if len(history) > _DEFAULT_LIMIT:
+            del history[_DEFAULT_LIMIT:]
+
+        try:
+            cache.set(key, history, timeout=_DEFAULT_TTL)
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Failed to persist notification history for restaurant %s", restaurant_id)
+
+    lock_cm = _history_lock(restaurant_id)
+    if lock_cm is _NULL_CONTEXT:
+        _persist()
+        return
+
     try:
-        history = cache.get(key)
+        with lock_cm:
+            _persist()
+            return
     except Exception:  # pragma: no cover - defensive logging
-        logger.exception("Failed to load notification history for restaurant %s", restaurant_id)
-        history = None
+        logger.exception(
+            "Failed to lock notification history for restaurant %s; falling back to unlocked write",
+            restaurant_id,
+        )
 
-    if not isinstance(history, list):
-        history = []
-
-    history.insert(0, copy.deepcopy(event))
-    if len(history) > _DEFAULT_LIMIT:
-        del history[_DEFAULT_LIMIT:]
-
-    try:
-        cache.set(key, history, timeout=_DEFAULT_TTL)
-    except Exception:  # pragma: no cover - defensive logging
-        logger.exception("Failed to persist notification history for restaurant %s", restaurant_id)
+    _persist()
 
 
 def get_notification_history(restaurant_id: int, limit: int | None = None) -> list[dict[str, Any]]:
