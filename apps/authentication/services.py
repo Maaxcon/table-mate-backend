@@ -10,12 +10,12 @@ from django.db import IntegrityError, transaction
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.id_token import verify_oauth2_token
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from common.api import resolve_restaurant_public_id
 
 from .models import RoleCode, User
 from .selectors import get_user_by_email, get_user_by_google_sub
+from .tokens import CartAwareRefreshToken
 
 logger = logging.getLogger(__name__)
 
@@ -122,10 +122,16 @@ def google_authenticate(code: str, redirect_uri: str) -> User:
     return user
 
 
-def issue_tokens(user: User, restaurant_public_id: str | None = None) -> tuple[str, str]:
-    refresh = RefreshToken.for_user(user)
+def issue_tokens(
+    user: User,
+    restaurant_public_id: str | None = None,
+    cart_session_id: str | None = None,
+) -> tuple[str, str]:
+    refresh = CartAwareRefreshToken.for_user(user)
     refresh["role"] = user.role
     refresh["token_version"] = user.token_version
+    if cart_session_id:
+        refresh["cart_session_id"] = cart_session_id
     if user.restaurant_id is not None:
         refresh["restaurant_id"] = user.restaurant_id
         refresh["restaurant_public_id"] = restaurant_public_id or resolve_restaurant_public_id(user.restaurant_id)
@@ -136,12 +142,15 @@ def issue_tokens_with_restaurant(
     user: User,
     restaurant_id: int,
     restaurant_public_id: str | None = None,
+    cart_session_id: str | None = None,
 ) -> tuple[str, str]:
-    refresh = RefreshToken.for_user(user)
+    refresh = CartAwareRefreshToken.for_user(user)
     refresh["role"] = user.role
     refresh["token_version"] = user.token_version
     refresh["restaurant_id"] = restaurant_id
     refresh["restaurant_public_id"] = restaurant_public_id or resolve_restaurant_public_id(restaurant_id)
+    if cart_session_id:
+        refresh["cart_session_id"] = cart_session_id
     return str(refresh.access_token), str(refresh)
 
 

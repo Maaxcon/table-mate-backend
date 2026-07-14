@@ -2,13 +2,13 @@ from typing import Any, cast
 
 from django.conf import settings
 from rest_framework import serializers
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 
 from apps.reservations.models import Reservation
 from common.api import PublicIdRelatedField, resolve_restaurant_public_id
 
 from .models import RoleCode, User
+from .tokens import CartAwareRefreshToken
 
 
 class GuestInitSerializer(serializers.Serializer[None]):
@@ -49,6 +49,10 @@ class GoogleContextSerializer(serializers.Serializer[None]):
 
 class GoogleContextResponseSerializer(serializers.Serializer[None]):
     access = serializers.CharField(read_only=True)
+
+
+class CartAwareTokenRefreshSerializer(TokenRefreshSerializer):
+    token_class = CartAwareRefreshToken
 
 
 _STAFF_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
@@ -125,8 +129,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         elif user.role in _STAFF_ROLES:
             raise serializers.ValidationError({"restaurant_id": "This field is required for staff users."})
 
-    def get_token(self, user: User) -> RefreshToken:  # type: ignore[override]
-        token = cast(RefreshToken, super().get_token(user))
+    def get_token(self, user: User) -> CartAwareRefreshToken:  # type: ignore[override]
+        token = CartAwareRefreshToken.for_user(user)
         token["role"] = user.role
         token["token_version"] = user.token_version
         if self._restaurant_id is not None:
