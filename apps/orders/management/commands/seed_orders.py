@@ -249,6 +249,9 @@ class Command(BaseCommand):
                         "opened_at": now - timedelta(minutes=45),
                     },
                 )
+                if session.ends_at != walk_in_reservation.end_at:
+                    session.ends_at = walk_in_reservation.end_at
+                    session.save(update_fields=["ends_at"])
 
                 if menu_items:
                     profile = next(profiles)
