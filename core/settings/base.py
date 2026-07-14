@@ -126,12 +126,13 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "common.api.exception_handler.custom_exception_handler",
     # ScopedRateThrottle only limits views that set `throttle_scope`; every
     # other view is unaffected.
-    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "DEFAULT_THROTTLE_CLASSES": ["apps.orders.throttles.GuestAwareScopedRateThrottle"],
     "DEFAULT_THROTTLE_RATES": {
         "auth": "10/min",  # login / Google sign-in (anti brute-force, per IP)
         "me_write": "30/min",  # profile updates
         "cart": "60/min",  # add/remove/update cart items
         "checkout": "10/min",  # submit order, pay items
+        "bill": "30/min",  # view bill (more liberal — read-only refreshes)
     },
 }
 
