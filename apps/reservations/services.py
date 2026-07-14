@@ -1010,14 +1010,19 @@ def batch_update_reservations(
             if table is None and rid in session_map:
                 table = session_map[rid].table
             if actor is not None and table is not None:
-                transaction.on_commit(
-                    lambda reservation_id=str(res.public_id), table_id=str(table.public_id): emit_hall_reservation_cancelled(
+
+                def _cancel_hall_event(
+                    reservation_id: str = str(res.public_id),
+                    table_id: str = str(table.public_id),
+                ) -> None:
+                    emit_hall_reservation_cancelled(
                         restaurant_id,
                         reservation_id=reservation_id,
                         table_id=table_id,
                         actor=actor,
                     )
-                )
+
+                transaction.on_commit(_cancel_hall_event)
 
     # Process moves/resizes
     for c in changes:
