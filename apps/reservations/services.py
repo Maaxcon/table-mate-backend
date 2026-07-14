@@ -618,7 +618,7 @@ def activate_pending_reservation(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__gt=occupancy_cutoff,
+        ends_at__gt=occupancy_cutoff,
     )
     if non_stale.exists():
         raise ReservationConflictError("Table already has an active session.")
@@ -626,7 +626,7 @@ def activate_pending_reservation(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__lte=occupancy_cutoff,
+        ends_at__lte=occupancy_cutoff,
     )
     for stale_session in stale:
         close_visit_session(session=stale_session, actor=None)

@@ -78,7 +78,7 @@ class SessionViewSet(
             table=table,
             status=SessionStatus.OPEN,
             reservation__status=ReservationStatus.ACTIVE,
-            reservation__end_at__gt=occupancy_cutoff,
+            ends_at__gt=occupancy_cutoff,
         )
         if non_stale.exists():
             raise TableOccupiedError()
@@ -86,7 +86,7 @@ class SessionViewSet(
             table=table,
             status=SessionStatus.OPEN,
             reservation__status=ReservationStatus.ACTIVE,
-            reservation__end_at__lte=occupancy_cutoff,
+            ends_at__lte=occupancy_cutoff,
         )
         guest_count = serializer.validated_data["guest_count"]
         with transaction.atomic():

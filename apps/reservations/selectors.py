@@ -13,17 +13,17 @@ from .models import Reservation, ReservationParticipant, ReservationStatus
 def get_active_reservation_for_table(table: Table) -> Reservation | None:
     """Return the reservation currently in progress on the table, or None.
 
-    Once a reservation is ACTIVE the table is open, so the cart stays available
-    for the whole visit until end_at — no lower bound on start_at (a guest may
-    scan/seat a few minutes early). Expired reservations (end_at passed) yield
-    nothing. Walk-in and pre-booked are treated the same.
+    Only an OPEN visit session makes a reservation "live" for cart creation.
+    ``Reservation.end_at`` remains booking data and is not used as a fallback
+    when there is no open session.
     """
     now = timezone.now()
     return (
         Reservation.objects.filter(
             table=table,
             status=ReservationStatus.ACTIVE,
-            end_at__gt=now,
+            session__status=SessionStatus.OPEN,
+            session__ends_at__gt=now,
         )
         .order_by("-created_at")
         .first()
@@ -112,7 +112,7 @@ def get_session_grace_cutoffs(
     current_reservation_id: int | Iterable[int] | None = None,
 ) -> dict[int, datetime]:
     """For each table with a currently OPEN session, the instant it can be
-    considered free again: whichever is later, its reservation's booked end,
+    considered free again: whichever is later, the session's live `ends_at`,
     or `now + SESSION_GRACE_PERIOD` (they're seated right now and likely to
     stay at least that long). Batchable — call once and reuse across many
     slots instead of re-querying per slot.
@@ -129,7 +129,7 @@ def get_session_grace_cutoffs(
     should always imply that, but if some path ever cancels/completes a
     reservation without also closing its session (a data-integrity bug, not a
     normal state), this recomputes "occupied until now + grace" on every
-    single check, forever, since there's no reservation end to age it out.
+    single check, forever, since there's no session end to age it out.
     Guarding on reservation status here means a table can't get stuck looking
     permanently occupied just because a session was left dangling.
     """
@@ -148,8 +148,8 @@ def get_session_grace_cutoffs(
             qs = qs.exclude(reservation_id__in=current_reservation_id)
 
     cutoffs: dict[int, datetime] = {}
-    for table_id, res_end in qs.values_list("table_id", "reservation__end_at"):
-        until = max(res_end, grace_until) if res_end else grace_until
+    for table_id, session_end in qs.values_list("table_id", "ends_at"):
+        until = max(session_end, grace_until) if session_end else grace_until
         if table_id not in cutoffs or until > cutoffs[table_id]:
             cutoffs[table_id] = until
     return cutoffs

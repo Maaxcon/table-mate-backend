@@ -132,7 +132,7 @@ def get_tables_with_occupancy(restaurant_id: int) -> QuerySet[Table]:
         table=OuterRef("pk"),
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__gt=occupancy_cutoff,
+        ends_at__gt=occupancy_cutoff,
     )
     return qs.annotate(is_occupied=Exists(occupied_subquery))
 

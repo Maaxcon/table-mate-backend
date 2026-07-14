@@ -425,7 +425,7 @@ def open_session(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__gt=occupancy_cutoff,
+        ends_at__gt=occupancy_cutoff,
     )
     if non_stale.exists():
         raise TableOccupiedError()
@@ -433,7 +433,7 @@ def open_session(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__lte=occupancy_cutoff,
+        ends_at__lte=occupancy_cutoff,
     )
     for stale_session in stale:
         _close_visit_session(session=stale_session, actor=None)
