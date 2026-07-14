@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 from asgiref.sync import sync_to_async
@@ -75,6 +76,7 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
         self.group_name = staff_group_name(restaurant_id)
         self._pending_notifications: list[dict[str, object]] = []
+        self._pending_lock = asyncio.Lock()
         self._history_replay_complete = False
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
@@ -84,9 +86,10 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
         try:
             await self._send_cached_notifications(restaurant_id)
+            await self._drain_pending_notifications()
         finally:
-            await self._flush_pending_notifications()
             self._history_replay_complete = True
+            await self._drain_pending_notifications()
 
     async def disconnect(self, code: int) -> None:
         if hasattr(self, "group_name"):
@@ -98,7 +101,8 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
             return
 
         if not getattr(self, "_history_replay_complete", True):
-            self._pending_notifications.append(event)
+            async with self._pending_lock:
+                self._pending_notifications.append(event)
             return
 
         await self.send(text_data=json.dumps(event))
@@ -108,13 +112,17 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         for event in history:
             await self.send(text_data=json.dumps(event))
 
-    async def _flush_pending_notifications(self) -> None:
-        pending = getattr(self, "_pending_notifications", None)
-        if not pending:
-            return
-        for event in pending:
-            await self.send(text_data=json.dumps(event))
-        pending.clear()
+    async def _drain_pending_notifications(self) -> None:
+        while True:
+            async with self._pending_lock:
+                pending = self._pending_notifications
+                if not pending:
+                    return
+                batch = pending[:]
+                self._pending_notifications.clear()
+
+            for event in batch:
+                await self.send(text_data=json.dumps(event))
 
 
 _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {

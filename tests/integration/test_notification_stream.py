@@ -174,6 +174,60 @@ def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any
     asyncio.run(_test())
 
 
+@pytest.mark.django_db
+def test_notification_consumer_flushes_events_added_after_initial_drain(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [{"type": "CART_CREATED", "data": {"id": "hist-only", "table_number": "T9"}}]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+
+        channel_layer = get_channel_layer()
+        assert channel_layer is not None
+
+        original_drain = NotificationStreamConsumer._drain_pending_notifications
+        drain_calls = 0
+
+        async def instrumented(self: NotificationStreamConsumer) -> None:
+            nonlocal drain_calls
+            drain_calls += 1
+            await original_drain(self)
+            if drain_calls == 1:
+                await channel_layer.group_send(
+                    staff_group_name(restaurant.id),
+                    {
+                        "type": "notification.event",
+                        "event": {
+                            "type": "KITCHEN_TICKET_INJECTED",
+                            "data": {"id": "live-after", "table_number": "T9"},
+                        },
+                    },
+                )
+                await asyncio.sleep(0)
+
+        with patch.object(NotificationStreamConsumer, "_drain_pending_notifications", new=instrumented):
+            connected, _ = await communicator.connect()
+            assert connected
+
+            first = await communicator.receive_json_from(timeout=3)
+            assert first == historical[0]
+            live = await communicator.receive_json_from(timeout=3)
+            assert live["data"]["id"] == "live-after"
+
+            await communicator.disconnect()
+
+    asyncio.run(_test())
+
+
 # ── NotificationStreamConsumer auth / role gates ──
 
 
