@@ -24,7 +24,6 @@ from .sessions import (
 )
 from .walk_in import create_walk_in_reservation
 
-
 __all__ = [
     "add_item_to_cart",
     "create_order_with_items",

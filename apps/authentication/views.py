@@ -1,10 +1,11 @@
 from datetime import timedelta
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 from uuid import uuid4
 
 from django.conf import settings
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import generics, status
+from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -261,8 +262,6 @@ class LogoutView(APIView):
 class _GuestInitAuthMixin:
     """Accepts regular JWT, guest JWT, or no token — never 401s."""
 
-    authentication_classes = [TokenVersionJWTAuthentication]
-
     def perform_authentication(self, request: Request) -> None:
         try:
             super().perform_authentication(request)  # type: ignore[misc]
@@ -276,6 +275,9 @@ class _GuestInitAuthMixin:
 class GuestInitView(_GuestInitAuthMixin, APIView):
     permission_classes = [AllowAny]
     throttle_scope = "auth"
+
+    def get_authenticators(self) -> list[BaseAuthentication]:
+        return [TokenVersionJWTAuthentication()]
 
     @extend_schema(
         request=GuestInitSerializer,

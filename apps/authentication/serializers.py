@@ -130,7 +130,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise serializers.ValidationError({"restaurant_id": "This field is required for staff users."})
 
     def get_token(self, user: User) -> CartAwareRefreshToken:  # type: ignore[override]
-        token = CartAwareRefreshToken.for_user(user)
+        token = cast(CartAwareRefreshToken, CartAwareRefreshToken.for_user(user))
         token["role"] = user.role
         token["token_version"] = user.token_version
         if self._restaurant_id is not None:

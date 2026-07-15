@@ -1,8 +1,10 @@
+from typing import Any
+
 from rest_framework.throttling import ScopedRateThrottle
 
 
 class GuestAwareScopedRateThrottle(ScopedRateThrottle):
-    def get_cache_key(self, request, view):
+    def get_cache_key(self, request: Any, view: Any) -> str | None:
         cache_key = super().get_cache_key(request, view)
         if cache_key is None:
             return None
