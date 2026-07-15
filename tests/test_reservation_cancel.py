@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-untyped-call"
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
@@ -5,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
+from rest_framework import status
 
 from apps.authentication.models import RoleCode
 from apps.orders.models import CartSessionStatus, Session, SessionStatus
@@ -12,6 +14,141 @@ from apps.orders.services import ensure_active_cart_for_table
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.services import cancel_reservation
 from apps.restaurants.models import Restaurant, Table
+from common.exceptions import ReservationCancelError
+
+from .conftest import AuthContext
+
+pytestmark = pytest.mark.django_db
+
+
+def _reservation(
+    *,
+    restaurant: Restaurant,
+    table: Table,
+    customer: Any,
+    res_status: str = ReservationStatus.PENDING,
+    start_offset_hours: int = 2,
+) -> Reservation:
+    now = timezone.now()
+    return Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        customer=customer,
+        guest_count=2,
+        start_at=now + timedelta(hours=start_offset_hours),
+        end_at=now + timedelta(hours=start_offset_hours + 1),
+        status=res_status,
+    )
+
+
+def _url(res: Reservation) -> str:
+    return f"/api/reservations/reservations/{res.public_id}/"
+
+
+class TestCancelReservationService:
+    def test_cancel_pending_reservation(
+        self, api: Any, restaurant: Restaurant, table: Table, user_factory: Any
+    ) -> None:
+        customer = user_factory()
+        customer.save()
+        res = _reservation(restaurant=restaurant, table=table, customer=customer)
+        actor = user_factory(role=RoleCode.ADMIN)
+        actor.save()
+
+        from apps.reservations.services import cancel_reservation
+
+        result = cancel_reservation(res)
+        result.refresh_from_db()
+        assert result.status == ReservationStatus.CANCELLED
+
+    def test_cancel_active_reservation(
+        self, api: Any, restaurant: Restaurant, table: Table, user_factory: Any
+    ) -> None:
+        customer = user_factory()
+        customer.save()
+        res = _reservation(restaurant=restaurant, table=table, customer=customer, res_status=ReservationStatus.ACTIVE)
+        actor = user_factory(role=RoleCode.WAITER)
+        actor.save()
+
+        from apps.reservations.services import cancel_reservation
+
+        result = cancel_reservation(res)
+        result.refresh_from_db()
+        assert result.status == ReservationStatus.CANCELLED
+
+    def test_cannot_cancel_completed_reservation(
+        self, api: Any, restaurant: Restaurant, table: Table, user_factory: Any
+    ) -> None:
+        customer = user_factory()
+        customer.save()
+        res = _reservation(
+            restaurant=restaurant, table=table, customer=customer, res_status=ReservationStatus.COMPLETED
+        )
+        actor = user_factory(role=RoleCode.ADMIN)
+        actor.save()
+
+        from apps.reservations.services import cancel_reservation
+
+        with pytest.raises(ReservationCancelError, match="Only pending or active"):
+            cancel_reservation(res)
+
+    def test_cannot_cancel_already_cancelled(
+        self, api: Any, restaurant: Restaurant, table: Table, user_factory: Any
+    ) -> None:
+        customer = user_factory()
+        customer.save()
+        res = _reservation(
+            restaurant=restaurant, table=table, customer=customer, res_status=ReservationStatus.CANCELLED
+        )
+        actor = user_factory(role=RoleCode.ADMIN)
+        actor.save()
+
+        from apps.reservations.services import cancel_reservation
+
+        with pytest.raises(ReservationCancelError, match="Only pending or active"):
+            cancel_reservation(res)
+
+
+class TestCancelReservationAPI:
+    def test_customer_can_cancel_own_pending(
+        self, api: Any, restaurant: Restaurant, table: Table, user_factory: Any
+    ) -> None:
+        customer = user_factory()
+        customer.save()
+        res = _reservation(restaurant=restaurant, table=table, customer=customer)
+        ctx: AuthContext = api(role=RoleCode.CUSTOMER)
+        # Force authenticate as the customer
+        ctx.client.force_authenticate(user=customer)
+
+        resp = ctx.client.patch(_url(res), {"status": "cancelled"}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        res.refresh_from_db()
+        assert res.status == ReservationStatus.CANCELLED
+
+    def test_customer_cannot_cancel_active(
+        self, api: Any, restaurant: Restaurant, table: Table, user_factory: Any
+    ) -> None:
+        customer = user_factory()
+        customer.save()
+        res = _reservation(restaurant=restaurant, table=table, customer=customer, res_status=ReservationStatus.ACTIVE)
+        ctx: AuthContext = api(role=RoleCode.CUSTOMER)
+        ctx.client.force_authenticate(user=customer)
+
+        resp = ctx.client.patch(_url(res), {"status": "cancelled"}, format="json")
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_staff_can_cancel_active(
+        self, api: Any, restaurant: Restaurant, table: Table, user_factory: Any
+    ) -> None:
+        customer = user_factory()
+        customer.save()
+        res = _reservation(restaurant=restaurant, table=table, customer=customer, res_status=ReservationStatus.ACTIVE)
+        ctx: AuthContext = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+
+        resp = ctx.client.patch(_url(res), {"status": "cancelled"}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        res.refresh_from_db()
+        assert res.status == ReservationStatus.CANCELLED
 
 
 @pytest.mark.django_db
@@ -20,12 +157,6 @@ def test_cancel_reservation_closes_its_open_session(
     table: Table,
     user_factory: Callable[..., Any],
 ) -> None:
-    """Staff can cancel an ACTIVE (seated) reservation directly. If that
-    reservation has an open session, cancelling must close it too — otherwise
-    the table looks occupied forever afterward: get_unavailable_table_ids
-    treats an open session as still-occupied and recomputes its grace cutoff
-    from "now" on every check, so a dangling session never ages out.
-    """
     customer = user_factory()
     customer.save()
     now = timezone.now()
@@ -62,8 +193,6 @@ def test_cancel_pending_reservation_with_no_session_still_works(
     table: Table,
     user_factory: Callable[..., Any],
 ) -> None:
-    """A PENDING reservation never has a session — cancelling it must not
-    blow up looking for one that doesn't exist."""
     customer = user_factory()
     customer.save()
     start_at = timezone.now() + timedelta(hours=1)
@@ -89,12 +218,6 @@ def test_cancel_active_reservation_emits_table_freed_and_cancelled_events(
     table: Table,
     user_factory: Callable[..., Any],
 ) -> None:
-    """Cancelling a seated (ACTIVE) reservation closes its session — the
-    table goes from occupied to free right now, not just "eventually" via
-    the next availability check. Without HALL_TABLE_STATUS_CHANGED, the
-    customer floor stream and staff hall dashboard both stay stale until a
-    reload, undercutting the whole point of a real-time floor.
-    """
     customer = user_factory()
     customer.save()
     staff = user_factory(role=RoleCode.WAITER)
@@ -146,10 +269,6 @@ def test_cancel_pending_reservation_emits_only_cancelled_event(
     table: Table,
     user_factory: Callable[..., Any],
 ) -> None:
-    """A PENDING reservation never has a session, so there's no table-freed
-    event to send — but HALL_RESERVATION_CANCELLED still fires, so the
-    customer floor drops it from "upcoming" and refreshes slot availability.
-    """
     customer = user_factory()
     customer.save()
     staff = user_factory(role=RoleCode.WAITER)
@@ -184,8 +303,6 @@ def test_cancel_reservation_without_actor_skips_events(
     table: Table,
     user_factory: Callable[..., Any],
 ) -> None:
-    """Matches create_reservation's convention: actor is optional, and
-    omitting it just skips the notification rather than erroring."""
     customer = user_factory()
     customer.save()
     start_at = timezone.now() + timedelta(hours=1)
@@ -215,12 +332,6 @@ def test_cancel_active_reservation_closes_its_active_cart(
     table: Table,
     user_factory: Callable[..., Any],
 ) -> None:
-    """Staff cancelling a seated booking must also close its guest cart —
-    checkout_cart_session only checks the CartSession's own status, not the
-    reservation's, so a cart left ACTIVE would let the guest keep
-    ordering/checking out (injecting a kitchen ticket) against a reservation
-    that's already cancelled. Mirrors close_visit_session's teardown.
-    """
     customer = user_factory()
     customer.save()
     now = timezone.now()

@@ -98,6 +98,7 @@ class Session(RestaurantScopedModel):
     service_charge = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     total = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     opened_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-opened_at", "-id"]
@@ -112,6 +113,17 @@ class Session(RestaurantScopedModel):
             models.CheckConstraint(
                 condition=models.Q(status__in=SessionStatus.values),
                 name="orders_session_status_valid",
+            ),
+            # A physical table holds one seated party at a time. Sessions are only
+            # created for seated (active) parties, so at most one OPEN session may
+            # exist per table. This is the DB backstop for the batch re-seat / prolong
+            # path (which mutates Session.table/ends_at outside the Reservation
+            # exclusion constraint) and for the activate_pending TOCTOU race — both of
+            # which can otherwise double-book a table across concurrent transactions.
+            models.UniqueConstraint(
+                fields=["table"],
+                condition=models.Q(status=SessionStatus.OPEN),
+                name="orders_one_open_session_per_table",
             ),
         ]
 

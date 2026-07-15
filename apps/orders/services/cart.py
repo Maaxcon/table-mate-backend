@@ -22,6 +22,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -39,7 +40,7 @@ from common.exceptions import (
     ReservationConflictError,
     RestaurantClosedError,
 )
-from common.hall_events import emit_hall_table_status_changed
+from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
 from common.notification_events import emit_kitchen_ticket_injected
 
 from ..models import (
@@ -405,18 +406,34 @@ def open_session(
     opened_at: str | datetime,
     actor: User,
 ) -> Session:
+    from apps.orders.billing import close_visit_session as _close_visit_session
     from common.exceptions import TableOccupiedError
 
     now = timezone.now()
     grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
     occupancy_cutoff = now - timedelta(minutes=grace_minutes)
-    if Session.objects.filter(
+    non_stale = Session.objects.filter(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__gt=occupancy_cutoff,
-    ).exists():
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__gt=occupancy_cutoff,
+    )
+    if non_stale.exists():
         raise TableOccupiedError()
+    stale = Session.objects.filter(
+        table=table,
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__lte=occupancy_cutoff,
+    )
+    for stale_session in stale:
+        _close_visit_session(session=stale_session, actor=None)
 
     reservation = create_walk_in_reservation(
         table=table,
@@ -432,6 +449,7 @@ def open_session(
         status=SessionStatus.OPEN,
         currency=currency,
         opened_at=opened_at,
+        ends_at=reservation.end_at,
     )
 
     transaction.on_commit(
@@ -443,6 +461,11 @@ def open_session(
             session_id=str(session.public_id),
             actor=actor,
         )
+    )
+
+    table_id = str(table.public_id)
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
     )
 
     return session

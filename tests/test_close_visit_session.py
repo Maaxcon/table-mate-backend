@@ -2,6 +2,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
@@ -85,6 +86,60 @@ def test_close_endpoint_returns_200_and_closes(
     assert resp.json()["status"] == SessionStatus.CLOSED
     reservation.refresh_from_db()
     assert reservation.status == ReservationStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_close_broadcasts_reservations_updated_without_actor(
+    restaurant: Restaurant,
+    table: Table,
+    django_capture_on_commit_callbacks: Any,
+) -> None:
+    reservation = _active_reservation(restaurant, table)
+    session = ensure_visit_session(reservation)
+
+    with (
+        patch("apps.orders.billing.emit_hall_table_status_changed") as mock_status,
+        patch("apps.orders.billing.emit_hall_reservations_updated") as mock_reservations,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        close_visit_session(session=session)
+
+    session.refresh_from_db()
+    reservation.refresh_from_db()
+    assert session.status == SessionStatus.CLOSED
+    assert reservation.status == ReservationStatus.COMPLETED
+    mock_status.assert_not_called()
+    mock_reservations.assert_called_once_with(restaurant.id, table_ids=[str(table.public_id)])
+
+
+@pytest.mark.django_db
+def test_close_broadcasts_table_status_and_reservations_updated_for_actor(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+    django_capture_on_commit_callbacks: Any,
+) -> None:
+    waiter = user_factory(role=RoleCode.WAITER)
+    waiter.save()
+    reservation = _active_reservation(restaurant, table)
+    session = ensure_visit_session(reservation)
+
+    with (
+        patch("apps.orders.billing.emit_hall_table_status_changed") as mock_status,
+        patch("apps.orders.billing.emit_hall_reservations_updated") as mock_reservations,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        close_visit_session(session=session, actor=waiter)
+
+    mock_status.assert_called_once_with(
+        restaurant.id,
+        table_id=str(table.public_id),
+        previous_status="occupied",
+        current_status="free",
+        session_id=str(session.public_id),
+        actor=waiter,
+    )
+    mock_reservations.assert_called_once_with(restaurant.id, table_ids=[str(table.public_id)])
 
 
 @pytest.mark.django_db

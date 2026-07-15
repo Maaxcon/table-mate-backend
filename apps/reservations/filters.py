@@ -6,6 +6,12 @@ from .models import Reservation
 
 class ReservationFilter(django_filters.FilterSet):  # type: ignore[misc]
     status__in = django_filters.CharFilter(method="filter_status_in")
+    start_at__date__gte = django_filters.DateFilter(
+        field_name="start_at", lookup_expr="date__gte",
+    )
+    start_at__date__lte = django_filters.DateFilter(
+        field_name="start_at", lookup_expr="date__lte",
+    )
 
     class Meta:
         model = Reservation

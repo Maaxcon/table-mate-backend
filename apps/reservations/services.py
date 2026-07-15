@@ -1,26 +1,30 @@
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import date, datetime, timedelta
+from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.billing import close_reservation_carts, ensure_visit_session
+from apps.orders.billing import close_reservation_carts, close_visit_session, ensure_visit_session
 from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
-from apps.restaurants.models import Table
-from common.exceptions import ReservationCancelError, ReservationConflictError
+from apps.restaurants.models import RestaurantSettings, Table
+from apps.restaurants.selectors import _DAY_KEYS, _hhmm_to_minutes
+from common.exceptions import ReservationCancelError, ReservationConflictError, RestaurantClosedError
 from common.hall_events import (
     emit_hall_new_reservation,
     emit_hall_reservation_cancelled,
+    emit_hall_reservations_updated,
     emit_hall_table_status_changed,
 )
 from common.notification_events import emit_hall_new_reservation_notification
 
 from ..editor.selectors import get_available_tables
 from .models import Reservation, ReservationStatus, ReservationType
-from .selectors import get_unavailable_table_ids
 
 
 def check_availability(
@@ -47,16 +51,60 @@ def _check_reservation_conflict(
     end_at: datetime,
     current_reservation_id: int | None = None,
 ) -> None:
-    unavailable = get_unavailable_table_ids(
-        restaurant_id=restaurant_id,
-        start_at=start_at,
-        end_at=end_at,
-        table_ids=[table.pk],
-        current_reservation_id=current_reservation_id,
+    # For an ACTIVE reservation the occupied window is the OPEN session's actuals
+    # [opened_at, ends_at]; for PENDING it's the booked [start_at, end_at]. Coalesce
+    # falls back to the booked values when there is no open session (pending). The
+    # fallback also covers any legacy session predating the ends_at backfill
+    # (migration 0025) — a safety net, not the primary mechanism.
+    open_session = (
+        Session.objects.filter(
+            reservation=OuterRef("pk"),
+            status=SessionStatus.OPEN,
+        )
+        .order_by("opened_at")
     )
-    if table.pk in unavailable:
-        raise ReservationConflictError("Table is not available during the requested time.")
 
+    qs = (
+        Reservation.objects.filter(
+            restaurant_id=restaurant_id,
+            table=table,
+            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+        )
+        .annotate(
+            eff_start=Coalesce(Subquery(open_session.values("opened_at")[:1]), "start_at"),
+            eff_end=Coalesce(Subquery(open_session.values("ends_at")[:1]), "end_at"),
+        )
+        .filter(
+            eff_start__lt=end_at,
+            eff_end__gt=start_at,
+        )
+    )
+    if current_reservation_id is not None:
+        qs = qs.exclude(id=current_reservation_id)
+    conflict = qs.first()
+    if conflict is not None:
+        raise ReservationConflictError(
+            "Table is not available during the requested time.",
+            conflicting_reservation_id=str(conflict.public_id),
+        )
+
+    # A new/edited reservation may not begin before a party already seated on this
+    # table: pending bookings queue AFTER the active session, never before it. The
+    # anchor is the session's opened_at (when the party actually sat down).
+    seated = Session.objects.filter(
+        restaurant_id=restaurant_id,
+        table=table,
+        status=SessionStatus.OPEN,
+        opened_at__gt=start_at,
+    )
+    if current_reservation_id is not None:
+        seated = seated.exclude(reservation_id=current_reservation_id)
+    seated_session = seated.select_related("reservation").first()
+    if seated_session is not None:
+        raise ReservationConflictError(
+            "Table is occupied; a new reservation must start after the seated party.",
+            conflicting_reservation_id=str(seated_session.reservation.public_id),
+        )
 
 @transaction.atomic
 def create_reservation(
@@ -83,6 +131,29 @@ def create_reservation(
         start_at=start_at,
         end_at=end_at,
     )
+
+    settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
+    if settings and settings.working_hours:
+        tz = ZoneInfo(settings.timezone) if settings.timezone else ZoneInfo("UTC")
+        local_start = start_at.astimezone(tz)
+        day_key = _DAY_KEYS[local_start.weekday()]
+        day_hours = settings.working_hours.get(day_key)
+        if not day_hours:
+            raise RestaurantClosedError(f"Restaurant closed on {day_key}.")
+        open_min = _hhmm_to_minutes(day_hours.get("open"))
+        close_min = _hhmm_to_minutes(day_hours.get("close"))
+        if open_min is not None and close_min is not None:
+            start_min = local_start.hour * 60 + local_start.minute
+            local_end = end_at.astimezone(tz)
+            end_min = local_end.hour * 60 + local_end.minute
+            if close_min > open_min:
+                if start_min < open_min or end_min > close_min:
+                    raise RestaurantClosedError("Reservation falls outside operating hours.")
+            else:
+                if not (start_min >= open_min or start_min < close_min) or not (
+                    end_min >= open_min or end_min < close_min
+                ):
+                    raise RestaurantClosedError("Reservation falls outside operating hours.")
 
     reservation = Reservation.objects.create(
         restaurant_id=restaurant_id,
@@ -154,6 +225,7 @@ def create_staff_reservation(
     reservation = Reservation.objects.create(
         restaurant_id=restaurant_id,
         customer=None,
+        guest_name=guest_name,
         table=table,
         guest_count=guest_count,
         start_at=start_at,
@@ -161,7 +233,6 @@ def create_staff_reservation(
         type=ReservationType.PRE_BOOKED,
         status=ReservationStatus.PENDING,
         created_by_staff=True,
-        guest_name=guest_name or "",
         notes=staff_notes or None,
     )
 
@@ -252,8 +323,54 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
                 actor=actor,
             )
         )
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(locked.restaurant_id, table_ids=[str(table.public_id)])
+        )
 
     return locked
+
+
+def _prolong_active_reservation(
+    reservation: Reservation,
+    validated_data: dict[str, Any],
+) -> Reservation:
+    """Prolong/annotate a seated party without touching the booked reservation.
+
+    For an ACTIVE reservation the booking (table/start_at/end_at) is immutable; the
+    actual end lives on the OPEN session's ``ends_at``. Only ``end_at`` (→ session) and
+    ``notes`` (→ reservation) may change.
+    """
+    session = (
+        Session.objects.select_for_update()
+        .filter(reservation=reservation, status=SessionStatus.OPEN)
+        .first()
+    )
+    if session is None:
+        raise ReservationConflictError("Active reservation has no open session.")
+
+    new_end = validated_data.get("end_at")
+    if new_end is not None:
+        if new_end <= session.opened_at:
+            raise ReservationConflictError("End time must be after the party was seated.")
+        _check_reservation_conflict(
+            restaurant_id=reservation.restaurant_id,
+            table=session.table,
+            start_at=session.opened_at,
+            end_at=new_end,
+            current_reservation_id=reservation.id,
+        )
+        session.ends_at = new_end
+        session.save(update_fields=["ends_at", "updated_at"])
+
+    if "notes" in validated_data:
+        reservation.notes = validated_data["notes"]
+        reservation.save(update_fields=["notes", "updated_at"])
+
+    restaurant_id = reservation.restaurant_id
+    table_id = str(session.table.public_id)
+    transaction.on_commit(lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id]))
+
+    return reservation
 
 
 @transaction.atomic
@@ -268,6 +385,12 @@ def reschedule_reservation(
             raise ReservationConflictError(
                 f"Active reservations can only be prolonged (end_at). Cannot change: {', '.join(sorted(disallowed))}."
             )
+        return _prolong_active_reservation(reservation, validated_data)
+
+    if reservation.status in {ReservationStatus.COMPLETED, ReservationStatus.CANCELLED}:
+        raise ReservationConflictError(f"Cannot reschedule a {reservation.status} reservation.")
+
+    old_table_public_id = str(reservation.table.public_id) if reservation.table else ""
 
     table = validated_data.get("table", reservation.table)
     if table is None:
@@ -276,6 +399,29 @@ def reschedule_reservation(
 
     start_at = validated_data.get("start_at", reservation.start_at)
     end_at = validated_data.get("end_at", reservation.end_at)
+
+    settings = RestaurantSettings.objects.filter(restaurant_id=reservation.restaurant_id).first()
+    if settings and settings.working_hours:
+        tz = ZoneInfo(settings.timezone) if settings.timezone else ZoneInfo("UTC")
+        local_start = start_at.astimezone(tz)
+        day_key = _DAY_KEYS[local_start.weekday()]
+        day_hours = settings.working_hours.get(day_key)
+        if not day_hours:
+            raise RestaurantClosedError(f"Restaurant closed on {day_key}.")
+        open_min = _hhmm_to_minutes(day_hours.get("open"))
+        close_min = _hhmm_to_minutes(day_hours.get("close"))
+        if open_min is not None and close_min is not None:
+            start_min = local_start.hour * 60 + local_start.minute
+            local_end = end_at.astimezone(tz)
+            end_min = local_end.hour * 60 + local_end.minute
+            if close_min > open_min:
+                if start_min < open_min or end_min > close_min:
+                    raise RestaurantClosedError("Reservation falls outside operating hours.")
+            else:
+                if not (start_min >= open_min or start_min < close_min) or not (
+                    end_min >= open_min or end_min < close_min
+                ):
+                    raise RestaurantClosedError("Reservation falls outside operating hours.")
 
     _check_reservation_conflict(
         restaurant_id=reservation.restaurant_id,
@@ -291,6 +437,15 @@ def reschedule_reservation(
             setattr(reservation, field, validated_data[field])
 
     reservation.save()
+
+    # Notify the floor (waiter/booking views) so they refetch. Covers single-PATCH
+    # reschedules; the batch path emits the same event from batch_update_reservations.
+    restaurant_id = reservation.restaurant_id
+    affected_table_ids = {old_table_public_id, str(reservation.table.public_id) if reservation.table else ""}
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(restaurant_id, table_ids=list(affected_table_ids))
+    )
+
     return reservation
 
 
@@ -324,6 +479,13 @@ def activate_reservation(
             locked.status = ReservationStatus.ACTIVE
             locked.save(update_fields=["status"])
         ensure_visit_session(locked, opened_by=opened_by_user)
+
+    restaurant_id = locked.restaurant_id
+    table_id = str(locked.table.public_id) if locked.table else ""
+    if table_id:
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
+        )
     return locked
 
 
@@ -361,6 +523,12 @@ def activate_reservation_by_scan(
     reservation.save(update_fields=["status"])
 
     ensure_visit_session(reservation, opened_by=user)
+
+    restaurant_id = reservation.restaurant_id
+    table_id = str(table.public_id)
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
+    )
     return True, "Table verified and activated."
 
 
@@ -405,6 +573,12 @@ def update_reservation_status(
             )
         )
 
+    table_id = str(reservation.table.public_id) if reservation.table else ""
+    if table_id:
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(reservation.restaurant_id, table_ids=[table_id])
+        )
+
     return reservation
 
 
@@ -414,6 +588,9 @@ def activate_pending_reservation(
     *,
     actor: User,
 ) -> Reservation:
+    if reservation.status == ReservationStatus.ACTIVE:
+        return reservation
+
     if reservation.status != ReservationStatus.PENDING:
         raise ReservationConflictError("Only pending reservations can be activated.")
 
@@ -421,16 +598,44 @@ def activate_pending_reservation(
     if table is None:
         raise ReservationConflictError("Reservation has no table assigned.")
 
+    locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
+
+    if locked.status != ReservationStatus.PENDING:
+        raise ReservationConflictError("Only pending reservations can be activated.")
+
+    # Serialize concurrent activations onto this table. The open-session guard below
+    # is a check-then-create: two activations of *different* pending reservations on
+    # the same table lock different reservation rows, so without a per-table lock they
+    # could both pass the guard and each open a session (double-booking). Locking the
+    # table row forces them to run one at a time; the DB constraint
+    # (orders_one_open_session_per_table) is the final backstop.
+    Table.objects.select_for_update().get(pk=table.pk)
+
     now = timezone.now()
     grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
     occupancy_cutoff = now - timedelta(minutes=grace_minutes)
-    if Session.objects.filter(
+    non_stale = Session.objects.filter(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__gt=occupancy_cutoff,
-    ).exists():
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__gt=occupancy_cutoff,
+    )
+    if non_stale.exists():
         raise ReservationConflictError("Table already has an active session.")
+    stale = Session.objects.filter(
+        table=table,
+        status=SessionStatus.OPEN,
+        reservation__status=ReservationStatus.ACTIVE,
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__lte=occupancy_cutoff,
+    )
+    for stale_session in stale:
+        close_visit_session(session=stale_session, actor=None)
 
     earlier_pending = (
         Reservation.objects.filter(
@@ -446,18 +651,23 @@ def activate_pending_reservation(
     if earlier_pending:
         raise ReservationConflictError("There is an earlier pending reservation for this table.")
 
-    reservation.status = ReservationStatus.ACTIVE
-    reservation.save(update_fields=["status", "updated_at"])
+    locked.status = ReservationStatus.ACTIVE
+    locked.save(update_fields=["status", "updated_at"])
 
     restaurant = table.restaurant
+    try:
+        currency = restaurant.settings.currency
+    except RestaurantSettings.DoesNotExist:
+        currency = "UAH"
     session = Session.objects.create(
         restaurant_id=reservation.restaurant_id,
         table=table,
-        reservation=reservation,
+        reservation=locked,
         opened_by=actor,
         guest_count=reservation.guest_count,
-        currency=restaurant.settings.currency,
+        currency=currency,
         opened_at=now,
+        ends_at=locked.end_at,
     )
 
     transaction.on_commit(
@@ -471,7 +681,12 @@ def activate_pending_reservation(
         )
     )
 
-    return reservation
+    table_id = str(table.public_id)
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(reservation.restaurant_id, table_ids=[table_id])
+    )
+
+    return locked
 
 
 @transaction.atomic
@@ -551,6 +766,11 @@ def move_session_to_table(
         )
     )
 
+    affected_table_ids = [str(old_table.public_id), str(new_table.public_id)]
+    transaction.on_commit(
+        lambda: emit_hall_reservations_updated(session.restaurant_id, table_ids=affected_table_ids)
+    )
+
     return session
 
 
@@ -558,18 +778,20 @@ def move_session_to_table(
 def close_session(
     session: Session,
     *,
-    actor: User,
+    actor: User | None,
+    force: bool = False,
 ) -> Session:
     if session.status != SessionStatus.OPEN:
         raise ReservationConflictError("Session is not open.")
 
-    pending_items = OrderItem.objects.filter(
-        order__session=session,
-        status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
-    ).exists()
+    if not force:
+        pending_items = OrderItem.objects.filter(
+            order__session=session,
+            status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
+        ).exists()
 
-    if pending_items:
-        raise ReservationConflictError("Cannot close check: all items must be served or voided first.")
+        if pending_items:
+            raise ReservationConflictError("Cannot close check: all items must be served or voided first.")
 
     session.status = SessionStatus.CLOSED
     session.save(update_fields=["status", "updated_at"])
@@ -581,15 +803,250 @@ def close_session(
         reservation.end_at = now if now > reservation.start_at else reservation.start_at + timedelta(seconds=1)
         reservation.save(update_fields=["status", "end_at", "updated_at"])
 
-    transaction.on_commit(
-        lambda: emit_hall_table_status_changed(
-            session.restaurant_id,
-            table_id=str(session.table.public_id),
-            previous_status="occupied",
-            current_status="free",
-            session_id=str(session.public_id),
-            actor=actor,
+    if actor is not None:
+        transaction.on_commit(
+            lambda: emit_hall_table_status_changed(
+                session.restaurant_id,
+                table_id=str(session.table.public_id),
+                previous_status="occupied",
+                current_status="free",
+                session_id=str(session.public_id),
+                actor=actor,
+            )
         )
-    )
+
+        table_id = str(session.table.public_id)
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(session.restaurant_id, table_ids=[table_id])
+        )
 
     return session
+
+
+def _batch_end_date(c: dict[str, Any]) -> date:
+    """Return end date, advanced by 1 day if the reservation crosses midnight."""
+    if c["new_end_time"] <= c["new_start_time"]:
+        return cast(date, c["new_date"] + timedelta(days=1))
+    return cast(date, c["new_date"])
+
+
+def _batch_active_end_datetime(c: dict[str, Any], session: Session) -> datetime:
+    """End datetime for an ACTIVE row: anchored to session.opened_at.date().
+
+    Consistent with ignoring the client's ``new_start_time`` (and therefore
+    ``new_date``) for the start anchor — the seated party's actual times are
+    the ground truth.
+    """
+    end_date = session.opened_at.date()
+    opened_time = session.opened_at.time().replace(second=0, microsecond=0)
+    if c["new_end_time"] <= opened_time:
+        end_date += timedelta(days=1)
+    return timezone.make_aware(datetime.combine(end_date, c["new_end_time"]))
+
+
+@transaction.atomic
+def batch_update_reservations(
+    *,
+    restaurant_id: int,
+    changes: list[dict[str, Any]],
+    cancellations: list[str] | None = None,
+    actor: User | None = None,
+) -> None:
+    """Apply a batch of reservation moves/resizes/cancellations atomically.
+
+    PENDING reservations are cancelled (status → CANCELLED); ACTIVE reservations
+    are force-completed (session closed, status → COMPLETED). The entire batch
+    rolls back on any failure.
+    """
+    # 1. Gather + lock all affected reservations
+    res_public_ids = [c["reservation_id"] for c in changes]
+    if cancellations:
+        res_public_ids.extend(cancellations)
+
+    reservations = Reservation.objects.select_for_update().filter(
+        restaurant_id=restaurant_id,
+        public_id__in=res_public_ids,
+        status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+    )
+    res_map = {str(r.public_id): r for r in reservations}
+
+    for c in changes:
+        rid = str(c["reservation_id"])
+        if rid not in res_map:
+            raise NotFound(f"Reservation {rid} not found or not editable.")
+    if cancellations:
+        for c_id in cancellations:
+            rid = str(c_id)
+            if rid not in res_map:
+                raise NotFound(f"Reservation {rid} not found or not editable.")
+
+    # Validate no reservation is both changed AND cancelled
+    change_ids = {c["reservation_id"] for c in changes}
+    cancel_ids = set(cancellations or [])
+    if change_ids & cancel_ids:
+        raise ReservationConflictError("A reservation cannot be both modified and cancelled in the same batch.")
+
+    # 2. Lock sessions for ACTIVE reservations (both changes and cancellations)
+    session_map: dict[str, Session] = {}
+    for c in changes:
+        rid = str(c["reservation_id"])
+        res = res_map[rid]
+        if res.status == ReservationStatus.ACTIVE:
+            session = (
+                Session.objects.select_for_update()
+                .filter(reservation=res, status=SessionStatus.OPEN)
+                .first()
+            )
+            if session is None:
+                raise ReservationConflictError(f"Active reservation {rid} has no open session.")
+            session_map[rid] = session
+
+    if cancellations:
+        for c_id in cancellations:
+            rid = str(c_id)
+            res = res_map[rid]
+            if res.status == ReservationStatus.ACTIVE:
+                session = (
+                    Session.objects.select_for_update()
+                    .filter(reservation=res, status=SessionStatus.OPEN)
+                    .first()
+                )
+                if session is None:
+                    raise ReservationConflictError(f"Active reservation {rid} has no open session.")
+                session_map[rid] = session
+
+    # 3. Validation — past-date guard and overlap checks (applies to changes only)
+    today = timezone.now().date()
+    now_time = timezone.now().time().replace(second=0, microsecond=0)
+    for c in changes:
+        rid = str(c["reservation_id"])
+        if res_map[rid].status == ReservationStatus.ACTIVE:
+            continue
+        if c["new_date"] < today:
+            raise ReservationConflictError(
+                "Cannot batch-update to a past date.",
+                conflicting_reservation_id=rid,
+            )
+        if c["new_date"] == today and c["new_start_time"] < now_time:
+            raise ReservationConflictError(
+                "Cannot schedule a reservation in the past.",
+                conflicting_reservation_id=rid,
+            )
+
+    intervals: list[tuple[str, datetime, datetime, str]] = []
+    for c in changes:
+        rid = str(c["reservation_id"])
+        table_id = str(c["new_table_id"])
+        if res_map[rid].status == ReservationStatus.ACTIVE:
+            new_start = session_map[rid].opened_at
+            new_end = _batch_active_end_datetime(c, session_map[rid])
+        else:
+            new_start = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
+            new_end = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
+        if new_end <= new_start:
+            raise ReservationConflictError(
+                "Reservation end must be after its start.",
+                conflicting_reservation_id=c["reservation_id"],
+            )
+        intervals.append((table_id, new_start, new_end, c["reservation_id"]))
+
+    for i in range(len(intervals)):
+        t_i, s_i, e_i, _rid_i = intervals[i]
+        for j in range(i + 1, len(intervals)):
+            t_j, s_j, e_j, rid_j = intervals[j]
+            if t_i == t_j and s_i < e_j and s_j < e_i:
+                raise ReservationConflictError(
+                    "Overlapping reservations in payload.",
+                    conflicting_reservation_id=rid_j,
+                )
+
+    for c in changes:
+        rid = str(c["reservation_id"])
+        res = res_map[rid]
+        table = Table.objects.filter(
+            public_id=c["new_table_id"],
+            restaurant_id=restaurant_id,
+            active=True,
+        ).first()
+        if table is None:
+            raise NotFound(f"Table {c['new_table_id']} not found or inactive.")
+
+        if res.status == ReservationStatus.ACTIVE:
+            start_at = session_map[rid].opened_at
+            end_at = _batch_active_end_datetime(c, session_map[rid])
+            if end_at <= start_at:
+                raise ReservationConflictError("End time must be after the party was seated.")
+        else:
+            start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
+            end_at = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
+
+        _check_reservation_conflict(
+            restaurant_id=restaurant_id,
+            table=table,
+            start_at=start_at,
+            end_at=end_at,
+            current_reservation_id=res.id,
+        )
+
+    # 4. Apply all changes + cancellations
+    affected_table_ids: set[str] = set()
+
+    # Process cancellations first — pending become CANCELLED, active get force-completed
+    if cancellations:
+        for c_id in cancellations:
+            rid = str(c_id)
+            res = res_map[rid]
+            if res.table:
+                affected_table_ids.add(str(res.table.public_id))
+
+            if res.status == ReservationStatus.ACTIVE:
+                session = session_map[rid]
+                close_session(session=session, actor=actor, force=True)
+            else:
+                res.status = ReservationStatus.CANCELLED
+                res.save(update_fields=["status", "updated_at"])
+
+            table = res.table
+            if table is None and rid in session_map:
+                table = session_map[rid].table
+            if actor is not None and table is not None:
+
+                def _cancel_hall_event(
+                    reservation_id: str = str(res.public_id),
+                    table_id: str = str(table.public_id),
+                ) -> None:
+                    emit_hall_reservation_cancelled(
+                        restaurant_id,
+                        reservation_id=reservation_id,
+                        table_id=table_id,
+                        actor=actor,
+                    )
+
+                transaction.on_commit(_cancel_hall_event)
+
+    # Process moves/resizes
+    for c in changes:
+        rid = str(c["reservation_id"])
+        res = res_map[rid]
+        table = Table.objects.get(
+            public_id=c["new_table_id"],
+            restaurant_id=restaurant_id,
+            active=True,
+        )
+        if res.status == ReservationStatus.ACTIVE:
+            session = session_map[rid]
+            old_table_id = str(session.table.public_id)
+            affected_table_ids.update({old_table_id, str(c["new_table_id"])})
+            session.ends_at = _batch_active_end_datetime(c, session)
+            if old_table_id != str(c["new_table_id"]):
+                session.table = table
+            session.save(update_fields=["ends_at", "table", "updated_at"])
+        else:
+            affected_table_ids.update({str(res.table.public_id) if res.table else "", str(c["new_table_id"])})
+            res.table = table
+            res.start_at = timezone.make_aware(datetime.combine(c["new_date"], c["new_start_time"]))
+            res.end_at = timezone.make_aware(datetime.combine(_batch_end_date(c), c["new_end_time"]))
+            res.save(update_fields=["table", "start_at", "end_at", "updated_at"])
+
+    # Aggregate refresh for affected tables after the batch lands.
+    transaction.on_commit(lambda: emit_hall_reservations_updated(restaurant_id, table_ids=list(affected_table_ids)))

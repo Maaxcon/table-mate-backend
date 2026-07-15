@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.authentication.models import User
@@ -38,6 +39,12 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
     table_info = TableInfoSerializer(source="table", read_only=True)
     restaurant_info = RestaurantInfoSerializer(source="restaurant", read_only=True)
     customer_name = serializers.SerializerMethodField()
+    # Actuals of the seated party (from the OPEN session), annotated by the viewset.
+    # Null for pending/unseated reservations or in contexts without the annotation.
+    opened_at = serializers.SerializerMethodField()
+    session_ends_at = serializers.SerializerMethodField()
+    session_table = serializers.SerializerMethodField()
+    session_table_number = serializers.SerializerMethodField()
 
     class Meta:
         model = Reservation
@@ -54,6 +61,10 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "guest_count",
             "start_at",
             "end_at",
+            "opened_at",
+            "session_ends_at",
+            "session_table",
+            "session_table_number",
             "status",
             "created_by_staff",
             "notes",
@@ -65,9 +76,28 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "restaurant",
             "customer",
             "customer_name",
+            "opened_at",
+            "session_ends_at",
+            "session_table",
+            "session_table_number",
             "created_at",
             "updated_at",
         ]
+
+    def get_opened_at(self, obj: Reservation) -> str | None:
+        val = getattr(obj, "session_opened_at", None)
+        return val.isoformat() if val else None
+
+    def get_session_ends_at(self, obj: Reservation) -> str | None:
+        val = getattr(obj, "session_ends_at", None)
+        return val.isoformat() if val else None
+
+    def get_session_table(self, obj: Reservation) -> str | None:
+        val = getattr(obj, "session_table_id", None)
+        return str(val) if val else None
+
+    def get_session_table_number(self, obj: Reservation) -> str | None:
+        return getattr(obj, "session_table_number", None)
 
     def get_customer_name(self, obj: Reservation) -> str:
         if obj.guest_name:
@@ -84,6 +114,13 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
         return value
 
     def validate_guest_count(self, value: int) -> int:
+        if value < 1:
+            raise serializers.ValidationError("Guest count must be at least 1.")
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        is_staff = getattr(user, "role", None) in ("admin", "waiter")
+        if is_staff:
+            return value
         if self.instance is not None:
             capacity = self.instance.table.capacity if self.instance.table else None
         elif "table" in self.initial_data:
@@ -103,9 +140,45 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             return value
         raise serializers.ValidationError(f"Invalid status: {value}.")
 
+    def validate_notes(self, value: str) -> str:
+        if len(value) > 2000:
+            raise serializers.ValidationError("Notes must be at most 2000 characters.")
+        return value
+
     def validate(self, attrs: dict[str, object]) -> dict[str, object]:
         start_at = attrs.get("start_at")
         end_at = attrs.get("end_at")
-        if isinstance(start_at, datetime) and isinstance(end_at, datetime) and start_at >= end_at:
-            raise serializers.ValidationError({"end_at": "end_at must be after start_at."})
+        if isinstance(start_at, datetime) and isinstance(end_at, datetime):
+            if start_at >= end_at:
+                raise serializers.ValidationError({"end_at": "end_at must be after start_at."})
+            if start_at < timezone.now():
+                raise serializers.ValidationError({"start_at": "start_at must be in the future."})
+            if end_at - start_at > timedelta(hours=8):
+                raise serializers.ValidationError({"end_at": "Duration must not exceed 8 hours."})
         return attrs
+
+
+class BatchUpdateItemSerializer(serializers.Serializer[dict[str, object]]):
+    reservation_id = serializers.UUIDField()
+    new_table_id = serializers.UUIDField()
+    new_date = serializers.DateField()
+    new_start_time = serializers.TimeField()
+    new_end_time = serializers.TimeField()
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        return attrs
+
+
+class BatchUpdateSerializer(serializers.Serializer[dict[str, object]]):
+    changes = BatchUpdateItemSerializer(many=True)
+    cancellations = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        default=list,
+    )
+
+
+class BatchUpdateErrorSerializer(serializers.Serializer[dict[str, object]]):
+    detail = serializers.CharField()
+    code = serializers.CharField(required=False)
+    conflicting_reservation_id = serializers.CharField(required=False)

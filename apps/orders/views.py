@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.db import transaction
 from django.db.models import QuerySet
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -26,7 +27,7 @@ from common.api import (
     require_restaurant_id_from_auth,
 )
 from common.exceptions import TableOccupiedError
-from common.hall_events import emit_hall_table_status_changed
+from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
 from .billing import close_visit_session, ensure_visit_session
@@ -74,32 +75,46 @@ class SessionViewSet(
         now = timezone.now()
         grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
         occupancy_cutoff = now - timedelta(minutes=grace_minutes)
-        if Session.objects.filter(
+        non_stale = Session.objects.filter(
             table=table,
             status=SessionStatus.OPEN,
             reservation__status=ReservationStatus.ACTIVE,
-            reservation__end_at__gt=occupancy_cutoff,
-        ).exists():
+        ).annotate(
+            effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+        ).filter(
+            effective_end_at__gt=occupancy_cutoff,
+        )
+        if non_stale.exists():
             raise TableOccupiedError()
+        stale = Session.objects.filter(
+            table=table,
+            status=SessionStatus.OPEN,
+            reservation__status=ReservationStatus.ACTIVE,
+        ).annotate(
+            effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+        ).filter(
+            effective_end_at__lte=occupancy_cutoff,
+        )
         guest_count = serializer.validated_data["guest_count"]
         with transaction.atomic():
+            for stale_session in stale:
+                close_visit_session(session=stale_session, actor=None)
             reservation = create_walk_in_reservation(table=table, guest_count=guest_count)
-            # ensure_visit_session owns currency/opened_at resolution for every
-            # open-table path (walk-in, scan, activate), so it stays in one place.
-            # IsFloor guarantees an authenticated staff user here.
             serializer.instance = ensure_visit_session(reservation, opened_by=cast(User, self.request.user))
             restaurant_id = get_restaurant_id_from_auth(self.request)
             if restaurant_id is not None:
+                table_id = str(table.public_id)
 
                 def _on_commit() -> None:
                     emit_hall_table_status_changed(
                         restaurant_id,
-                        table_id=str(table.public_id),
+                        table_id=table_id,
                         previous_status="free",
                         current_status="occupied",
                         session_id=str(serializer.instance.public_id),
                         actor=cast(User, self.request.user),
                     )
+                    emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
 
                 transaction.on_commit(_on_commit)
 

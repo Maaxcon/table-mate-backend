@@ -9,7 +9,7 @@ from channels.layers import get_channel_layer
 from django.core.cache import cache
 from django.utils import timezone
 
-from .channels import hall_group_name
+from .channels import hall_group_name, staff_group_name
 
 if TYPE_CHECKING:
     from apps.authentication.models import User
@@ -28,10 +28,14 @@ def _stable_event_id(event_name: str, *parts: str | int) -> str:
 
 def _broadcast_hall_event(restaurant_id: int, event: dict[str, object]) -> None:
     event_id = str(event.get("event_id", ""))
-    dedup_key = f"dedup:hall:{event_id}"
-    if not cache.add(dedup_key, "1", timeout=_DEDUP_TTL_SECONDS):
-        logger.debug("Dedup: skipping duplicate hall event %s", event_id)
-        return
+    # Only dedup events that carry an event_id. Events without one (e.g.
+    # HALL_RESERVATIONS_UPDATED) would otherwise all collide on the empty key
+    # "dedup:hall:" and every event after the first within the TTL would be dropped.
+    if event_id:
+        dedup_key = f"dedup:hall:{event_id}"
+        if not cache.add(dedup_key, "1", timeout=_DEDUP_TTL_SECONDS):
+            logger.debug("Dedup: skipping duplicate hall event %s", event_id)
+            return
 
     channel_layer = get_channel_layer()
     try:
@@ -89,6 +93,20 @@ def emit_hall_layout_published(
     )
 
 
+def _send_to_staff_group(restaurant_id: int, event: dict[str, object]) -> None:
+    channel_layer = get_channel_layer()
+    try:
+        async_to_sync(channel_layer.group_send)(
+            staff_group_name(restaurant_id),
+            {"type": "hall.event", "event": event},
+        )
+    except Exception:
+        logger.exception(
+            "Failed to broadcast event to staff group for restaurant %s",
+            restaurant_id,
+        )
+
+
 def emit_hall_reservation_cancelled(
     restaurant_id: int,
     *,
@@ -96,19 +114,18 @@ def emit_hall_reservation_cancelled(
     table_id: str,
     actor: User,
 ) -> None:
-    _broadcast_hall_event(
-        restaurant_id,
-        {
-            "event_name": "HALL_RESERVATION_CANCELLED",
-            "schema_version": "1",
-            "event_id": _stable_event_id("HALL_RESERVATION_CANCELLED", reservation_id, table_id),
-            "reservation_id": reservation_id,
-            "table_id": table_id,
-            "actor_id": actor.pk,
-            "actor_role": actor.role,
-            "occurred_at": timezone.now().isoformat(),
-        },
-    )
+    event: dict[str, object] = {
+        "event_name": "HALL_RESERVATION_CANCELLED",
+        "schema_version": "1",
+        "event_id": _stable_event_id("HALL_RESERVATION_CANCELLED", reservation_id, table_id),
+        "reservation_id": reservation_id,
+        "table_id": table_id,
+        "actor_id": actor.pk,
+        "actor_role": actor.role,
+        "occurred_at": timezone.now().isoformat(),
+    }
+    _broadcast_hall_event(restaurant_id, event)
+    _send_to_staff_group(restaurant_id, event)
 
 
 def emit_hall_new_reservation(
@@ -120,21 +137,20 @@ def emit_hall_new_reservation(
     end_at: str,
     actor: User,
 ) -> None:
-    _broadcast_hall_event(
-        restaurant_id,
-        {
-            "event_name": "HALL_NEW_RESERVATION",
-            "schema_version": "1",
-            "event_id": _stable_event_id("HALL_NEW_RESERVATION", reservation_id, table_id),
-            "reservation_id": reservation_id,
-            "table_id": table_id,
-            "start_at": start_at,
-            "end_at": end_at,
-            "actor_id": actor.pk,
-            "actor_role": actor.role,
-            "occurred_at": timezone.now().isoformat(),
-        },
-    )
+    event: dict[str, object] = {
+        "event_name": "HALL_NEW_RESERVATION",
+        "schema_version": "1",
+        "event_id": _stable_event_id("HALL_NEW_RESERVATION", reservation_id, table_id),
+        "reservation_id": reservation_id,
+        "table_id": table_id,
+        "start_at": start_at,
+        "end_at": end_at,
+        "actor_id": actor.pk,
+        "actor_role": actor.role,
+        "occurred_at": timezone.now().isoformat(),
+    }
+    _broadcast_hall_event(restaurant_id, event)
+    _send_to_staff_group(restaurant_id, event)
 
 
 def emit_hall_zone_created(
@@ -180,6 +196,21 @@ def emit_hall_zone_updated(
     )
 
 
+def emit_hall_reservations_updated(
+    restaurant_id: int,
+    *,
+    table_ids: list[str],
+) -> None:
+    event: dict[str, object] = {
+        "event_name": "HALL_RESERVATIONS_UPDATED",
+        "schema_version": "1",
+        "table_ids": table_ids,
+        "occurred_at": timezone.now().isoformat(),
+    }
+    _broadcast_hall_event(restaurant_id, event)
+    _send_to_staff_group(restaurant_id, event)
+
+
 def emit_hall_zone_deleted(
     restaurant_id: int,
     *,
@@ -195,3 +226,22 @@ def emit_hall_zone_deleted(
             "occurred_at": timezone.now().isoformat(),
         },
     )
+
+
+def emit_hall_session_auto_extended(
+    restaurant_id: int,
+    *,
+    table_id: str,
+    ends_at: str,
+    clamped_by: str,
+) -> None:
+    event: dict[str, object] = {
+        "event_name": "HALL_SESSION_AUTO_EXTENDED",
+        "schema_version": "1",
+        "table_id": table_id,
+        "ends_at": ends_at,
+        "clamped_by": clamped_by,
+        "occurred_at": timezone.now().isoformat(),
+    }
+    _broadcast_hall_event(restaurant_id, event)
+    _send_to_staff_group(restaurant_id, event)

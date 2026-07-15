@@ -21,7 +21,12 @@ class Command(BaseCommand):
         call_command("seed_superuser")
 
         self.stdout.write("\n=== Seeding restaurants ===")
-        call_command("seed_restaurants", restaurant_id=restaurant_id)
+        # Prune so the table set always matches the canonical seed (and the layout
+        # published by seed_layouts below). Without this, tables added out-of-band
+        # (e.g. via the editor UI) survive as active rows that seed_layouts drops
+        # from the current layout — leaving "ghost" tables that are reservable but
+        # absent from the floor plan.
+        call_command("seed_restaurants", restaurant_id=restaurant_id, prune=True)
 
         self.stdout.write("\n=== Seeding layouts ===")
         call_command("seed_layouts", restaurant_id=restaurant_id)

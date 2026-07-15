@@ -1,10 +1,11 @@
+from datetime import UTC, timedelta
 from datetime import datetime as datetime_cls
-from datetime import timedelta
 from typing import Any, TypedDict
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db.models import Exists, OuterRef, QuerySet
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode, User
@@ -66,6 +67,86 @@ def is_restaurant_open(restaurant_id: int, when: datetime_cls | None = None) -> 
     return now_min >= open_min or now_min < close_min  # overnight window
 
 
+def get_working_hours_close_at(
+    restaurant_id: int,
+    when: datetime_cls,
+) -> datetime_cls | None:
+    """Return the closing time as a datetime for the day containing ``when``.
+
+    Returns ``None`` if no working hours are configured (no limit). Handles
+    overnight windows: if close <= open the closing time rolls into the next day.
+    """
+    settings = get_restaurant_settings(restaurant_id)
+    if settings is None:
+        return None
+    working_hours = settings.working_hours or {}
+    if not working_hours:
+        return None
+
+    tz = ZoneInfo(settings.timezone) if settings.timezone else ZoneInfo("UTC")
+    local = when.astimezone(tz)
+    now_min = local.hour * 60 + local.minute
+    current_day_key = _DAY_KEYS[local.weekday()]
+    current_hours = working_hours.get(current_day_key)
+
+    def _close_for_day(day_offset: int) -> datetime_cls | None:
+        hours = working_hours.get(_DAY_KEYS[(local.weekday() + day_offset) % 7])
+        if not isinstance(hours, dict):
+            return None
+
+        open_min = _hhmm_to_minutes(hours.get("open"))
+        close_min = _hhmm_to_minutes(hours.get("close"))
+        if open_min is None or close_min is None:
+            return None
+
+        open_hour, open_minute = divmod(open_min, 60)
+        close_hour, close_minute = divmod(close_min, 60)
+        anchor = local + timedelta(days=day_offset)
+        window_start = anchor.replace(hour=open_hour, minute=open_minute, second=0, microsecond=0)
+        if close_min > open_min:
+            window_end = anchor.replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
+        else:
+            window_end = (window_start + timedelta(days=1)).replace(
+                hour=close_hour,
+                minute=close_minute,
+                second=0,
+                microsecond=0,
+            )
+        if window_start <= local < window_end:
+            return window_end
+        return None
+
+    if isinstance(current_hours, dict):
+        open_min = _hhmm_to_minutes(current_hours.get("open"))
+        close_min = _hhmm_to_minutes(current_hours.get("close"))
+        if open_min is not None and close_min is not None:
+            close_hour, close_minute = divmod(close_min, 60)
+            if close_min > open_min:
+                if now_min < open_min:
+                    close_dt = _close_for_day(-1)
+                    if close_dt is not None:
+                        return close_dt.astimezone(UTC)
+                close_dt = local.replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
+                return close_dt.astimezone(UTC)
+            if now_min >= open_min:
+                close_dt = (local + timedelta(days=1)).replace(
+                    hour=close_hour,
+                    minute=close_minute,
+                    second=0,
+                    microsecond=0,
+                )
+                return close_dt.astimezone(UTC)
+            close_dt = _close_for_day(-1)
+            if close_dt is not None:
+                return close_dt.astimezone(UTC)
+            return None
+
+    close_dt = _close_for_day(-1)
+    if close_dt is not None:
+        return close_dt.astimezone(UTC)
+    return None
+
+
 def list_employees(restaurant_id: int) -> QuerySet[User]:
     return User.objects.filter(restaurant_id=restaurant_id).exclude(role=RoleCode.CUSTOMER).order_by("role", "email")
 
@@ -80,12 +161,15 @@ def get_tables_with_occupancy(restaurant_id: int) -> QuerySet[Table]:
     now = timezone.now()
     grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
     occupancy_cutoff = now - timedelta(minutes=grace_minutes)
-    qs = Table.objects.select_related("zone").filter(restaurant_id=restaurant_id)
+    qs = Table.objects.select_related("zone").filter(restaurant_id=restaurant_id, active=True)
     occupied_subquery = Session.objects.filter(
         table=OuterRef("pk"),
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__gt=occupancy_cutoff,
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__gt=occupancy_cutoff,
     )
     return qs.annotate(is_occupied=Exists(occupied_subquery))
 
@@ -149,5 +233,6 @@ __all__ = [
     "get_restaurant",
     "get_restaurant_settings",
     "get_tables_with_occupancy",
+    "get_working_hours_close_at",
     "list_employees",
 ]

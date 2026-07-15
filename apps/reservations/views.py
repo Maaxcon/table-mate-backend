@@ -6,7 +6,7 @@ from datetime import time as time_type
 from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from django.db.models import QuerySet
+from django.db.models import OuterRef, QuerySet, Subquery
 from django.utils import timezone
 from drf_spectacular.plumbing import build_array_type, build_basic_type, build_object_type
 from drf_spectacular.types import OpenApiTypes
@@ -20,10 +20,16 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.models import Session
+from apps.orders.billing import close_visit_session
+from apps.orders.models import Session, SessionStatus
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
-from common.api import PublicLookupMixin, PublicRestaurantQueryMixin, get_restaurant_id_from_auth
+from common.api import (
+    PublicLookupMixin,
+    PublicRestaurantQueryMixin,
+    get_restaurant_id_from_auth,
+    require_restaurant_id_from_auth,
+)
 from common.channels import resolve_restaurant_pk_sync
 
 from .filters import ReservationFilter
@@ -36,11 +42,11 @@ from .selectors import (
     get_session_grace_cutoffs,
     get_unavailable_table_ids,
 )
-from .serializers import ReservationSerializer
+from .serializers import BatchUpdateErrorSerializer, BatchUpdateSerializer, ReservationSerializer
 from .services import (
-    activate_reservation,
+    activate_pending_reservation,
+    batch_update_reservations,
     cancel_reservation,
-    close_session,
     create_reservation,
     create_staff_reservation,
     move_session_to_table,
@@ -160,6 +166,17 @@ class ReservationViewSet(
 
     def get_queryset(self) -> QuerySet[Reservation]:
         qs = super().get_queryset()
+        # Surface the OPEN session's actuals (arrival/end/table) so the admin scheduler
+        # can render ACTIVE reservations by what really happened, not the booked window.
+        open_session = Session.objects.filter(
+            reservation=OuterRef("pk"), status=SessionStatus.OPEN
+        ).order_by("opened_at")
+        qs = qs.annotate(
+            session_opened_at=Subquery(open_session.values("opened_at")[:1]),
+            session_ends_at=Subquery(open_session.values("ends_at")[:1]),
+            session_table_id=Subquery(open_session.values("table__public_id")[:1]),
+            session_table_number=Subquery(open_session.values("table__public_number")[:1]),
+        )
         role = getattr(self.request.user, "role", None)
         if role and role in (RoleCode.ADMIN, RoleCode.WAITER):
             restaurant_id = get_restaurant_id_from_auth(self.request)
@@ -265,11 +282,19 @@ class ReservationViewSet(
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request: Request, *args: object, **kwargs: object) -> Response:
         reservation = self.get_object()
-        is_staff = getattr(request.user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER)
-        result = activate_reservation(
+        user = cast(User, request.user)
+        is_staff = getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER)
+        if not is_staff:
+            from .services import ACTIVATION_EARLY_WINDOW
+
+            if reservation.status == ReservationStatus.PENDING:
+                if reservation.start_at - timezone.now() > ACTIVATION_EARLY_WINDOW:
+                    from common.exceptions import ReservationConflictError
+
+                    raise ReservationConflictError("This reservation cannot be activated yet.")
+        result = activate_pending_reservation(
             reservation=reservation,
-            opened_by=request.user,
-            enforce_window=not is_staff,
+            actor=user,
         )
         serializer = self.get_serializer(result)
         return Response(serializer.data)
@@ -641,6 +666,35 @@ class ReservationViewSet(
         except Session.DoesNotExist:
             raise ValidationError("No active session for this reservation.") from None
 
-        close_session(session, actor=user)
+        close_visit_session(session=session, actor=user)
 
         return Response({"detail": "Check closed successfully."})
+
+    @extend_schema(
+        summary="Batch update reservations",
+        description="Move/resize multiple reservations atomically. "
+        "If any validation fails, the entire batch rolls back.",
+        request=BatchUpdateSerializer,
+        responses={
+            200: None,
+            409: BatchUpdateErrorSerializer,
+        },
+    )
+    @action(detail=False, methods=["post"], url_path="batch-update")
+    def batch_update(self, request: Request) -> Response:
+        user = cast(User, request.user)
+        if getattr(user, "role", None) not in (RoleCode.ADMIN, RoleCode.WAITER):
+            raise PermissionDenied("Only staff can batch update reservations.")
+
+        serializer = BatchUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        restaurant_id = require_restaurant_id_from_auth(request)
+
+        user = cast(User, request.user)
+        batch_update_reservations(
+            restaurant_id=restaurant_id,
+            changes=serializer.validated_data["changes"],
+            cancellations=serializer.validated_data.get("cancellations") or None,
+            actor=user,
+        )
+        return Response(status=status.HTTP_200_OK)

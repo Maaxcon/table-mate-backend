@@ -87,8 +87,11 @@ services:
       context: ../table-mate-frontend
       target: build
     command: npx vite --host 0.0.0.0
-    env_file:
-      - .env
+    environment:
+      VITE_API_BASE_URL: ""
+      VITE_WS_URL: ws://localhost:8000/ws
+      VITE_GOOGLE_CLIENT_ID: 194097055062-d8bmdj8m0hm1k17sfbpg182kcb5raeoh.apps.googleusercontent.com
+      API_PROXY_TARGET: http://web:8000
     ports:
       - "${FRONTEND_EXPOSED_PORT:-5173}:5173"
     volumes:

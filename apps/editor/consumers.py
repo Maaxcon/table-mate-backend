@@ -6,6 +6,7 @@ from collections import deque
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.core.exceptions import ValidationError
 
 from apps.authentication.models import RoleCode
 from common.channels import (
@@ -100,6 +101,9 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
+    async def hall_event(self, message: dict[str, object]) -> None:
+        pass
+
     async def notification_event(self, message: dict[str, object]) -> None:
         event = message.get("event")
         if not isinstance(event, dict):
@@ -177,6 +181,8 @@ _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {
     "ZONE_CREATED": {"event_name", "zone_public_id", "zone_name", "occurred_at"},
     "ZONE_UPDATED": {"event_name", "zone_public_id", "zone_name", "occurred_at"},
     "ZONE_DELETED": {"event_name", "zone_public_id", "occurred_at"},
+    "HALL_RESERVATIONS_UPDATED": {"event_name", "table_ids", "occurred_at"},
+    "HALL_SESSION_AUTO_EXTENDED": {"event_name", "table_id", "ends_at", "clamped_by", "occurred_at"},
 }
 
 
@@ -184,6 +190,60 @@ def _filter_event_for_floor(event: dict[str, object]) -> dict[str, object]:
     event_name = event.get("event_name", "")
     allowed = _FLOOR_EVENT_FIELDS.get(str(event_name), set())
     return {k: v for k, v in event.items() if k in allowed}
+
+
+@sync_to_async
+def _resolve_restaurant_from_uuid(public_id: str) -> int | None:
+    from apps.restaurants.models import Restaurant
+
+    try:
+        return Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
+    except (Restaurant.DoesNotExist, ValueError, ValidationError):
+        return None
+
+
+class StaffReservationsConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
+    """Admin/waiter WebSocket for reservation-specific hall events.
+
+    Subscribes to the ``staff_{restaurant_id}`` group and forwards
+    ``hall_event`` messages so admin clients receive reservation updates
+    without sharing the waiter-oriented ``/ws/hall/`` channel.
+    """
+
+    async def connect(self) -> None:
+        try:
+            user, restaurant_id = await authenticate_websocket(self.scope)
+        except Exception:
+            await self.accept()
+            await self.close(code=4001)
+            return
+
+        if user is None or restaurant_id is None:
+            await self.accept()
+            await self.close(code=4001)
+            return
+
+        if user.role not in _HALL_ALLOWED_ROLES:
+            await self.accept()
+            await self.close(code=4003)
+            return
+
+        self.group_name = staff_group_name(restaurant_id)
+
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, code: int) -> None:
+        if hasattr(self, "group_name"):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def hall_event(self, message: dict[str, object]) -> None:
+        await self.send(text_data=json.dumps(message["event"]))
+
+    async def notification_event(self, message: dict[str, object]) -> None:
+        # Staff reservation sockets share the same group as notification streams,
+        # but they only surface hall-style payloads.
+        pass
 
 
 class FloorConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]

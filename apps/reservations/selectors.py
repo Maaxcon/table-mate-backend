@@ -2,6 +2,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta
 
 from django.db.models import QuerySet
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.orders.models import Session, SessionStatus
@@ -20,11 +21,9 @@ def get_active_reservation_for_table(table: Table) -> Reservation | None:
     """
     now = timezone.now()
     return (
-        Reservation.objects.filter(
-            table=table,
-            status=ReservationStatus.ACTIVE,
-            end_at__gt=now,
-        )
+        Reservation.objects.filter(table=table, status=ReservationStatus.ACTIVE)
+        .annotate(effective_end_at=Coalesce("session__ends_at", "end_at"))
+        .filter(effective_end_at__gt=now)
         .order_by("-created_at")
         .first()
     )
@@ -148,8 +147,11 @@ def get_session_grace_cutoffs(
             qs = qs.exclude(reservation_id__in=current_reservation_id)
 
     cutoffs: dict[int, datetime] = {}
-    for table_id, res_end in qs.values_list("table_id", "reservation__end_at"):
-        until = max(res_end, grace_until) if res_end else grace_until
+    for table_id, eff_end in qs.annotate(effective_end_at=Coalesce("ends_at", "reservation__end_at")).values_list(
+        "table_id",
+        "effective_end_at",
+    ):
+        until = max(eff_end, grace_until) if eff_end else grace_until
         if table_id not in cutoffs or until > cutoffs[table_id]:
             cutoffs[table_id] = until
     return cutoffs

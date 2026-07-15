@@ -1,24 +1,33 @@
-"""Cart-session lifecycle: open, ensure-for-table, and stale cleanup."""
+"""Cart-session lifecycle: open, ensure-for-table, stale cleanup, and auto-extend."""
 
-from datetime import timedelta
+import logging
+from datetime import datetime, timedelta
+from typing import cast
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
-from apps.orders.billing import close_visit_session
-from apps.reservations.models import ReservationStatus
+from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import Table
-from common.exceptions import NoActiveReservationError, ReservationNotFoundError
+from apps.restaurants.selectors import get_working_hours_close_at
+from common.exceptions import NoActiveReservationError, ReservationConflictError, ReservationNotFoundError
+from common.hall_events import emit_hall_reservations_updated, emit_hall_session_auto_extended
 from common.notification_events import emit_cart_created
 
 from ..models import CartSession, CartSessionStatus, Session, SessionStatus
 from ..selectors import _resolve_allowed_reservation_participant_ids, get_reservation
 from .cart import _broadcast_cart_updated
+
+logger = logging.getLogger(__name__)
+
+_AUTO_EXTEND_AHEAD_MINUTES = 15
+_AUTO_EXTEND_DURATION_MINUTES = 30
 
 
 def create_cart_session(
@@ -148,9 +157,16 @@ def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: i
     scope a run to one tenant.
     """
     now = timezone.now()
-    base = CartSession.objects.filter(status=CartSessionStatus.ACTIVE).filter(
-        Q(reservation__status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED])
-        | Q(reservation__end_at__lt=now)
+    base = (
+        CartSession.objects.filter(status=CartSessionStatus.ACTIVE)
+        .filter(
+            Q(reservation__status__in=[ReservationStatus.COMPLETED, ReservationStatus.CANCELLED])
+            | Q(reservation__session__ends_at__lt=now)
+            | (
+                Q(reservation__end_at__lt=now)
+                & ~Exists(Session.objects.filter(reservation=OuterRef("reservation")))
+            )
+        )
     )
     if restaurant_id is not None:
         base = base.filter(restaurant_id=restaurant_id)
@@ -158,9 +174,29 @@ def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: i
     total_closed = 0
     while True:
         with transaction.atomic():
-            batch = list(base.select_for_update(skip_locked=True).order_by("pk")[:batch_size])
+            batch_ids = list(base.values_list("pk", flat=True)[:batch_size])
+            if not batch_ids:
+                break
+            batch = list(
+                CartSession.objects.filter(pk__in=batch_ids).select_for_update(skip_locked=True)
+            )
             if not batch:
                 break
+
+            # Re-validate staleness under the lock — a concurrent auto-extend
+            # may have pushed reservation__session__ends_at past now since the
+            # first SELECT.  Re-run the staleness filter (without FOR UPDATE,
+            # so outer joins in the filter are legal) to exclude rows that are
+            # no longer stale.
+            still_stale_ids = set(
+                base.filter(pk__in=[c.pk for c in batch]).values_list("pk", flat=True)
+            )
+            batch = [c for c in batch if c.pk in still_stale_ids]
+            if not batch:
+                if len(batch_ids) < batch_size:
+                    break
+                continue
+
             for cart in batch:
                 cart.status = CartSessionStatus.CLOSED
             CartSession.objects.bulk_update(batch, ["status"])
@@ -174,30 +210,218 @@ def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: i
     return total_closed
 
 
+def _find_conflict_limit(
+    session: Session,
+    target_end: datetime,
+) -> datetime | None:
+    """Return the earliest conflicting reservation's effective start, or None."""
+    from apps.reservations.services import _check_reservation_conflict
+
+    try:
+        _check_reservation_conflict(
+            restaurant_id=session.restaurant_id,
+            table=session.table,
+            start_at=session.opened_at,
+            end_at=target_end,
+            current_reservation_id=session.reservation_id,
+        )
+    except ReservationConflictError:
+        pass
+    else:
+        return None
+
+    # Conflict found — find the earliest one using the same overlap predicate
+    # as _check_reservation_conflict so the clamp always matches the detection.
+    open_session_sq = (
+        Session.objects.filter(
+            reservation=OuterRef("pk"),
+            status=SessionStatus.OPEN,
+        )
+        .order_by("opened_at")
+    )
+
+    earliest = (
+        Reservation.objects.filter(
+            restaurant_id=session.restaurant_id,
+            table=session.table,
+            status__in=[ReservationStatus.PENDING, ReservationStatus.ACTIVE],
+        )
+        .exclude(id=session.reservation_id)
+        .annotate(
+            eff_start=Coalesce(
+                Subquery(open_session_sq.values("opened_at")[:1]),
+                "start_at",
+            ),
+            eff_end=Coalesce(
+                Subquery(open_session_sq.values("ends_at")[:1]),
+                "end_at",
+            ),
+        )
+        .filter(
+            eff_start__lt=target_end,
+            eff_end__gt=session.opened_at,
+        )
+        .order_by("eff_start")
+        .first()
+    )
+    if earliest is not None:
+        return cast(datetime | None, earliest.eff_start)
+    return None
+
+
+def auto_extend_session(session: Session) -> dict[str, object]:
+    """Attempt to extend an open session by up to 30 minutes.
+
+    Respects working-hours boundaries (clamps to closing time) and upcoming
+    reservation conflicts (clamps to the conflict's start). Returns a dict
+    with ``extended`` (bool), ``clamped_by`` (str or None), and
+    ``new_ends_at`` (datetime or None).
+
+    Safe under concurrency: acquires a row-level lock on both the session and
+    its table so the conflict-check-then-write is serialized against all other
+    occupancy writers (create_reservation, _prolong_active_reservation,
+    batch_update_reservations, activate_pending_reservation).
+    """
+    with transaction.atomic():
+        # Re-fetch under lock so we serialize against _prolong_active_reservation
+        # and any other session mutator, and re-read ends_at fresh.
+        locked = (
+            Session.objects.select_for_update()
+            .filter(pk=session.pk, status=SessionStatus.OPEN)
+            .first()
+        )
+        if locked is None:
+            return {"extended": False, "clamped_by": None, "new_ends_at": None}
+
+        # Serialize against create_reservation, batch_update, activate_pending
+        # which all lock the Table row before writing occupancy.
+        Table.objects.select_for_update().get(pk=locked.table_id)
+
+        now = timezone.now()
+
+        if locked.ends_at is None or locked.ends_at > now + timedelta(minutes=_AUTO_EXTEND_AHEAD_MINUTES):
+            return {"extended": False, "clamped_by": None, "new_ends_at": None}
+
+        target = now + timedelta(minutes=_AUTO_EXTEND_DURATION_MINUTES)
+        reason: str | None = None
+
+        # 1. Clamp to working hours
+        close_at = get_working_hours_close_at(locked.restaurant_id, now)
+        if close_at is not None and target > close_at:
+            target = close_at
+            reason = "working_hours"
+
+        # 2. Clamp to upcoming conflict
+        conflict_limit = _find_conflict_limit(locked, target)
+        if conflict_limit is not None and conflict_limit < target:
+            target = conflict_limit
+            reason = "conflict"
+
+        # 3. No meaningful extension
+        if target <= locked.ends_at:
+            return {"extended": False, "clamped_by": reason, "new_ends_at": None}
+
+        # 4. Apply
+        locked.ends_at = target
+        locked.save(update_fields=["ends_at", "updated_at"])
+
+        restaurant_id = locked.restaurant_id
+        table_id = str(locked.table.public_id)
+        target_iso = target.isoformat()
+
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
+        )
+
+        if reason == "conflict":
+            transaction.on_commit(
+                lambda: emit_hall_session_auto_extended(
+                    restaurant_id,
+                    table_id=table_id,
+                    ends_at=target_iso,
+                    clamped_by="conflict",
+                )
+            )
+
+        logger.info(
+            "Auto-extended session %s (table %s) to %s (reason=%s)",
+            locked.public_id,
+            table_id,
+            target_iso,
+            reason or "none",
+        )
+
+        return {"extended": True, "clamped_by": reason, "new_ends_at": target}
+
+
+def auto_extend_all_sessions(restaurant_id: int | None = None) -> list[dict[str, object]]:
+    """Auto-extend all open sessions nearing their end time.
+
+    Scopes to ``restaurant_id`` when provided. Returns a list of per-session
+    result dicts.
+    """
+    now = timezone.now()
+    threshold = now + timedelta(minutes=_AUTO_EXTEND_AHEAD_MINUTES)
+
+    qs = Session.objects.filter(
+        status=SessionStatus.OPEN,
+        ends_at__isnull=False,
+        ends_at__lte=threshold,
+    ).select_related("table", "reservation")
+    if restaurant_id is not None:
+        qs = qs.filter(restaurant_id=restaurant_id)
+
+    results: list[dict[str, object]] = []
+    for session in qs:
+        result = auto_extend_session(session)
+        results.append(result)
+
+    return results
+
+
 def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE) -> int:
     """Close OPEN sessions whose active reservation ended beyond the grace window."""
+    from apps.orders.billing import close_visit_session
+
     now = timezone.now()
     grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
     cutoff = now - timedelta(minutes=grace_minutes)
     base = Session.objects.filter(
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        reservation__end_at__lte=cutoff,
+        ends_at__lte=cutoff,
     )
 
     total_closed = 0
+    last_pk = 0
     while True:
-        batch_ids = list(base.order_by("pk").values_list("pk", flat=True)[:batch_size])
+        batch_ids = list(
+            base.filter(pk__gt=last_pk).order_by("pk").values_list("pk", flat=True)[:batch_size]
+        )
         if not batch_ids:
             break
 
-        for session_id in batch_ids:
-            # Idempotent: if another worker closed it first, close_visit_session
-            # simply returns the already-closed visit.
-            close_visit_session(session=Session(pk=session_id), actor=None)
-            total_closed += 1
+        last_pk = batch_ids[-1]
 
-        if len(batch_ids) < batch_size:
-            break
+        with transaction.atomic():
+            sessions = list(
+                Session.objects.select_for_update(skip_locked=True)
+                .filter(pk__in=batch_ids, status=SessionStatus.OPEN, reservation__status=ReservationStatus.ACTIVE)
+                .order_by("pk")
+            )
+
+            for session in sessions:
+                # Re-check under lock so a concurrent auto-extend can move the
+                # session out of the overdue bucket between the initial SELECT
+                # and the eventual close.
+                if session.ends_at is None or session.ends_at > cutoff:
+                    continue
+                try:
+                    close_visit_session(session=session, actor=None)
+                except ReservationConflictError:
+                    # One bad session must not wedge the cleanup run; the row
+                    # remains overdue and will be retried on a later pass.
+                    continue
+                total_closed += 1
 
     return total_closed

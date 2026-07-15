@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-untyped-call"
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
@@ -5,6 +6,8 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 import pytest
+from django.utils import timezone
+from rest_framework import status
 
 from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
@@ -14,8 +17,128 @@ from apps.restaurants.selectors import _DAY_KEYS
 KYIV = ZoneInfo("Europe/Kyiv")
 UTC = ZoneInfo("UTC")
 
+pytestmark = pytest.mark.django_db
+
 AVAILABLE_SLOTS_URL = "/api/reservations/reservations/available-slots/"
 AVAILABILITY_URL = "/api/reservations/reservations/availability/"
+
+
+def _reservation(
+    *,
+    restaurant: Restaurant,
+    table: Table,
+    start_offset_hours: int = 2,
+) -> Reservation:
+    now = timezone.now()
+    return Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=now + timedelta(hours=start_offset_hours),
+        end_at=now + timedelta(hours=start_offset_hours + 1),
+        status=ReservationStatus.PENDING,
+    )
+
+
+def _url(table_id: str, date_str: str | None = None) -> str:
+    base = f"/api/reservations/reservations/available-slots/?table={table_id}"
+    if date_str:
+        base += f"&date={date_str}"
+    return base
+
+
+class TestAvailableSlots:
+    def test_returns_slots_for_valid_day(
+        self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
+    ) -> None:
+        tomorrow = (timezone.now() + timedelta(days=1)).date()
+        client = api().client  # unauthenticated (AllowAny)
+        resp = client.get(_url(str(table.public_id), tomorrow.isoformat()))
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.data
+        assert isinstance(data, dict)
+        assert tomorrow.isoformat() in data
+        slots = data[tomorrow.isoformat()]
+        assert isinstance(slots, list)
+        assert len(slots) > 0
+
+    def test_past_date_rejected(
+        self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
+    ) -> None:
+        yesterday = (timezone.now() - timedelta(days=1)).date()
+        client = api().client
+        resp = client.get(_url(str(table.public_id), yesterday.isoformat()))
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_missing_table_param_rejected(
+        self, api: Any, restaurant: Restaurant, restaurant_settings: RestaurantSettings
+    ) -> None:
+        client = api().client
+        resp = client.get("/api/reservations/reservations/available-slots/")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_nonexistent_table_rejected(
+        self, api: Any, restaurant: Restaurant, restaurant_settings: RestaurantSettings
+    ) -> None:
+        client = api().client
+        resp = client.get(_url("00000000-0000-0000-0000-000000000000"))
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_excludes_occupied_slots(
+        self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
+    ) -> None:
+        from zoneinfo import ZoneInfo
+
+        tomorrow = (timezone.now() + timedelta(days=1)).date()
+        tz = ZoneInfo("Europe/Kyiv")
+        # Create a reservation at 10:00 local time (which is 07:00 UTC for Kyiv)
+        res_start_local = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 10, 0, tzinfo=tz)
+        res_end_local = res_start_local + timedelta(hours=1)
+        Reservation.objects.create(
+            restaurant=restaurant,
+            table=table,
+            guest_count=2,
+            start_at=res_start_local.astimezone(ZoneInfo("UTC")),
+            end_at=res_end_local.astimezone(ZoneInfo("UTC")),
+            status=ReservationStatus.PENDING,
+        )
+
+        client = api().client
+        resp = client.get(_url(str(table.public_id), tomorrow.isoformat()))
+        assert resp.status_code == status.HTTP_200_OK
+        slots = resp.data[tomorrow.isoformat()]
+        # The 10:00 and 10:30 slots should be excluded
+        assert "10:00" not in slots
+        assert "10:30" not in slots
+
+    def test_exclude_ids_parameter(
+        self, api: Any, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings
+    ) -> None:
+        from zoneinfo import ZoneInfo
+
+        tomorrow = (timezone.now() + timedelta(days=1)).date()
+        tz = ZoneInfo("Europe/Kyiv")
+        res_start_local = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 10, 0, tzinfo=tz)
+        res_end_local = res_start_local + timedelta(hours=1)
+        res = Reservation.objects.create(
+            restaurant=restaurant,
+            table=table,
+            guest_count=2,
+            start_at=res_start_local.astimezone(ZoneInfo("UTC")),
+            end_at=res_end_local.astimezone(ZoneInfo("UTC")),
+            status=ReservationStatus.PENDING,
+        )
+
+        client = api().client
+        # Without exclude, slots should be occupied
+        resp = client.get(_url(str(table.public_id), tomorrow.isoformat()))
+        assert "10:00" not in resp.data[tomorrow.isoformat()]
+
+        # With exclude, slots should be available
+        resp2 = client.get(
+            f"{_url(str(table.public_id), tomorrow.isoformat())}&exclude={res.public_id}"
+        )
+        assert "10:00" in resp2.data[tomorrow.isoformat()]
 
 
 @pytest.mark.django_db
@@ -26,18 +149,6 @@ def test_available_slots_excludes_own_session_from_grace_cutoff(
     user_factory: Callable[..., Any],
     api_client: Any,
 ) -> None:
-    """A waiter opens ModifyReservationModal for a guest who's overstaying
-    (booked end already passed, still ACTIVE with an open session) and asks
-    for available slots to push the end out. The endpoint excludes the
-    reservation from the overlap query via ?exclude=, but the session grace
-    cutoff was computed with no exclusion at all — the ACTIVE reservation's
-    own open session then self-blocks the near-term slots the modal actually
-    needs, even though reschedule_reservation itself would accept them (it
-    passes current_reservation_id and excludes both the overlap and the
-    session). Frozen "now" not on a 30-min boundary (12:05, not 12:00) so the
-    next candidate slot (12:30) falls strictly inside the buggy now+30
-    window, reproducing the bug precisely instead of missing it by luck.
-    """
     customer = user_factory()
     customer.save()
 
@@ -50,7 +161,7 @@ def test_available_slots_excludes_own_session_from_grace_cutoff(
         table=table,
         guest_count=2,
         start_at=fixed_now - timedelta(hours=2),
-        end_at=fixed_now - timedelta(hours=1),  # already passed -> overstaying
+        end_at=fixed_now - timedelta(hours=1),
         status=ReservationStatus.ACTIVE,
     )
     Session.objects.create(
@@ -86,10 +197,6 @@ def test_available_slots_without_exclude_still_blocks_others_sessions(
     user_factory: Callable[..., Any],
     api_client: Any,
 ) -> None:
-    """Sanity check for the fix's other direction: an open session that
-    genuinely isn't excluded must still block near-term slots — the fix only
-    exempts the caller's own excluded reservation, not sessions in general.
-    """
     customer = user_factory()
     customer.save()
 
@@ -133,14 +240,6 @@ def test_available_slots_and_availability_agree_at_a_misaligned_closing_tail(
     restaurant_settings: RestaurantSettings,
     api_client: Any,
 ) -> None:
-    """available-slots must never list a start time that availability would
-    then reject as "too close to closing" for the exact same instant — a
-    close time that isn't 30-min-aligned (22:40, not 22:00 or 22:30) used to
-    break that invariant: available-slots only checked the slot started
-    before close, while availability required at least 30 min left, so the
-    grid could offer a slot that 409s (or availability could report a table
-    free/taken for a time the grid never listed at all).
-    """
     target_date = (datetime.now(KYIV) + timedelta(days=7)).date()
     day_key = _DAY_KEYS[target_date.weekday()]
     restaurant_settings.working_hours = {
@@ -156,12 +255,9 @@ def test_available_slots_and_availability_agree_at_a_misaligned_closing_tail(
     assert slots_resp.status_code == 200
     slots = slots_resp.json()[target_date.isoformat()]
 
-    # 22:00 leaves exactly 40 min before the 22:40 close -> still bookable.
     assert "22:00" in slots
-    # 22:30 would leave only 10 min -> available-slots must not offer it...
     assert "22:30" not in slots
 
-    # ...and availability must agree it's not bookable either, for the same time.
     avail_resp = api_client.get(
         AVAILABILITY_URL,
         {
@@ -174,7 +270,6 @@ def test_available_slots_and_availability_agree_at_a_misaligned_closing_tail(
     assert avail_resp.status_code == 200
     assert avail_resp.json()["availability"][str(table.public_id)] is False
 
-    # And it must agree 22:00 (the last slot available-slots did offer) is bookable.
     avail_resp_ok = api_client.get(
         AVAILABILITY_URL,
         {
@@ -195,14 +290,6 @@ def test_available_slots_filters_past_slots_on_an_explicitly_queried_past_date(
     restaurant_settings: RestaurantSettings,
     api_client: Any,
 ) -> None:
-    """The past-slot filter used to only apply when the queried date exactly
-    equaled the server's "today" (`d == today_local`) — so a date explicitly
-    queried while it's already yesterday (relevant right after midnight, for
-    a still-open overnight session that started the night before) skipped
-    the filter entirely and returned every slot on that day, including ones
-    from many hours in the past. The filter must key off the absolute instant
-    (slot_utc <= now_utc), not day equality.
-    """
     today_kyiv = datetime.now(KYIV).date()
     yesterday = today_kyiv - timedelta(days=1)
     day_key = _DAY_KEYS[yesterday.weekday()]
@@ -220,6 +307,4 @@ def test_available_slots_filters_past_slots_on_an_explicitly_queried_past_date(
         )
 
     assert resp.status_code == 200
-    # Yesterday's entire 10:00-20:00 window is in the past relative to
-    # 08:00 today -> nothing should be offered.
     assert resp.json()[yesterday.isoformat()] == []
