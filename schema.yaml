@@ -3309,6 +3309,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/Table'
           description: ''
+  /api/restaurants/tables/{public_id}/qr/:
+    get:
+      operationId: restaurants_tables_qr_retrieve
+      description: Returns a PNG QR code. Scanning it opens this table's menu page.
+      summary: QR code image for a table
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+          description: ''
   /api/restaurants/tables/layout/:
     get:
       operationId: restaurants_tables_layout_retrieve

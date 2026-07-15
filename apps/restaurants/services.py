@@ -1,10 +1,11 @@
 from typing import Any
 
+from django.conf import settings as django_settings
 from django.db import transaction
 
 from apps.authentication.models import User
 
-from .models import Restaurant, RestaurantSettings
+from .models import Restaurant, RestaurantSettings, Table
 
 RESTAURANT_UPDATABLE = frozenset({"name", "address", "phone", "telegram_url", "facebook_url"})
 SETTINGS_UPDATABLE = frozenset(
@@ -75,9 +76,19 @@ def create_employee(*, restaurant_id: int, email: str, role: str, **data: Any) -
     )
 
 
+def build_table_menu_url(table: Table) -> str:
+    """Menu deep link a table's QR code encodes.
+
+    Opens the table's restaurant menu with the table pre-selected, so a scan
+    skips the manual restaurant/table lookup the menu page otherwise needs.
+    """
+    return f"{django_settings.FRONTEND_BASE_URL}/menu/{table.restaurant.public_id}?table={table.public_id}"
+
+
 __all__ = [
     "update_restaurant",
     "update_restaurant_settings",
     "manage_employee",
     "create_employee",
+    "build_table_menu_url",
 ]
