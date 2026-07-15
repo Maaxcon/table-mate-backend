@@ -173,11 +173,17 @@ CHANNEL_LAYERS = {
 # hard dependency (channels), so reuse it as a process-shared cache.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
         "KEY_PREFIX": "tablemate",
     }
 }
+
+NOTIFICATION_HISTORY_LIMIT = env.int("NOTIFICATION_HISTORY_LIMIT", default=50)
+NOTIFICATION_HISTORY_TTL_SECONDS = env.int("NOTIFICATION_HISTORY_TTL_SECONDS", default=60 * 60 * 6)
 
 # Celery: background/periodic tasks. Reuses Redis as the broker. Beat schedules
 # are stored in the DB (django_celery_beat) and seeded from CELERY_BEAT_SCHEDULE.
