@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    image: europe-docker.pkg.dev/auth-server-381211/table-mate/backend/develop:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${BACKEND_EXPOSED_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: europe-docker.pkg.dev/auth-server-381211/table-mate/backend/develop:latest
+    restart: unless-stopped
+    command: celery -A core worker -l info
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    image: europe-docker.pkg.dev/auth-server-381211/table-mate/backend/develop:latest
+    restart: unless-stopped
+    command: celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler -f /tmp/celerybeat-schedule
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: europe-docker.pkg.dev/auth-server-381211/table-mate/frontend/develop:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${FRONTEND_EXPOSED_PORT:-80}:80"
+    depends_on:
+      web:
+        condition: service_started
