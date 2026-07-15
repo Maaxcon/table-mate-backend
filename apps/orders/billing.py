@@ -195,8 +195,8 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
                 reservation.save(update_fields=["status", "end_at"])
             close_reservation_carts(reservation)
 
+        table = session.table
         if actor is not None:
-            table = session.table
             transaction.on_commit(
                 lambda: emit_hall_table_status_changed(
                     session.restaurant_id,
@@ -207,9 +207,9 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
                     actor=actor,
                 )
             )
-            transaction.on_commit(
-                lambda: emit_hall_reservations_updated(session.restaurant_id, table_ids=[str(table.public_id)])
-            )
+        transaction.on_commit(
+            lambda: emit_hall_reservations_updated(session.restaurant_id, table_ids=[str(table.public_id)])
+        )
 
     return session
 

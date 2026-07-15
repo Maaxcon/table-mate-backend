@@ -139,6 +139,51 @@ class TestSessionCreate:
         response = auth.client.post(URL, payload, content_type="application/json")
         assert response.status_code == status.HTTP_409_CONFLICT
 
+    def test_prolonged_open_session_still_blocks_new_walk_in_without_being_closed(
+        self,
+        api: Callable[..., AuthContext],
+        table: Table,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=table.restaurant_id)
+        now = timezone.now()
+        reservation = Reservation.objects.create(
+            restaurant=table.restaurant,
+            table=table,
+            guest_count=2,
+            start_at=now - timedelta(hours=1),
+            end_at=now - timedelta(minutes=5),
+            status=ReservationStatus.ACTIVE,
+        )
+        session = Session.objects.create(
+            restaurant=table.restaurant,
+            table=table,
+            reservation=reservation,
+            guest_count=2,
+            status=SessionStatus.OPEN,
+            currency="UAH",
+            opened_at=reservation.start_at,
+            ends_at=now + timedelta(minutes=30),
+        )
+        session_id = session.pk
+        original_ends_at = session.ends_at
+
+        response = auth.client.post(
+            URL,
+            {
+                "table": str(table.public_id),
+                "guest_count": 2,
+                "opened_at": datetime.now(UTC).isoformat(),
+                "currency": "UAH",
+            },
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        session.refresh_from_db()
+        assert session.pk == session_id
+        assert session.status == SessionStatus.OPEN
+        assert session.ends_at == original_ends_at
+
     def test_returns_403_for_customer(
         self,
         api: Callable[..., AuthContext],

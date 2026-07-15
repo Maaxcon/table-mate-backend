@@ -1,5 +1,5 @@
 # mypy: disable-error-code="no-untyped-call"
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from typing import Any
 
 import pytest
@@ -146,6 +146,63 @@ class TestBatchUpdateActiveMovesSession:
         # Session ends_at is updated
         session.refresh_from_db()
         assert session.ends_at != original_session_end, "Session ends_at must be updated"
+
+    def test_active_prolong_uses_opened_at_time_for_midnight_rollover(
+        self,
+        api: Any,
+        restaurant: Restaurant,
+        table: Table,
+        zone: Any,
+        restaurant_settings: RestaurantSettings,
+        user_factory: Any,
+    ) -> None:
+        """Active rows must decide midnight rollover from the seated time, not the client's booked start."""
+        actor = user_factory(role=RoleCode.WAITER)
+        actor.save()
+
+        booked_date = (timezone.now() - timedelta(days=1)).date()
+        opened_at = timezone.make_aware(datetime.combine(booked_date + timedelta(days=1), time(0, 10)))
+        reservation = Reservation.objects.create(
+            restaurant=restaurant,
+            table=table,
+            guest_count=2,
+            start_at=timezone.make_aware(datetime.combine(booked_date, time(23, 0))),
+            end_at=opened_at + timedelta(hours=1),
+            status=ReservationStatus.ACTIVE,
+        )
+        session = Session.objects.create(
+            restaurant=restaurant,
+            table=table,
+            reservation=reservation,
+            guest_count=2,
+            status=SessionStatus.OPEN,
+            currency="UAH",
+            opened_at=opened_at,
+            ends_at=opened_at + timedelta(hours=1),
+        )
+
+        ctx: AuthContext = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+
+        resp = ctx.client.post(
+            _url(),
+            {
+                "changes": [
+                    {
+                        "reservation_id": str(reservation.public_id),
+                        "new_table_id": str(table.public_id),
+                        "new_date": opened_at.date().isoformat(),
+                        "new_start_time": "23:00",
+                        "new_end_time": "00:20",
+                    }
+                ]
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+
+        session.refresh_from_db()
+        assert session.ends_at.date() == opened_at.date()
+        assert session.ends_at.time().replace(second=0, microsecond=0) == time(0, 20)
 
     def test_batch_cannot_double_book_two_active_sessions_onto_one_table(
         self,

@@ -9,6 +9,7 @@ from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.selectors import get_unavailable_table_ids
 from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.selectors import get_tables_with_occupancy
 
 
 def _seated_reservation(
@@ -170,3 +171,27 @@ def test_extended_session_end_keeps_table_blocked_past_booked_end(
     )
 
     assert table.pk in unavailable
+
+
+@pytest.mark.django_db
+def test_floor_table_selector_reports_prolonged_session_occupied(
+    restaurant: Restaurant,
+    table: Table,
+    user_factory: Callable[..., Any],
+) -> None:
+    customer = user_factory()
+    customer.save()
+    now = timezone.now()
+    reservation = _seated_reservation(restaurant, table, customer, now)
+    reservation.end_at = now - timedelta(minutes=5)
+    reservation.save(update_fields=["end_at"])
+
+    session = Session.objects.get(reservation=reservation, status=SessionStatus.OPEN)
+    session.ends_at = now + timedelta(minutes=30)
+    session.save(update_fields=["ends_at"])
+
+    occupied = list(get_tables_with_occupancy(restaurant.id))
+
+    assert len(occupied) == 1
+    assert occupied[0].pk == table.pk
+    assert occupied[0].is_occupied is True

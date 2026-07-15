@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db.models import Exists, OuterRef, QuerySet
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode, User
@@ -84,33 +85,66 @@ def get_working_hours_close_at(
 
     tz = ZoneInfo(settings.timezone) if settings.timezone else ZoneInfo("UTC")
     local = when.astimezone(tz)
-    hours = working_hours.get(_DAY_KEYS[local.weekday()])
-    if not isinstance(hours, dict):
-        return None
+    now_min = local.hour * 60 + local.minute
+    current_day_key = _DAY_KEYS[local.weekday()]
+    current_hours = working_hours.get(current_day_key)
 
-    open_min = _hhmm_to_minutes(hours.get("open"))
-    close_min = _hhmm_to_minutes(hours.get("close"))
-    if open_min is None or close_min is None:
-        return None
+    def _close_for_day(day_offset: int) -> datetime_cls | None:
+        hours = working_hours.get(_DAY_KEYS[(local.weekday() + day_offset) % 7])
+        if not isinstance(hours, dict):
+            return None
 
-    close_hour, close_minute = divmod(close_min, 60)
+        open_min = _hhmm_to_minutes(hours.get("open"))
+        close_min = _hhmm_to_minutes(hours.get("close"))
+        if open_min is None or close_min is None:
+            return None
 
-    if close_min > open_min:
-        # Same-day close
-        close_dt = local.replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
-    else:
-        # Overnight window — close rolls into the next day only when `when` is
-        # on the evening side (>= open). In the after-midnight side (< close)
-        # the close is on the same calendar day (the end of the previous day's window).
-        now_min = local.hour * 60 + local.minute
-        if now_min >= open_min:
-            close_dt = (local + timedelta(days=1)).replace(
-                hour=close_hour, minute=close_minute, second=0, microsecond=0,
-            )
+        open_hour, open_minute = divmod(open_min, 60)
+        close_hour, close_minute = divmod(close_min, 60)
+        anchor = local + timedelta(days=day_offset)
+        window_start = anchor.replace(hour=open_hour, minute=open_minute, second=0, microsecond=0)
+        if close_min > open_min:
+            window_end = anchor.replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
         else:
-            close_dt = local.replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
+            window_end = (window_start + timedelta(days=1)).replace(
+                hour=close_hour,
+                minute=close_minute,
+                second=0,
+                microsecond=0,
+            )
+        if window_start <= local < window_end:
+            return window_end
+        return None
 
-    return close_dt.astimezone(UTC)
+    if isinstance(current_hours, dict):
+        open_min = _hhmm_to_minutes(current_hours.get("open"))
+        close_min = _hhmm_to_minutes(current_hours.get("close"))
+        if open_min is not None and close_min is not None:
+            close_hour, close_minute = divmod(close_min, 60)
+            if close_min > open_min:
+                if now_min < open_min:
+                    close_dt = _close_for_day(-1)
+                    if close_dt is not None:
+                        return close_dt.astimezone(UTC)
+                close_dt = local.replace(hour=close_hour, minute=close_minute, second=0, microsecond=0)
+                return close_dt.astimezone(UTC)
+            if now_min >= open_min:
+                close_dt = (local + timedelta(days=1)).replace(
+                    hour=close_hour,
+                    minute=close_minute,
+                    second=0,
+                    microsecond=0,
+                )
+                return close_dt.astimezone(UTC)
+            close_dt = _close_for_day(-1)
+            if close_dt is not None:
+                return close_dt.astimezone(UTC)
+            return None
+
+    close_dt = _close_for_day(-1)
+    if close_dt is not None:
+        return close_dt.astimezone(UTC)
+    return None
 
 
 def list_employees(restaurant_id: int) -> QuerySet[User]:
@@ -132,7 +166,10 @@ def get_tables_with_occupancy(restaurant_id: int) -> QuerySet[Table]:
         table=OuterRef("pk"),
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        ends_at__gt=occupancy_cutoff,
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__gt=occupancy_cutoff,
     )
     return qs.annotate(is_occupied=Exists(occupied_subquery))
 

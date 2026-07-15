@@ -42,7 +42,7 @@ from .selectors import (
     get_session_grace_cutoffs,
     get_unavailable_table_ids,
 )
-from .serializers import BatchUpdateSerializer, ReservationSerializer
+from .serializers import BatchUpdateErrorSerializer, BatchUpdateSerializer, ReservationSerializer
 from .services import (
     activate_pending_reservation,
     batch_update_reservations,
@@ -675,7 +675,10 @@ class ReservationViewSet(
         description="Move/resize multiple reservations atomically. "
         "If any validation fails, the entire batch rolls back.",
         request=BatchUpdateSerializer,
-        responses={200: None, 409: None},
+        responses={
+            200: None,
+            409: BatchUpdateErrorSerializer,
+        },
     )
     @action(detail=False, methods=["post"], url_path="batch-update")
     def batch_update(self, request: Request) -> Response:

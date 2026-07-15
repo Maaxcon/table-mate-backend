@@ -30,6 +30,7 @@ from common.hall_events import (
     emit_hall_reservations_updated,
     emit_hall_table_status_changed,
 )
+from common.notification_events import emit_cart_created
 from core.routing import application
 from tests.conftest import RestaurantFactory, UserFactory
 
@@ -701,6 +702,33 @@ async def test_staff_reservations_consumer_receives_hall_reservations_updated(
 
     communicator = await _connect_staff_reservations(admin, restaurant.id)
 
+    await sync_to_async(emit_hall_reservations_updated)(
+        restaurant.id,
+        table_ids=[str(table.public_id)],
+    )
+
+    event = await communicator.receive_json_from(timeout=5)
+    assert event["event_name"] == "HALL_RESERVATIONS_UPDATED"
+    assert event["table_ids"] == [str(table.public_id)]
+
+    await communicator.disconnect()
+
+
+@pytestmark_rt
+async def test_staff_reservations_consumer_survives_notification_broadcast(
+    restaurant: Any, table: Any
+) -> None:
+    admin = await sync_to_async(UserFactory.build)(role=RoleCode.ADMIN)
+    await sync_to_async(admin.save)()
+
+    communicator = await _connect_staff_reservations(admin, restaurant.id)
+
+    await sync_to_async(emit_cart_created)(
+        restaurant.id,
+        session_id="session-1",
+        table_number=table.public_number,
+        guest_name="Alice",
+    )
     await sync_to_async(emit_hall_reservations_updated)(
         restaurant.id,
         table_ids=[str(table.public_id)],

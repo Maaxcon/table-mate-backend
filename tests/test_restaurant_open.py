@@ -11,7 +11,7 @@ from apps.orders.models import Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.management.commands.seed_restaurants import DEFAULT_WORKING_HOURS
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table, validate_working_hours
-from apps.restaurants.selectors import _DAY_KEYS, is_restaurant_open
+from apps.restaurants.selectors import _DAY_KEYS, get_working_hours_close_at, is_restaurant_open
 from common.exceptions import RestaurantClosedError
 
 ALL_DAYS = {d: {"open": "09:00", "close": "22:00"} for d in _DAY_KEYS}
@@ -95,6 +95,47 @@ def test_overnight_window(restaurant: Restaurant) -> None:
     assert is_restaurant_open(restaurant.id, when=WED_1300_UTC.replace(hour=23)) is True
     assert is_restaurant_open(restaurant.id, when=WED_1300_UTC.replace(hour=1)) is True
     assert is_restaurant_open(restaurant.id, when=WED_1300_UTC.replace(hour=12)) is False
+
+
+@pytest.mark.django_db
+def test_working_hours_close_at_uses_previous_day_overnight_tail_when_today_is_different(
+    restaurant: Restaurant,
+) -> None:
+    tz = ZoneInfo("Europe/Kyiv")
+    _settings(
+        restaurant,
+        {
+            "mon": {"open": "18:00", "close": "02:00"},
+            "tue": {"open": "09:00", "close": "22:00"},
+        },
+        tz="Europe/Kyiv",
+    )
+
+    when = datetime(2026, 6, 16, 1, 20, tzinfo=tz)
+    close_at = get_working_hours_close_at(restaurant.id, when)
+
+    assert close_at is not None
+    assert close_at.astimezone(tz) == datetime(2026, 6, 16, 2, 0, tzinfo=tz)
+
+
+@pytest.mark.django_db
+def test_working_hours_close_at_uses_previous_day_overnight_tail_when_today_is_closed(
+    restaurant: Restaurant,
+) -> None:
+    tz = ZoneInfo("Europe/Kyiv")
+    _settings(
+        restaurant,
+        {
+            "mon": {"open": "18:00", "close": "02:00"},
+        },
+        tz="Europe/Kyiv",
+    )
+
+    when = datetime(2026, 6, 16, 1, 20, tzinfo=tz)
+    close_at = get_working_hours_close_at(restaurant.id, when)
+
+    assert close_at is not None
+    assert close_at.astimezone(tz) == datetime(2026, 6, 16, 2, 0, tzinfo=tz)
 
 
 @pytest.mark.django_db

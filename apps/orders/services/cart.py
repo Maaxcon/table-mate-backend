@@ -22,6 +22,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -40,6 +41,7 @@ from common.exceptions import (
     RestaurantClosedError,
 )
 from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
+from common.notification_events import emit_kitchen_ticket_injected
 
 from ..models import (
     CartItem,
@@ -425,7 +427,10 @@ def open_session(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        ends_at__gt=occupancy_cutoff,
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__gt=occupancy_cutoff,
     )
     if non_stale.exists():
         raise TableOccupiedError()
@@ -433,7 +438,10 @@ def open_session(
         table=table,
         status=SessionStatus.OPEN,
         reservation__status=ReservationStatus.ACTIVE,
-        ends_at__lte=occupancy_cutoff,
+    ).annotate(
+        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+    ).filter(
+        effective_end_at__lte=occupancy_cutoff,
     )
     for stale_session in stale:
         _close_visit_session(session=stale_session, actor=None)
@@ -544,6 +552,22 @@ def create_order_with_items(
     session.tax = agg["tax"] or 0
     session.total = session.subtotal + session.tax
     session.save(update_fields=["subtotal", "tax", "total"])
+
+    table_number = ""
+    try:
+        table_number = session.table.public_number
+    except AttributeError:
+        pass
+
+    def _emit_ticket_notification() -> None:
+        emit_kitchen_ticket_injected(
+            session.restaurant_id,
+            ticket_id=str(ticket.public_id),
+            table_number=table_number,
+            items_count=len(items),
+        )
+
+    transaction.on_commit(_emit_ticket_notification)
 
     return order
 

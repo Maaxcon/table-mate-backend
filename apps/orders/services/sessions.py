@@ -11,7 +11,6 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.authentication.models import User
-from apps.orders.billing import close_visit_session
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import Table
@@ -376,6 +375,8 @@ def auto_extend_all_sessions(restaurant_id: int | None = None) -> list[dict[str,
 
 def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE) -> int:
     """Close OPEN sessions whose active reservation ended beyond the grace window."""
+    from apps.orders.billing import close_visit_session
+
     now = timezone.now()
     grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
     cutoff = now - timedelta(minutes=grace_minutes)
@@ -386,18 +387,35 @@ def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE)
     )
 
     total_closed = 0
+    last_pk = 0
     while True:
-        batch_ids = list(base.order_by("pk").values_list("pk", flat=True)[:batch_size])
+        batch_ids = list(
+            base.filter(pk__gt=last_pk).order_by("pk").values_list("pk", flat=True)[:batch_size]
+        )
         if not batch_ids:
             break
 
-        for session_id in batch_ids:
-            # Idempotent: if another worker closed it first, close_visit_session
-            # simply returns the already-closed visit.
-            close_visit_session(session=Session(pk=session_id), actor=None)
-            total_closed += 1
+        last_pk = batch_ids[-1]
 
-        if len(batch_ids) < batch_size:
-            break
+        with transaction.atomic():
+            sessions = list(
+                Session.objects.select_for_update(skip_locked=True)
+                .filter(pk__in=batch_ids, status=SessionStatus.OPEN, reservation__status=ReservationStatus.ACTIVE)
+                .order_by("pk")
+            )
+
+            for session in sessions:
+                # Re-check under lock so a concurrent auto-extend can move the
+                # session out of the overdue bucket between the initial SELECT
+                # and the eventual close.
+                if session.ends_at is None or session.ends_at > cutoff:
+                    continue
+                try:
+                    close_visit_session(session=session, actor=None)
+                except ReservationConflictError:
+                    # One bad session must not wedge the cleanup run; the row
+                    # remains overdue and will be retried on a later pass.
+                    continue
+                total_closed += 1
 
     return total_closed

@@ -176,3 +176,9 @@ class BatchUpdateSerializer(serializers.Serializer[dict[str, object]]):
         required=False,
         default=list,
     )
+
+
+class BatchUpdateErrorSerializer(serializers.Serializer[dict[str, object]]):
+    detail = serializers.CharField()
+    code = serializers.CharField(required=False)
+    conflicting_reservation_id = serializers.CharField(required=False)
