@@ -7,7 +7,7 @@ from django.utils.deconstruct import deconstructible
 from django.utils.translation import gettext_lazy as _
 
 ALLOWED_IMAGE_EXTENSIONS: set[str] = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-ALLOWED_IMAGE_MIMES: set[str] = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+ALLOWED_IMAGE_MIMES: set[str] = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
 
 # Magic bytes for image format detection (first bytes of file content).
 _IMAGE_MAGIC: dict[str, list[bytes]] = {

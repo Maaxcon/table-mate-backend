@@ -88,6 +88,9 @@ class TestImageFileValidator:
         ImageFileValidator()(_make_file(_valid_jpeg_bytes()))
         # must not raise
 
+    def test_valid_jpg_alias(self) -> None:
+        ImageFileValidator()(_make_file(_valid_jpeg_bytes(), name="test.jpg", content_type="image/jpg"))
+
     def test_valid_png(self) -> None:
         ImageFileValidator()(_make_file(_valid_png_bytes(), name="test.png", content_type="image/png"))
 
