@@ -134,6 +134,9 @@ REST_FRAMEWORK = {
         "checkout": "10/min",  # submit order, pay items
         "bill": "30/min",  # view bill (more liberal — read-only refreshes)
     },
+    # Trust one reverse-proxy hop so throttles use the client IP instead of the
+    # last internal hop's address. Adjust only if the edge topology changes.
+    "NUM_PROXIES": env.int("NUM_PROXIES", default=1),
 }
 
 SIMPLE_JWT = {
@@ -192,7 +195,8 @@ NOTIFICATION_HISTORY_TTL_SECONDS = env.int("NOTIFICATION_HISTORY_TTL_SECONDS", d
 # are stored in the DB (django_celery_beat) and seeded from CELERY_BEAT_SCHEDULE.
 CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env.str("CELERY_RESULT_BACKEND", default=REDIS_URL)
-CELERY_TASK_IGNORE_RESULT = True
+CELERY_TASK_IGNORE_RESULT = False
+CELERY_RESULT_EXPIRES = env.int("CELERY_RESULT_EXPIRES", default=60 * 60 * 6)
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TIMEZONE = TIME_ZONE
 # Grace window after reservation end before an OPEN visit is auto-closed.
