@@ -41,6 +41,7 @@ from common.exceptions import (
     RestaurantClosedError,
 )
 from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
+from common.notification_events import emit_kitchen_ticket_injected
 
 from ..models import (
     CartItem,
@@ -540,6 +541,22 @@ def create_order_with_items(
     session.tax = agg["tax"] or 0
     session.total = session.subtotal + session.tax
     session.save(update_fields=["subtotal", "tax", "total"])
+
+    table_number = ""
+    try:
+        table_number = session.table.public_number
+    except AttributeError:
+        pass
+
+    def _emit_ticket_notification() -> None:
+        emit_kitchen_ticket_injected(
+            session.restaurant_id,
+            ticket_id=str(ticket.public_id),
+            table_number=table_number,
+            items_count=len(items),
+        )
+
+    transaction.on_commit(_emit_ticket_notification)
 
     return order
 

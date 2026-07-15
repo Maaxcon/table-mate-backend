@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from asgiref.sync import sync_to_async
+from channels.layers import get_channel_layer
 from channels.testing import WebsocketCommunicator
+from django.core.cache import cache, caches
+from django.test.utils import override_settings
+from django.utils import timezone
 
+import common.notification_store as notification_store_module
 from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens, issue_tokens_with_restaurant
 from apps.editor.consumers import (
@@ -15,12 +22,16 @@ from apps.editor.consumers import (
     NotificationStreamConsumer,
     _filter_event_for_floor,
 )
+from apps.orders.models import Session, SessionStatus
+from apps.orders.services.cart import create_order_with_items
+from apps.reservations.models import Reservation, ReservationStatus
 from common.channels import staff_group_name
 from common.notification_events import (
     emit_cart_created,
     emit_kitchen_ticket_injected,
     emit_order_item_status_changed,
 )
+from common.notification_store import get_notification_history, store_notification_event
 from core.routing import application
 from tests.conftest import RestaurantFactory, UserFactory
 
@@ -32,6 +43,368 @@ def _inmemory_channel_layer(settings: Any) -> None:
             "BACKEND": "channels.layers.InMemoryChannelLayer",
         }
     }
+
+
+@pytest.fixture(autouse=True)
+def _locmem_cache() -> Iterator[None]:
+    locmem_settings = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
+
+    def _reset_cache_handler() -> None:
+        cache_store = getattr(caches, "_caches", None)
+        if isinstance(cache_store, dict):
+            cache_store.clear()
+
+    with override_settings(CACHES=locmem_settings):
+        _reset_cache_handler()
+        cache.clear()
+        try:
+            yield
+        finally:
+            cache.clear()
+            _reset_cache_handler()
+
+
+# ── Notification history persistence ──
+
+
+@pytest.mark.django_db
+def test_store_notification_event_uses_cache_lock(restaurant: Any) -> None:
+    event = {"type": "TEST_EVENT", "data": {"id": "lock-guard"}}
+    lock_cm = MagicMock()
+    lock_cm.__enter__.return_value = None
+    lock_cm.__exit__.return_value = None
+    lock_factory = MagicMock(return_value=lock_cm)
+
+    with patch.object(cache, "lock", lock_factory, create=True):
+        store_notification_event(restaurant.id, event)
+
+    lock_factory.assert_called_once()
+    lock_cm.__enter__.assert_called_once()
+    lock_cm.__exit__.assert_called_once()
+
+    history = get_notification_history(restaurant.id)
+    assert len(history) == 1
+    assert history[0]["type"] == "TEST_EVENT"
+
+
+@pytest.mark.django_db
+def test_store_notification_event_falls_back_when_lock_unavailable(
+    restaurant: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("ERROR", logger="common.notification_store")
+    event = {"type": "TEST_EVENT", "data": {"id": "lock-fallback"}}
+    lock_cm = MagicMock()
+    lock_cm.__enter__.side_effect = TimeoutError("busy")
+    lock_cm.__exit__.return_value = None
+
+    with patch.object(cache, "lock", return_value=lock_cm, create=True):
+        store_notification_event(restaurant.id, event)
+
+    history = get_notification_history(restaurant.id)
+    assert len(history) == 1
+    assert history[0]["data"]["id"] == "lock-fallback"
+    assert any("lock" in record.message for record in caplog.records)
+
+
+@pytest.mark.django_db
+def test_store_notification_event_truncates_large_payloads(restaurant: Any) -> None:
+    long_text = "x" * (notification_store_module._MAX_FIELD_LENGTH + 100)
+    event: dict[str, Any] = {
+        "type": "TEST_EVENT",
+        "data": {
+            "comment": long_text,
+            "items": [
+                {"note": long_text, "index": idx} for idx in range(notification_store_module._MAX_LIST_LENGTH + 5)
+            ],
+        },
+    }
+
+    store_notification_event(restaurant.id, event)
+
+    history = get_notification_history(restaurant.id)
+    stored = history[0]
+
+    assert stored["data"]["comment"].endswith("...")
+    assert len(stored["data"]["comment"]) == notification_store_module._MAX_FIELD_LENGTH
+    assert len(stored["data"]["items"]) == notification_store_module._MAX_LIST_LENGTH
+    assert stored["data"]["items"][0]["note"].endswith("...")
+    assert event["data"]["comment"] == long_text  # original payload untouched
+
+
+@pytest.mark.django_db
+def test_store_notification_event_prefers_redis_pipeline(restaurant: Any) -> None:
+    pipeline = MagicMock()
+    pipeline.lpush.return_value = pipeline
+    pipeline.ltrim.return_value = pipeline
+    pipeline.expire.return_value = pipeline
+    pipeline.execute.return_value = None
+
+    redis_conn = MagicMock()
+    redis_conn.pipeline.return_value = pipeline
+    redis_conn.lrange.return_value = []
+
+    with (
+        patch("common.notification_store.get_redis_connection", return_value=redis_conn),
+        patch.object(cache, "set") as mock_cache_set,
+        patch.object(cache, "get") as mock_cache_get,
+    ):
+        store_notification_event(restaurant.id, {"type": "TEST_EVENT", "data": {"id": "redis-case"}})
+        stored_payload = pipeline.lpush.call_args[0][1]
+        redis_conn.lrange.return_value = [stored_payload]
+        history = get_notification_history(restaurant.id)
+
+    assert mock_cache_set.call_count == 0
+    assert mock_cache_get.call_count == 0
+    assert history[0]["data"]["id"] == "redis-case"
+    redis_conn.pipeline.assert_called_once()
+    redis_conn.lrange.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_get_notification_history_falls_back_to_cache_when_redis_missing_key(restaurant: Any) -> None:
+    cached_event = {"type": "CACHED", "data": {"id": "cached"}}
+    redis_conn = MagicMock()
+    redis_conn.lrange.return_value = []
+    redis_conn.exists.return_value = 0
+
+    with (
+        patch("common.notification_store.get_redis_connection", return_value=redis_conn),
+        patch.object(cache, "get", return_value=[cached_event]) as mock_cache_get,
+    ):
+        history = get_notification_history(restaurant.id)
+
+    assert history == [cached_event]
+    mock_cache_get.assert_called_once()
+    redis_conn.lrange.assert_called_once()
+    redis_conn.exists.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_notification_consumer_buffers_live_events_during_replay(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [
+            {"type": "CART_CREATED", "data": {"id": "hist-1", "table_number": "T1"}},
+            {"type": "CART_CHECKED_OUT", "data": {"id": "hist-2", "table_number": "T1"}},
+        ]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+
+        original_catch_up = NotificationStreamConsumer._catch_up_new_notifications
+        replay_started = asyncio.Event()
+
+        async def slow_catch_up(self: NotificationStreamConsumer, restaurant_pk: int) -> None:
+            replay_started.set()
+            await asyncio.sleep(0.05)
+            await original_catch_up(self, restaurant_pk)
+
+        with patch.object(NotificationStreamConsumer, "_catch_up_new_notifications", new=slow_catch_up):
+            connect_task = asyncio.create_task(communicator.connect())
+            await asyncio.wait_for(replay_started.wait(), timeout=1)
+            await sync_to_async(emit_kitchen_ticket_injected)(
+                restaurant.id,
+                ticket_id="live-1-ticket",
+                table_number="T1",
+                items_count=2,
+            )
+
+            connected, _ = await connect_task
+            assert connected
+
+            received = [await communicator.receive_json_from(timeout=3) for _ in range(3)]
+            ids = [event["data"]["id"] for event in received]
+            assert ids[:2] == ["hist-1", "hist-2"]
+            assert received[2]["type"] == "KITCHEN_TICKET_INJECTED"
+            assert received[2]["data"]["ticket_id"] == "live-1-ticket"
+
+            await communicator.disconnect()
+
+    asyncio.run(_test())
+
+
+@pytest.mark.django_db
+def test_notification_consumer_deduplicates_history_and_live_events(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [
+            {"type": "CART_CREATED", "data": {"id": "hist-1", "table_number": "T1"}},
+            {"type": "CART_CHECKED_OUT", "data": {"id": "hist-2", "table_number": "T1"}},
+        ]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+
+        channel_layer = get_channel_layer()
+        assert channel_layer is not None
+
+        original_catch_up = NotificationStreamConsumer._catch_up_new_notifications
+        catch_up_started = asyncio.Event()
+        release_catch_up = asyncio.Event()
+
+        async def paused_catch_up(self: NotificationStreamConsumer, restaurant_pk: int) -> None:
+            catch_up_started.set()
+            await release_catch_up.wait()
+            await original_catch_up(self, restaurant_pk)
+
+        live_event = {
+            "type": "KITCHEN_TICKET_INJECTED",
+            "data": {"id": "live-dedupe", "table_number": "T1", "ticket_id": "abc", "items_count": 1},
+        }
+
+        with patch.object(NotificationStreamConsumer, "_catch_up_new_notifications", new=paused_catch_up):
+            connect_task = asyncio.create_task(communicator.connect())
+            await asyncio.wait_for(catch_up_started.wait(), timeout=1)
+
+            await sync_to_async(store_notification_event)(restaurant.id, live_event)
+            await channel_layer.group_send(
+                staff_group_name(restaurant.id),
+                {"type": "notification.event", "event": live_event},
+            )
+
+            release_catch_up.set()
+
+            connected, _ = await connect_task
+            assert connected
+
+            received = [await communicator.receive_json_from(timeout=3) for _ in range(3)]
+            ids = [event["data"]["id"] for event in received]
+            assert ids[:2] == ["hist-1", "hist-2"]
+            assert ids[2] == "live-dedupe"
+
+            await communicator.disconnect()
+
+    asyncio.run(_test())
+
+
+@pytest.mark.django_db
+def test_notification_consumer_replays_events_emitted_before_group_join(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [
+            {"type": "CART_CREATED", "data": {"id": "hist-1", "table_number": "T1"}},
+            {"type": "CART_CHECKED_OUT", "data": {"id": "hist-2", "table_number": "T1"}},
+        ]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+
+        channel_layer = get_channel_layer()
+        assert channel_layer is not None
+
+        group_add_called = asyncio.Event()
+        release_group_add = asyncio.Event()
+        original_group_add = channel_layer.group_add
+
+        async def blocked_group_add(group: str, channel: str) -> None:
+            group_add_called.set()
+            await release_group_add.wait()
+            await original_group_add(group, channel)
+
+        gap_event = {
+            "type": "ORDER_ITEM_STATUS_CHANGED",
+            "data": {
+                "id": "gap-event",
+                "table_number": "T1",
+                "order_item_id": "xyz",
+                "status": "ready",
+            },
+        }
+
+        with patch.object(channel_layer, "group_add", new=blocked_group_add):
+            connect_task = asyncio.create_task(communicator.connect())
+            await asyncio.wait_for(group_add_called.wait(), timeout=1)
+
+            await sync_to_async(store_notification_event)(restaurant.id, gap_event)
+
+            release_group_add.set()
+
+            connected, _ = await connect_task
+            assert connected
+
+            received = [await communicator.receive_json_from(timeout=3) for _ in range(3)]
+            ids = [event["data"]["id"] for event in received]
+            assert ids == ["hist-1", "hist-2", "gap-event"]
+
+            await communicator.disconnect()
+
+    asyncio.run(_test())
+
+
+@pytest.mark.django_db
+def test_notification_consumer_flushes_events_added_after_initial_drain(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [{"type": "CART_CREATED", "data": {"id": "hist-only", "table_number": "T9"}}]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+
+        original_drain = NotificationStreamConsumer._drain_pending_notifications
+        drain_calls = 0
+
+        async def instrumented(self: NotificationStreamConsumer) -> None:
+            nonlocal drain_calls
+            drain_calls += 1
+            await original_drain(self)
+            if drain_calls == 1:
+                await sync_to_async(emit_kitchen_ticket_injected)(
+                    restaurant.id,
+                    ticket_id="live-after-ticket",
+                    table_number="T9",
+                    items_count=3,
+                )
+                await asyncio.sleep(0)
+
+        with patch.object(NotificationStreamConsumer, "_drain_pending_notifications", new=instrumented):
+            connected, _ = await communicator.connect()
+            assert connected
+
+            first = await communicator.receive_json_from(timeout=3)
+            assert first == historical[0]
+            live = await communicator.receive_json_from(timeout=3)
+            assert live["type"] == "KITCHEN_TICKET_INJECTED"
+            assert live["data"]["ticket_id"] == "live-after-ticket"
+
+            await communicator.disconnect()
+
+    asyncio.run(_test())
 
 
 # ── NotificationStreamConsumer auth / role gates ──
@@ -141,6 +514,95 @@ def test_notification_consumer_allows_cook(restaurant: Any) -> None:
         await communicator.disconnect()
 
     asyncio.run(_test())
+
+
+@pytest.mark.django_db
+def test_notification_consumer_replays_cached_events(restaurant: Any) -> None:
+    async def _test() -> None:
+        user = UserFactory.build(role=RoleCode.WAITER)
+        await sync_to_async(user.save)()
+        access, _ = await sync_to_async(issue_tokens_with_restaurant)(user, restaurant.id, str(restaurant.public_id))
+
+        historical = [
+            {"type": "CART_CREATED", "data": {"id": "1", "table_number": "T1"}},
+            {"type": "CART_CHECKED_OUT", "data": {"id": "2", "table_number": "T1"}},
+        ]
+        for event in historical:
+            await sync_to_async(store_notification_event)(restaurant.id, event)
+
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/staff/notifications/",
+            subprotocols=["access_token", access],
+        )
+        connected, _ = await communicator.connect()
+        assert connected
+
+        first = await communicator.receive_json_from(timeout=3)
+        assert first == historical[0]
+        second = await communicator.receive_json_from(timeout=3)
+        assert second == historical[1]
+
+        await sync_to_async(emit_cart_created)(
+            restaurant.id,
+            session_id="session-live",
+            table_number="T1",
+            guest_name="Bob",
+        )
+        live = await communicator.receive_json_from(timeout=3)
+        assert live["type"] == "CART_CREATED"
+
+        await communicator.disconnect()
+
+    asyncio.run(_test())
+
+
+# ── Waiter order flow emits kitchen notification ──
+
+
+@pytest.mark.django_db
+def test_waiter_order_emits_kitchen_ticket_notification(
+    restaurant: Any, table: Any, item: Any, restaurant_settings: Any
+) -> None:
+    waiter = UserFactory.build(role=RoleCode.WAITER, restaurant=restaurant)
+    waiter.save()
+
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        status=ReservationStatus.ACTIVE,
+        start_at=timezone.now(),
+        end_at=timezone.now() + timedelta(hours=2),
+    )
+
+    session = Session.objects.create(
+        restaurant=restaurant,
+        table=table,
+        opened_by=waiter,
+        guest_count=2,
+        status=SessionStatus.OPEN,
+        currency=restaurant_settings.currency,
+        opened_at=timezone.now(),
+        reservation=reservation,
+    )
+
+    def _run_immediately(func: Any, using: str | None = None) -> None:  # pragma: no cover - helper inside test
+        func()
+
+    with patch("django.db.transaction.on_commit", side_effect=_run_immediately):
+        with patch("apps.orders.services.cart.emit_kitchen_ticket_injected") as mock_emit:
+            create_order_with_items(
+                session=session,
+                items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+                actor=waiter,
+            )
+
+            mock_emit.assert_called_once()
+            call = mock_emit.call_args
+            assert call.args[0] == restaurant.id
+            assert call.kwargs["table_number"] == table.public_number
+            assert call.kwargs["items_count"] == 1
 
 
 # ── Tenant isolation (staff_A never receives staff_B) ──
@@ -341,7 +803,10 @@ def test_floor_consumer_allows_waiter(restaurant: Any) -> None:
 
 @pytest.mark.django_db
 def test_emit_cart_created_sends_to_staff_group(restaurant: Any) -> None:
-    with patch("common.notification_events.get_channel_layer") as mock_get_layer:
+    with (
+        patch("common.notification_events.get_channel_layer") as mock_get_layer,
+        patch("common.notification_events.store_notification_event") as mock_store,
+    ):
         mock_layer = AsyncMock()
         mock_get_layer.return_value = mock_layer
 
@@ -360,11 +825,15 @@ def test_emit_cart_created_sends_to_staff_group(restaurant: Any) -> None:
         assert event["data"]["session_id"] == "test-session"
         assert event["data"]["table_number"] == "T1"
         assert event["data"]["guest_name"] == "Alice"
+        mock_store.assert_called_once_with(restaurant.id, ANY)
 
 
 @pytest.mark.django_db
 def test_emit_kitchen_ticket_injected_sends_to_staff_group(restaurant: Any) -> None:
-    with patch("common.notification_events.get_channel_layer") as mock_get_layer:
+    with (
+        patch("common.notification_events.get_channel_layer") as mock_get_layer,
+        patch("common.notification_events.store_notification_event") as mock_store,
+    ):
         mock_layer = AsyncMock()
         mock_get_layer.return_value = mock_layer
 
@@ -382,11 +851,15 @@ def test_emit_kitchen_ticket_injected_sends_to_staff_group(restaurant: Any) -> N
         assert event["type"] == "KITCHEN_TICKET_INJECTED"
         assert event["data"]["ticket_id"] == "test-ticket"
         assert event["data"]["items_count"] == 3
+        mock_store.assert_called_once_with(restaurant.id, ANY)
 
 
 @pytest.mark.django_db
 def test_emit_order_item_status_changed_sends_to_staff_group(restaurant: Any) -> None:
-    with patch("common.notification_events.get_channel_layer") as mock_get_layer:
+    with (
+        patch("common.notification_events.get_channel_layer") as mock_get_layer,
+        patch("common.notification_events.store_notification_event") as mock_store,
+    ):
         mock_layer = AsyncMock()
         mock_get_layer.return_value = mock_layer
 
@@ -406,3 +879,4 @@ def test_emit_order_item_status_changed_sends_to_staff_group(restaurant: Any) ->
         assert event["data"]["order_item_id"] == "test-item"
         assert event["data"]["status"] == "ready"
         assert event["data"]["menu_item_name"] == "Burger"
+        mock_store.assert_called_once_with(restaurant.id, ANY)

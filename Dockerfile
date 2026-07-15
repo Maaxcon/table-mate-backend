@@ -14,6 +14,10 @@ COPY . .
 
 RUN uv sync --frozen --no-dev --group prod
 
+RUN apt-get update && apt-get install -y --no-install-recommends supervisor && rm -rf /var/lib/apt/lists/*
+
+COPY supervisord.conf /app/supervisord.conf
+
 RUN chmod +x entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]
 
@@ -22,7 +26,7 @@ ENV DJANGO_SETTINGS_MODULE="core.settings.production"
 
 EXPOSE 8000
 
-CMD ["gunicorn", "core.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["supervisord", "-c", "/app/supervisord.conf"]
 
 FROM base AS test
 

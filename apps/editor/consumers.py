@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from collections import deque
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -16,12 +18,13 @@ from common.channels import (
     resolve_restaurant_pk,
     staff_group_name,
 )
+from common.notification_store import get_notification_history
 
 _HALL_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
 _STAFF_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK})
-_FLOOR_ALLOWED_ROLES: frozenset[str] = frozenset(
-    {RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER}
-)
+_FLOOR_ALLOWED_ROLES: frozenset[str] = frozenset({RoleCode.ADMIN, RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER})
+
+_RECENT_EVENT_CACHE_SIZE = 256
 
 
 class HallConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
@@ -76,11 +79,23 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
             return
 
         self.group_name = staff_group_name(restaurant_id)
+        self._pending_notifications: list[dict[str, object]] = []
+        self._pending_lock = asyncio.Lock()
+        self._history_replay_complete = False
+        self._sent_event_ids: deque[str] = deque(maxlen=_RECENT_EVENT_CACHE_SIZE)
 
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
         _, via_subprotocol = extract_ws_token(self.scope)
         subprotocol = TOKEN_SUBPROTOCOL if via_subprotocol else None
         await self.accept(subprotocol=subprotocol)
+
+        try:
+            await self._send_cached_notifications(restaurant_id)
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+            await self._catch_up_new_notifications(restaurant_id)
+            await self._drain_pending_notifications()
+        finally:
+            self._history_replay_complete = True
+            await self._drain_pending_notifications()
 
     async def disconnect(self, code: int) -> None:
         if hasattr(self, "group_name"):
@@ -90,7 +105,72 @@ class NotificationStreamConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
         pass
 
     async def notification_event(self, message: dict[str, object]) -> None:
-        await self.send(text_data=json.dumps(message["event"]))
+        event = message.get("event")
+        if not isinstance(event, dict):
+            return
+
+        if not getattr(self, "_history_replay_complete", True):
+            async with self._pending_lock:
+                if not self._has_sent_event(event):
+                    self._pending_notifications.append(event)
+            return
+
+        if self._has_sent_event(event):
+            return
+
+        await self._send_event(event)
+
+    async def _send_cached_notifications(self, restaurant_id: int) -> None:
+        history = await sync_to_async(get_notification_history, thread_sensitive=False)(restaurant_id)
+        for event in history:
+            await self._send_event(event)
+
+    async def _catch_up_new_notifications(self, restaurant_id: int) -> None:
+        history = await sync_to_async(get_notification_history, thread_sensitive=False)(restaurant_id)
+        for event in history:
+            if self._has_sent_event(event):
+                continue
+            await self._send_event(event)
+
+    async def _drain_pending_notifications(self) -> None:
+        while True:
+            async with self._pending_lock:
+                pending = self._pending_notifications
+                if not pending:
+                    return
+                batch = pending[:]
+                self._pending_notifications.clear()
+
+            for event in batch:
+                if self._has_sent_event(event):
+                    continue
+                await self._send_event(event)
+
+    async def _send_event(self, event: dict[str, object]) -> None:
+        await self.send(text_data=json.dumps(event))
+        self._remember_event(event)
+
+    def _remember_event(self, event: dict[str, object]) -> None:
+        event_id = self._extract_event_id(event)
+        if event_id is None:
+            return
+        self._sent_event_ids.append(event_id)
+
+    def _has_sent_event(self, event: dict[str, object]) -> bool:
+        event_id = self._extract_event_id(event)
+        if event_id is None:
+            return False
+        return event_id in self._sent_event_ids
+
+    @staticmethod
+    def _extract_event_id(event: dict[str, object]) -> str | None:
+        data = event.get("data")
+        if not isinstance(data, dict):
+            return None
+        event_id = data.get("id")
+        if isinstance(event_id, str):
+            return event_id
+        return None
 
 
 _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {
