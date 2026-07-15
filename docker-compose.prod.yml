@@ -36,56 +36,6 @@ services:
       redis:
         condition: service_healthy
 
-  worker:
-    image: europe-docker.pkg.dev/auth-server-381211/table-mate/backend/develop:latest
-    restart: unless-stopped
-    command: celery -A core worker -l info
-    environment:
-      SECRET_KEY: "${SECRET_KEY:-}"
-      DEBUG: "${DEBUG:-False}"
-      DATABASE_URL: "${DATABASE_URL}"
-      DB_CONN_MAX_AGE: "${DB_CONN_MAX_AGE:-60}"
-      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
-      DJANGO_READ_DOT_ENV_FILE: "${DJANGO_READ_DOT_ENV_FILE:-False}"
-      FRONTEND_BASE_URL: "${FRONTEND_BASE_URL}"
-      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-194097055062-d8bmdj8m0hm1k17sfbpg182kcb5raeoh.apps.googleusercontent.com}"
-      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
-      GOOGLE_ALLOWED_REDIRECT_URIS: "${GOOGLE_ALLOWED_REDIRECT_URIS}"
-      ALLOWED_HOSTS: "${ALLOWED_HOSTS}"
-      CORS_ALLOW_ALL_ORIGINS: "${CORS_ALLOW_ALL_ORIGINS:-False}"
-      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS}"
-      CELERY_BROKER_URL: "${CELERY_BROKER_URL:-redis://redis:6379/0}"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  beat:
-    image: europe-docker.pkg.dev/auth-server-381211/table-mate/backend/develop:latest
-    restart: unless-stopped
-    command: celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler -f /tmp/celerybeat-schedule
-    environment:
-      SECRET_KEY: "${SECRET_KEY:-}"
-      DEBUG: "${DEBUG:-False}"
-      DATABASE_URL: "${DATABASE_URL}"
-      DB_CONN_MAX_AGE: "${DB_CONN_MAX_AGE:-60}"
-      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
-      DJANGO_READ_DOT_ENV_FILE: "${DJANGO_READ_DOT_ENV_FILE:-False}"
-      FRONTEND_BASE_URL: "${FRONTEND_BASE_URL}"
-      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-194097055062-d8bmdj8m0hm1k17sfbpg182kcb5raeoh.apps.googleusercontent.com}"
-      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
-      GOOGLE_ALLOWED_REDIRECT_URIS: "${GOOGLE_ALLOWED_REDIRECT_URIS}"
-      ALLOWED_HOSTS: "${ALLOWED_HOSTS}"
-      CORS_ALLOW_ALL_ORIGINS: "${CORS_ALLOW_ALL_ORIGINS:-False}"
-      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS}"
-      CELERY_BROKER_URL: "${CELERY_BROKER_URL:-redis://redis:6379/0}"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
   frontend:
     image: europe-docker.pkg.dev/auth-server-381211/table-mate/frontend/develop:latest
     restart: unless-stopped
