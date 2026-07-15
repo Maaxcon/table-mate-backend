@@ -327,6 +327,7 @@ class CartCheckoutView(GuestFallbackAuthMixin, APIView):
 @extend_schema(tags=["Cart"])
 class SetGuestNameView(GuestFallbackAuthMixin, APIView):
     permission_classes = [IsActiveTableGuest]
+    throttle_scope = "cart"
 
     @extend_schema(
         request=SetGuestNameSerializer,

@@ -60,7 +60,7 @@ def test_returns_cart_for_active_reservation(restaurant: Restaurant, table: Tabl
 
 
 @pytest.mark.django_db
-def test_active_reservation_without_open_session_does_not_yield_cart(
+def test_active_reservation_without_open_session_still_yields_cart(
     restaurant: Restaurant,
     table: Table,
 ) -> None:
@@ -71,8 +71,10 @@ def test_active_reservation_without_open_session_does_not_yield_cart(
         end_offset=timedelta(hours=2),
     )
 
-    with pytest.raises(NoActiveReservationError):
-        ensure_active_cart_for_table(table=table)
+    session = ensure_active_cart_for_table(table=table)
+
+    assert session.status == CartSessionStatus.ACTIVE
+    assert session.reservation.table_id == table.id
 
 
 @pytest.mark.django_db

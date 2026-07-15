@@ -38,7 +38,6 @@ from common.exceptions import (
     CartSessionClosedError,
     DomainError,
     EmptyCartError,
-    NoActiveReservationError,
     RestaurantClosedError,
 )
 
@@ -267,8 +266,10 @@ def test_pay_rejected_on_closed_visit(
     session.status = SessionStatus.CLOSED
     session.save(update_fields=["status"])
 
-    with pytest.raises(NoActiveReservationError):
-        ensure_active_cart_for_table(table=table)
+    new_cart = ensure_active_cart_for_table(table=table)
+
+    assert new_cart.status == CartSessionStatus.ACTIVE
+    assert new_cart.reservation_id == session.reservation_id
 
     order_item.refresh_from_db()
     assert order_item.is_paid is False
