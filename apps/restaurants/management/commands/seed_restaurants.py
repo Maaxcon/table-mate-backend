@@ -24,27 +24,31 @@ class _RestaurantData(TypedDict):
 
 _RESTAURANTS_DATA: list[_RestaurantData] = [
     {
-        "name": "Table Mate",
-        "address": "вул. Хрещатик, 1, Київ, 01001",
+        "name": "UniTable",
+        "address": "пров. Січовий 17, Черкаси, 18015",
         "timezone": "Europe/Kyiv",
         "currency": "UAH",
         "locale": "uk",
         "zones": [
-            {"name": "Main Hall", "sort_order": 0},
-            {"name": "VIP Room", "sort_order": 1},
-            {"name": "Winter Garden", "sort_order": 2},
+            {"name": "Main Hall", "sort_order": 0, "canvas_cols": 30, "canvas_rows": 18},
+            {"name": "Open Space", "sort_order": 1, "canvas_cols": 34, "canvas_rows": 27},
+            {"name": "Roof", "sort_order": 2, "canvas_cols": 28, "canvas_rows": 20},
         ],
         "tables": [
-            {"public_number": "T1", "capacity": 2, "zone_name": "Main Hall"},
-            {"public_number": "T2", "capacity": 2, "zone_name": "Main Hall"},
-            {"public_number": "T3", "capacity": 4, "zone_name": "Main Hall"},
-            {"public_number": "T4", "capacity": 4, "zone_name": "Main Hall"},
-            {"public_number": "T5", "capacity": 4, "zone_name": "Main Hall"},
-            {"public_number": "T6", "capacity": 6, "zone_name": "VIP Room"},
-            {"public_number": "T7", "capacity": 6, "zone_name": "VIP Room"},
-            {"public_number": "T8", "capacity": 8, "zone_name": "Winter Garden"},
-            {"public_number": "T9", "capacity": 4, "zone_name": "Winter Garden"},
-            {"public_number": "T10", "capacity": 4, "zone_name": "Winter Garden"},
+            {"public_number": "kathe", "capacity": 1, "zone_name": "Main Hall"},
+            {"public_number": "marie", "capacity": 1, "zone_name": "Main Hall"},
+            {"public_number": "mini", "capacity": 2, "zone_name": "Main Hall"},
+            {"public_number": "T1", "capacity": 3, "zone_name": "Main Hall"},
+            {"public_number": "T1.5", "capacity": 3, "zone_name": "Main Hall"},
+            {"public_number": "переговорка", "capacity": 8, "zone_name": "Main Hall"},
+            {"public_number": "T2", "capacity": 4, "zone_name": "Open Space"},
+            {"public_number": "T3", "capacity": 4, "zone_name": "Open Space"},
+            {"public_number": "T4", "capacity": 6, "zone_name": "Open Space"},
+            {"public_number": "T5", "capacity": 6, "zone_name": "Open Space"},
+            {"public_number": "T6", "capacity": 4, "zone_name": "Open Space"},
+            {"public_number": "T6.5", "capacity": 4, "zone_name": "Open Space"},
+            {"public_number": "T7", "capacity": 4, "zone_name": "Roof"},
+            {"public_number": "T8", "capacity": 4, "zone_name": "Roof"},
         ],
     },
     {
@@ -137,7 +141,11 @@ class Command(BaseCommand):
                 zone_obj, was_created_zone = Zone.objects.update_or_create(
                     restaurant=restaurant,
                     name=str(zone_data["name"]),
-                    defaults={"sort_order": int(zone_data["sort_order"])},
+                    defaults={
+                        "sort_order": int(zone_data["sort_order"]),
+                        "canvas_cols": int(zone_data.get("canvas_cols", 20)),
+                        "canvas_rows": int(zone_data.get("canvas_rows", 20)),
+                    },
                 )
                 zone_map[zone_obj.name] = zone_obj
                 if was_created_zone:
@@ -165,6 +173,7 @@ class Command(BaseCommand):
 
             if options["prune"]:
                 pruned_tables += self._prune_tables(restaurant, canonical_numbers)
+                self._prune_zones(restaurant, {z["name"] for z in data["zones"]})
 
             if options["restaurant_id"]:
                 break
@@ -204,3 +213,16 @@ class Command(BaseCommand):
             self.style.WARNING(f"  Pruned {len(orphans)} orphaned table(s): {', '.join(orphan_numbers)}")
         )
         return len(orphans)
+
+    def _prune_zones(self, restaurant: Restaurant, canonical_zone_names: set[str]) -> None:
+        from apps.restaurants.models import Zone
+
+        orphan_zones = Zone.objects.filter(restaurant=restaurant).exclude(name__in=canonical_zone_names)
+        if not orphan_zones.exists():
+            return
+
+        zone_names = list(orphan_zones.values_list("name", flat=True))
+        orphan_zones.delete()
+        self.stdout.write(
+            self.style.WARNING(f"  Pruned orphaned zone(s): {', '.join(zone_names)}")
+        )
