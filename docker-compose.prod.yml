@@ -48,3 +48,6 @@ services:
     depends_on:
       web:
         condition: service_started
+
+volumes:
+  media_data:
