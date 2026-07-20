@@ -1,7 +1,9 @@
+import re
+
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import URLPattern, URLResolver, include, path
+from django.urls import URLPattern, URLResolver, include, path, re_path
+from django.views.static import serve as serve_static
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -28,4 +30,15 @@ if settings.DEBUG:
     urlpatterns += [
         path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     ]
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# No separate media server (nginx/whitenoise) sits in front of the app in any
+# environment, so Django has to serve uploaded media itself even in prod.
+# django.conf.urls.static.static() no-ops when DEBUG=False, so the view is
+# wired up directly here instead.
+urlpatterns += [
+    re_path(
+        rf"^{re.escape(settings.MEDIA_URL.lstrip('/'))}(?P<path>.*)$",
+        serve_static,
+        {"document_root": settings.MEDIA_ROOT},
+    ),
+]
