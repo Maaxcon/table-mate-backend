@@ -12,7 +12,6 @@ from apps.orders.models import Session
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 
-
 _RESERVATIONS: dict[str, list[dict[str, Any]]] = {
     "UniTable": [
         # ── Active reservations (ongoing now → sessions created → OCCUPIED) ──
@@ -283,7 +282,7 @@ class Command(BaseCommand):
                 dict(r) for r in _RESERVATIONS.get(restaurant.name, [])
             ]
 
-            status_counters = defaultdict(count)
+            status_counters: dict[Any, count[int]] = defaultdict(count)
             for data in reservations_config:
                 i = next(status_counters[data["status"]])
                 match data["status"]:

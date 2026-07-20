@@ -173,7 +173,7 @@ class Command(BaseCommand):
 
             if options["prune"]:
                 pruned_tables += self._prune_tables(restaurant, canonical_numbers)
-                self._prune_zones(restaurant, {z["name"] for z in data["zones"]})
+                self._prune_zones(restaurant, {str(z["name"]) for z in data["zones"]})
 
             if options["restaurant_id"]:
                 break
