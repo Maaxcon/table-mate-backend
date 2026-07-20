@@ -30,6 +30,8 @@ services:
       CELERY_BROKER_URL: "${CELERY_BROKER_URL:-redis://redis:6379/0}"
     ports:
       - "${BACKEND_EXPOSED_PORT:-8000}:8000"
+    volumes:
+      - media_data:/app/media
     depends_on:
       redis:
         condition: service_healthy
