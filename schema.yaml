@@ -3125,13 +3125,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PatchedRestaurantSettings'
+              $ref: '#/components/schemas/PatchedBookingSettings'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/PatchedRestaurantSettings'
+              $ref: '#/components/schemas/PatchedBookingSettings'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/PatchedRestaurantSettings'
+              $ref: '#/components/schemas/PatchedBookingSettings'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -3140,7 +3140,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RestaurantSettings'
+                $ref: '#/components/schemas/BookingSettings'
           description: ''
   /api/restaurants/restaurants/:
     get:
@@ -5419,6 +5419,17 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PatchedBookingSettings:
+      type: object
+      properties:
+        currency:
+          type: string
+          readOnly: true
+        timezone:
+          type: string
+          readOnly: true
+        working_hours:
+          readOnly: true
     PatchedEditorTable:
       type: object
       properties:
@@ -5762,62 +5773,6 @@ components:
           format: uri
           readOnly: true
           nullable: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-    PatchedRestaurantSettings:
-      type: object
-      properties:
-        public_id:
-          type: string
-          format: uuid
-          readOnly: true
-        restaurant:
-          type: string
-          format: uuid
-          readOnly: true
-        timezone:
-          type: string
-          maxLength: 64
-        currency:
-          type: string
-          maxLength: 3
-        locale:
-          type: string
-          maxLength: 16
-        default_tax_rate:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        default_service_charge:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        working_hours:
-          $ref: '#/components/schemas/WorkingHours'
-        rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
-          readOnly: true
-          nullable: true
-        eta_min_minutes:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        eta_max_minutes:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        price_band:
-          type: integer
-          maximum: 4
-          minimum: 1
         created_at:
           type: string
           format: date-time
@@ -6509,69 +6464,6 @@ components:
       required:
       - name
       - public_id
-    RestaurantSettings:
-      type: object
-      properties:
-        public_id:
-          type: string
-          format: uuid
-          readOnly: true
-        restaurant:
-          type: string
-          format: uuid
-          readOnly: true
-        timezone:
-          type: string
-          maxLength: 64
-        currency:
-          type: string
-          maxLength: 3
-        locale:
-          type: string
-          maxLength: 16
-        default_tax_rate:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        default_service_charge:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,4})?$
-        working_hours:
-          $ref: '#/components/schemas/WorkingHours'
-        rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
-          readOnly: true
-          nullable: true
-        eta_min_minutes:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        eta_max_minutes:
-          type: integer
-          maximum: 32767
-          minimum: 0
-        price_band:
-          type: integer
-          maximum: 4
-          minimum: 1
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - created_at
-      - currency
-      - public_id
-      - rating
-      - restaurant
-      - updated_at
     RoleEnum:
       enum:
       - admin
