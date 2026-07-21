@@ -287,10 +287,11 @@ class RestaurantSettingsViewSet(
 
     def get_serializer_class(self) -> type[BaseSerializer[RestaurantSettings]]:
         # Anonymous booking clients get the trimmed booking fields; admins
-        # editing settings get the full serializer.
-        if self.request.method in SAFE_METHODS:
-            return BookingSettingsSerializer
-        return RestaurantSettingsSerializer
+        # (on both GET and PATCH) get the full serializer.
+        user = self.request.user
+        if user.is_authenticated and getattr(user, "role", None) == RoleCode.ADMIN:
+            return RestaurantSettingsSerializer
+        return BookingSettingsSerializer
 
     def get_queryset(self) -> QuerySet[RestaurantSettings]:
         qs = super().get_queryset()
