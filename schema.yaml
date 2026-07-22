@@ -2193,6 +2193,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/Session'
           description: ''
+  /api/orders/sessions/{public_id}/pay/:
+    post:
+      operationId: orders_sessions_pay_create
+      description: Mark ordered items on this visit as paid (simulated — no money
+        moves). Pass 'order_item_ids' to pay only those; omit it (or send an empty
+        list) to pay every outstanding item. Idempotent.
+      summary: Process payment
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionPayRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SessionPayRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SessionPayRequest'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
   /api/orders/tickets/:
     get:
       operationId: orders_tickets_list
@@ -4720,6 +4757,13 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        payable:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
+        is_paid:
+          type: boolean
         voided_at:
           type: string
           format: date-time
@@ -4754,6 +4798,7 @@ components:
       - menu_item_category_name
       - menu_item_name
       - order
+      - payable
       - public_id
       - quantity
       - restaurant
@@ -5640,6 +5685,13 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+        payable:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
+          readOnly: true
+        is_paid:
+          type: boolean
         voided_at:
           type: string
           format: date-time
@@ -6554,6 +6606,14 @@ components:
       - tax
       - total
       - updated_at
+    SessionPayRequest:
+      type: object
+      properties:
+        order_item_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
     SessionStatusEnum:
       enum:
       - open
