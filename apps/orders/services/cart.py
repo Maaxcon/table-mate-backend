@@ -6,6 +6,7 @@ __all__ = [
     "emit_hall_table_status_changed",
     "get_bill_order_items",
     "open_session",
+    "pay_session_bill",
     "pay_order_items",
     "remove_item_from_cart",
     "update_cart_item_quantity",
@@ -316,42 +317,83 @@ def _recompute_order_payment_status(order_ids: set[int]) -> None:
         Order.objects.filter(pk=order_id).update(payment_status=new_status)
 
 
+def _pay_order_items_for_session(
+    *,
+    session: Session,
+    order_item_ids: list[str] | None,
+    client_id: str | None = None,
+) -> None:
+    """Mark ordered items on ``session`` as paid (simulated — no money moves).
+
+    ``order_item_ids=None`` pays every outstanding item on the visit instead
+    of a specific set — used by the staff "process payment" action. Only
+    non-voided, currently-unpaid items are touched; unknown/already-paid ids
+    are ignored (idempotent). An order flips to PAID once all its non-voided
+    items are paid.
+    """
+    # A closed/voided visit is settled; paying against it would mutate a
+    # finalised bill. The guest API can't reach this (it 401s on a closed
+    # cart), but guard the service so any other caller fails loudly.
+    if session.status != SessionStatus.OPEN:
+        raise DomainError("Cannot pay items on a closed or voided visit.")
+
+    qs = (
+        OrderItem.objects.select_for_update()
+        .filter(order__session=session, is_paid=False)
+        .exclude(status=OrderItemStatus.VOIDED)
+    )
+    if order_item_ids is not None:
+        qs = qs.filter(public_id__in=order_item_ids)
+    to_pay = list(qs)
+    if not to_pay:
+        return
+
+    OrderItem.objects.filter(pk__in=[i.pk for i in to_pay]).update(
+        is_paid=True,
+        updated_at=timezone.now(),
+    )
+    _recompute_order_payment_status({i.order_id for i in to_pay})
+
+    cart_session = CartSession.objects.filter(
+        reservation_id=session.reservation_id, status=CartSessionStatus.ACTIVE
+    ).first()
+    if cart_session is not None:
+        _broadcast_cart_updated(cart_session, client_id)
+
+
 def pay_order_items(
     *,
     cart_session: CartSession,
     order_item_ids: list[str],
     client_id: str | None = None,
 ) -> list[OrderItem]:
-    """Mark the given ordered items as paid (simulated — no money moves).
-
-    Only non-voided, currently-unpaid items belonging to this table's visit are
-    touched; unknown/already-paid ids are ignored (idempotent). An order flips to
-    PAID once all its non-voided items are paid. Returns the full updated bill.
-    """
+    """Mark the given ordered items as paid (simulated). Returns the full updated bill."""
     with transaction.atomic():
         session = _visit_session_for_cart(cart_session)
         if session is None:
             return []
-        # A closed/voided visit is settled; paying against it would mutate a
-        # finalised bill. The API can't reach this (it 401s on a closed cart),
-        # but guard the service so any other caller fails loudly.
-        if session.status != SessionStatus.OPEN:
-            raise DomainError("Cannot pay items on a closed or voided visit.")
-
-        to_pay = list(
-            OrderItem.objects.select_for_update()
-            .filter(order__session=session, public_id__in=order_item_ids, is_paid=False)
-            .exclude(status=OrderItemStatus.VOIDED)
-        )
-        if to_pay:
-            OrderItem.objects.filter(pk__in=[i.pk for i in to_pay]).update(
-                is_paid=True,
-                updated_at=timezone.now(),
-            )
-            _recompute_order_payment_status({i.order_id for i in to_pay})
-            _broadcast_cart_updated(cart_session, client_id)
-
+        _pay_order_items_for_session(session=session, order_item_ids=order_item_ids, client_id=client_id)
         return get_bill_order_items(cart_session=cart_session)
+
+
+def pay_session_bill(
+    *,
+    session: Session,
+    order_item_ids: list[str] | None = None,
+    client_id: str | None = None,
+) -> Session:
+    """Staff action: mark ordered items on the visit as paid (simulated).
+
+    ``order_item_ids=None`` (or empty) pays every outstanding item; a
+    specific list pays only those — mirrors the guest bill's pay-selected
+    flow, just scoped by ``Session`` instead of a guest's ``CartSession``.
+    """
+    with transaction.atomic():
+        locked = Session.objects.select_for_update().get(pk=session.pk)
+        _pay_order_items_for_session(
+            session=locked, order_item_ids=order_item_ids or None, client_id=client_id
+        )
+        return locked
 
 
 _SESSION_STATUS_TRANSITIONS: dict[str, set[str]] = {

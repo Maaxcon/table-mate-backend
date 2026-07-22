@@ -37,6 +37,7 @@ from .serializers import (
     OrderItemSerializer,
     OrderItemVoidRequestSerializer,
     OrderSerializer,
+    SessionPayRequestSerializer,
     SessionSerializer,
     TicketSerializer,
     TicketStatsSerializer,
@@ -45,6 +46,7 @@ from .serializers import (
 from .services import (
     create_order_with_items,
     create_walk_in_reservation,
+    pay_session_bill,
     update_session_status,
     void_order_item,
 )
@@ -150,6 +152,26 @@ class SessionViewSet(
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         session = close_visit_session(session=self.get_object(), actor=cast(User, request.user))
+        serializer = self.get_serializer(session)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Process payment",
+        description="Mark ordered items on this visit as paid (simulated — no money moves). "
+        "Pass 'order_item_ids' to pay only those; omit it (or send an empty list) to pay "
+        "every outstanding item. Idempotent.",
+        request=SessionPayRequestSerializer,
+        responses=SessionSerializer,
+    )
+    @action(detail=True, methods=["post"], url_path="pay")
+    def pay(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        request_serializer = SessionPayRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+        order_item_ids = [str(i) for i in request_serializer.validated_data["order_item_ids"]]
+        session = pay_session_bill(
+            session=self.get_object(),
+            order_item_ids=order_item_ids or None,
+        )
         serializer = self.get_serializer(session)
         return Response(serializer.data)
 

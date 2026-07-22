@@ -241,6 +241,8 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
         read_only=True,
         allow_null=True,
     )
+    # Full amount owed for this line: goods + its tax + its service share.
+    payable = serializers.DecimalField(max_digits=14, decimal_places=4, read_only=True)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -284,6 +286,8 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
             "total_price",
             "tax_rate",
             "tax_amount",
+            "payable",
+            "is_paid",
             "voided_at",
             "voided_by",
             "void_reason",
@@ -298,6 +302,17 @@ class OrderItemSerializer(serializers.ModelSerializer[OrderItem]):
 class OrderItemVoidRequestSerializer(serializers.Serializer[None]):
     void_reason = serializers.CharField()
     note = serializers.CharField(required=False, allow_null=True, default=None)
+
+
+class SessionPayRequestSerializer(serializers.Serializer[None]):
+    # Omit (or send empty) to pay every outstanding item on the visit instead
+    # of a specific selection.
+    order_item_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
 
 
 class CreateOrderItemSerializer(serializers.Serializer[None]):
