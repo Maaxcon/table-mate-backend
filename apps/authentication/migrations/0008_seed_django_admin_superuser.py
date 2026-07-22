@@ -1,11 +1,14 @@
+from typing import Any
+
 from django.contrib.auth.hashers import make_password
 from django.db import migrations
+from django.db.migrations.state import StateApps
 
 ADMIN_EMAIL = "admin@tablemate.com"
 ADMIN_PASSWORD = "admin123"  # nosec B105
 
 
-def seed_superuser(apps: object, schema_editor: object) -> None:
+def seed_superuser(apps: StateApps, schema_editor: Any) -> None:
     User = apps.get_model("authentication", "User")
     User.objects.update_or_create(
         email=ADMIN_EMAIL,
@@ -21,7 +24,7 @@ def seed_superuser(apps: object, schema_editor: object) -> None:
     )
 
 
-def unseed_superuser(apps: object, schema_editor: object) -> None:
+def unseed_superuser(apps: StateApps, schema_editor: Any) -> None:
     User = apps.get_model("authentication", "User")
     User.objects.filter(email=ADMIN_EMAIL).delete()
 
