@@ -21,7 +21,7 @@ from apps.orders.selectors import (
     get_kitchen_order_items,
     get_kitchen_tickets,
 )
-from apps.orders.services import create_order_with_items, open_session
+from apps.orders.services import create_order_with_items, open_session, void_order_item
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table, Zone
 
 from .conftest import AuthContext
@@ -147,6 +147,32 @@ class TestKitchenSelectors:
         empty_restaurant: Any,
     ) -> None:
         tickets = list(get_kitchen_tickets(empty_restaurant.id))
+        assert tickets == []
+
+    def test_get_kitchen_tickets_skip_fully_voided_tickets(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER)
+        actor = auth.user
+        restaurant_id = restaurant.id
+
+        session = _build_session(table, restaurant_id, actor)
+        order = create_order_with_items(
+            session=session,
+            items=[{"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None}],
+            actor=actor,
+        )
+        ticket = order.tickets.first()
+        assert ticket is not None
+
+        for order_item in ticket.items.all():
+            void_order_item(order_item, actor=actor, void_reason_code="mispick")
+
+        tickets = list(get_kitchen_tickets(restaurant_id))
         assert tickets == []
 
     def test_get_kitchen_order_items_by_ticket(

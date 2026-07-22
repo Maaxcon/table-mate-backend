@@ -61,7 +61,7 @@ def get_kitchen_tickets(
             guest_count=F("session__guest_count"),
             items_count=Coalesce(Subquery(items_count_subq), 0),
         )
-        .filter(restaurant_id=restaurant_id)
+        .filter(restaurant_id=restaurant_id, items_count__gt=0)
         .order_by("injected_at", "id")
     )
 
