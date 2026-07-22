@@ -1,6 +1,7 @@
 import re
 
 from django.conf import settings
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.contrib import admin
 from django.urls import URLPattern, URLResolver, include, path, re_path
 from django.views.static import serve as serve_static
@@ -42,3 +43,7 @@ urlpatterns += [
         {"document_root": settings.MEDIA_ROOT},
     ),
 ]
+
+# The production stack does not put WhiteNoise or a dedicated static server in
+# front of Django, so serve collected static assets from the app itself.
+urlpatterns += staticfiles_urlpatterns()
