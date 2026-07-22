@@ -293,6 +293,11 @@ def auto_extend_session(session: Session) -> dict[str, object]:
         if locked is None:
             return {"extended": False, "clamped_by": None, "new_ends_at": None}
 
+        # The free auto-extend fires once per session. After that the table
+        # is genuinely overdue and it's up to staff to prolong or close it.
+        if locked.auto_extended:
+            return {"extended": False, "clamped_by": None, "new_ends_at": None}
+
         # Serialize against create_reservation, batch_update, activate_pending
         # which all lock the Table row before writing occupancy.
         Table.objects.select_for_update().get(pk=locked.table_id)
@@ -323,7 +328,8 @@ def auto_extend_session(session: Session) -> dict[str, object]:
 
         # 4. Apply
         locked.ends_at = target
-        locked.save(update_fields=["ends_at", "updated_at"])
+        locked.auto_extended = True
+        locked.save(update_fields=["ends_at", "auto_extended", "updated_at"])
 
         restaurant_id = locked.restaurant_id
         table_id = str(locked.table.public_id)
