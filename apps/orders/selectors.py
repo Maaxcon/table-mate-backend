@@ -34,7 +34,7 @@ def get_kitchen_tickets(
     """
     items_count_subq = (
         OrderItem.objects.filter(ticket=OuterRef("pk"))
-        .exclude(status=OrderItemStatus.VOIDED)
+        .exclude(status__in=[OrderItemStatus.VOIDED, OrderItemStatus.SERVED])
         .values("ticket")
         .annotate(count=Count("id"))
         .values("count")
