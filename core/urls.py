@@ -9,7 +9,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.permissions import IsAdminUser
 
 urlpatterns: list[URLPattern | URLResolver] = [
-    path("admin/", admin.site.urls),
+    path("drf-admin/", admin.site.urls),
     path("api/auth/", include("apps.authentication.urls")),
     path("api/restaurants/", include("apps.restaurants.urls")),
     path("api/editor/", include("apps.editor.urls")),
