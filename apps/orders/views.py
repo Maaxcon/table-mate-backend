@@ -77,25 +77,33 @@ class SessionViewSet(
         now = timezone.now()
         grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
         occupancy_cutoff = now - timedelta(minutes=grace_minutes)
-        non_stale = Session.objects.filter(
-            table=table,
-            status=SessionStatus.OPEN,
-            reservation__status=ReservationStatus.ACTIVE,
-        ).annotate(
-            effective_end_at=Coalesce("ends_at", "reservation__end_at"),
-        ).filter(
-            effective_end_at__gt=occupancy_cutoff,
+        non_stale = (
+            Session.objects.filter(
+                table=table,
+                status=SessionStatus.OPEN,
+                reservation__status=ReservationStatus.ACTIVE,
+            )
+            .annotate(
+                effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+            )
+            .filter(
+                effective_end_at__gt=occupancy_cutoff,
+            )
         )
         if non_stale.exists():
             raise TableOccupiedError()
-        stale = Session.objects.filter(
-            table=table,
-            status=SessionStatus.OPEN,
-            reservation__status=ReservationStatus.ACTIVE,
-        ).annotate(
-            effective_end_at=Coalesce("ends_at", "reservation__end_at"),
-        ).filter(
-            effective_end_at__lte=occupancy_cutoff,
+        stale = (
+            Session.objects.filter(
+                table=table,
+                status=SessionStatus.OPEN,
+                reservation__status=ReservationStatus.ACTIVE,
+            )
+            .annotate(
+                effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+            )
+            .filter(
+                effective_end_at__lte=occupancy_cutoff,
+            )
         )
         guest_count = serializer.validated_data["guest_count"]
         with transaction.atomic():
@@ -362,7 +370,10 @@ class OrderItemViewSet(
         restaurant_id = get_restaurant_id_from_auth(self.request)
         if restaurant_id is None:
             return qs.none()
-        return get_kitchen_order_items(restaurant_id)
+        qs = get_kitchen_order_items(restaurant_id)
+        if self.action == "list":
+            qs = qs.exclude(status__in=[OrderItemStatus.SERVED, OrderItemStatus.VOIDED])
+        return qs
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))

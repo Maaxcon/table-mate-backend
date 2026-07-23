@@ -89,7 +89,6 @@ def get_kitchen_order_items(
     qs = (
         OrderItem.objects.select_related("menu_item__category", "ticket", "order__session", "restaurant")
         .filter(restaurant_id=restaurant_id)
-        .exclude(status__in=[OrderItemStatus.VOIDED, OrderItemStatus.SERVED])
         .order_by("created_at", "id")
     )
 
