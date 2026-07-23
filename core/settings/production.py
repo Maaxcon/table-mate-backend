@@ -13,6 +13,9 @@ DEBUG = False
 # proxy always overwrites this header; the origin must not be reachable directly.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://tablemate.unibrix.net",
+]
 # SECRET_KEY also signs JWTs (SIMPLE_JWT defaults to it with HS256), so it must
 # be a strong, explicitly-set value in production.
 if SECRET_KEY == LOCAL_DEV_SECRET_KEY:  # noqa: F405
