@@ -1433,6 +1433,27 @@ paths:
                 items:
                   $ref: '#/components/schemas/BillItem'
           description: ''
+  /api/orders/cart/sessions/{session_pk}/call-waiter/:
+    post:
+      operationId: orders_cart_sessions_call_waiter_create
+      description: 'Guest action: ping staff that this table wants a waiter.'
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: Waiter notified.
+        '429':
+          description: Waiter already called recently (code waiter_call_cooldown).
   /api/orders/cart/sessions/{session_pk}/checkout/:
     post:
       operationId: orders_cart_sessions_checkout_create
