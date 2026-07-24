@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from datetime import timedelta
 from typing import Any, cast
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
@@ -18,6 +19,8 @@ from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsFloor, IsKitchen, IsStaff
+from apps.orders.broadcast import cart_group_send
+from apps.orders.models import CartSession, CartSessionStatus
 from apps.orders.selectors import compute_avg_prep_time, get_kitchen_order_items, get_kitchen_tickets
 from apps.reservations.models import ReservationStatus
 from apps.restaurants.models import RestaurantSettings
@@ -291,8 +294,16 @@ class TicketViewSet(
         return qs
 
     def perform_update(self, serializer):  # type: ignore[no-untyped-def]
-        if serializer.validated_data.get("status") == TicketStatus.COMPLETED:
-            restaurant_id = serializer.instance.restaurant_id
+        instance = serializer.instance
+        new_status = serializer.validated_data.get("status")
+
+        if new_status == TicketStatus.ACTIVE and instance.status != TicketStatus.ACTIVE:
+            instance.items.filter(status=OrderItemStatus.PENDING).update(
+                status=OrderItemStatus.IN_PROGRESS,
+            )
+
+        if new_status == TicketStatus.COMPLETED:
+            restaurant_id = instance.restaurant_id
             settings = RestaurantSettings.objects.filter(restaurant_id=restaurant_id).first()
             tz = ZoneInfo(settings.timezone) if settings and settings.timezone else ZoneInfo("UTC")
             now_local = timezone.now().astimezone(tz)
@@ -394,9 +405,16 @@ class OrderItemViewSet(
 
         if previous_status != instance.status:
             table_number = ""
+            cart_session_id: str | None = None
             try:
                 order_session = instance.order.session
                 table_number = order_session.table.public_number
+                reservation = order_session.reservation
+                active_cart = CartSession.objects.filter(
+                    reservation=reservation, status=CartSessionStatus.ACTIVE
+                ).first()
+                if active_cart is not None:
+                    cart_session_id = str(active_cart.public_id)
             except AttributeError:
                 pass
 
@@ -408,6 +426,8 @@ class OrderItemViewSet(
                     menu_item_name=instance.menu_item.name if instance.menu_item else "",
                     status=instance.status,
                 )
+                if cart_session_id is not None:
+                    cart_group_send(UUID(cart_session_id))
 
             transaction.on_commit(_emit)
 

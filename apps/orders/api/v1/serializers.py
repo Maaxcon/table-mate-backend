@@ -154,6 +154,7 @@ class BillItemSerializer(serializers.ModelSerializer[OrderItem]):
             "name",
             "guest_slot",
             "quantity",
+            "status",
             "payable",
             "is_paid",
         ]

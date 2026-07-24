@@ -390,9 +390,7 @@ def pay_session_bill(
     """
     with transaction.atomic():
         locked = Session.objects.select_for_update().get(pk=session.pk)
-        _pay_order_items_for_session(
-            session=locked, order_item_ids=order_item_ids or None, client_id=client_id
-        )
+        _pay_order_items_for_session(session=locked, order_item_ids=order_item_ids or None, client_id=client_id)
         return locked
 
 
@@ -454,25 +452,33 @@ def open_session(
     now = timezone.now()
     grace_minutes = max(int(getattr(settings, "SESSION_OVERDUE_AUTO_CLOSE_MINUTES", 20)), 0)
     occupancy_cutoff = now - timedelta(minutes=grace_minutes)
-    non_stale = Session.objects.filter(
-        table=table,
-        status=SessionStatus.OPEN,
-        reservation__status=ReservationStatus.ACTIVE,
-    ).annotate(
-        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
-    ).filter(
-        effective_end_at__gt=occupancy_cutoff,
+    non_stale = (
+        Session.objects.filter(
+            table=table,
+            status=SessionStatus.OPEN,
+            reservation__status=ReservationStatus.ACTIVE,
+        )
+        .annotate(
+            effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+        )
+        .filter(
+            effective_end_at__gt=occupancy_cutoff,
+        )
     )
     if non_stale.exists():
         raise TableOccupiedError()
-    stale = Session.objects.filter(
-        table=table,
-        status=SessionStatus.OPEN,
-        reservation__status=ReservationStatus.ACTIVE,
-    ).annotate(
-        effective_end_at=Coalesce("ends_at", "reservation__end_at"),
-    ).filter(
-        effective_end_at__lte=occupancy_cutoff,
+    stale = (
+        Session.objects.filter(
+            table=table,
+            status=SessionStatus.OPEN,
+            reservation__status=ReservationStatus.ACTIVE,
+        )
+        .annotate(
+            effective_end_at=Coalesce("ends_at", "reservation__end_at"),
+        )
+        .filter(
+            effective_end_at__lte=occupancy_cutoff,
+        )
     )
     for stale_session in stale:
         _close_visit_session(session=stale_session, actor=None)
@@ -506,9 +512,7 @@ def open_session(
     )
 
     table_id = str(table.public_id)
-    transaction.on_commit(
-        lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
-    )
+    transaction.on_commit(lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id]))
 
     return session
 
@@ -669,5 +673,12 @@ def void_order_item(
     session.service_charge = session_agg["service"] or Decimal(0)
     session.total = session.subtotal + session.tax + session.service_charge
     session.save(update_fields=["subtotal", "tax", "service_charge", "total"])
+
+    cart_session = CartSession.objects.filter(
+        reservation_id=session.reservation_id,
+        status=CartSessionStatus.ACTIVE,
+    ).first()
+    if cart_session is not None:
+        _broadcast_cart_updated(cart_session)
 
     return order_item
