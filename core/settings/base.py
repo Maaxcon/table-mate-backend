@@ -219,10 +219,10 @@ SPECTACULAR_SETTINGS = {
     "EXCEPTION_HANDLER": "common.api.exception_handler.custom_exception_handler",
     "ENUM_NAME_OVERRIDES": {
         "ReservationStatus": "apps.reservations.models.ReservationStatus",
-        "OrderItemStatus": "apps.orders.models.OrderItemStatus",
-        "SessionStatus": "apps.orders.models.SessionStatus",
-        "TicketStatus": "apps.orders.models.TicketStatus",
-        "OrderStatus": "apps.orders.models.OrderStatus",
-        "CartSessionStatus": "apps.orders.models.cart_session.CartSessionStatus",
+        "OrderItemStatusEnum": "apps.orders.models.OrderItemStatus",
+        "SessionStatusEnum": "apps.orders.models.SessionStatus",
+        "TicketStatusEnum": "apps.orders.models.TicketStatus",
+        "OrderStatusEnum": "apps.orders.models.OrderStatus",
+        "CartSessionStatusEnum": "apps.orders.models.cart_session.CartSessionStatus",
     },
 }

@@ -3899,6 +3899,8 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        status:
+          $ref: '#/components/schemas/OrderItemStatusEnum'
         payable:
           type: string
           format: decimal
