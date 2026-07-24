@@ -17,6 +17,7 @@ from apps.orders.permissions import IsActiveTableGuest
 from apps.orders.selectors import get_cart_session, is_cart_participant
 from apps.orders.services import (
     add_item_to_cart,
+    call_waiter,
     create_cart_session,
     get_bill_order_items,
     pay_order_items,
@@ -316,6 +317,37 @@ class CartCheckoutView(GuestFallbackAuthMixin, APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+@extend_schema(tags=["Cart"])
+class CartCallWaiterView(GuestFallbackAuthMixin, APIView):
+    """Guest action: ping staff that this table wants a waiter."""
+
+    permission_classes = [IsActiveTableGuest]
+    serializer_class = None
+
+    @extend_schema(
+        request=None,
+        responses={
+            204: OpenApiResponse(description="Waiter notified."),
+            429: OpenApiResponse(description="Waiter already called recently (code waiter_call_cooldown)."),
+        },
+    )
+    def post(self, request: Request, session_pk: str) -> Response:
+        session = _resolve_checkout_session(request, session_pk)
+
+        guest_identity = _get_guest_identity_from_request(request)
+        if guest_identity:
+            profile = GuestProfile.objects.filter(
+                cart_session=session, guest_identity=guest_identity
+            ).first()
+            guest_name = profile.display_name if profile else None
+        else:
+            user = _request_user_or_none(request)
+            guest_name = user.get_full_name() if user else None
+
+        call_waiter(session=session, guest_name=guest_name)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=["Cart"])
