@@ -157,7 +157,15 @@ def call_waiter(*, session: CartSession, guest_name: str | None = None) -> None:
     doesn't flood the staff notification stream.
     """
     cooldown_key = f"waiter_call_cooldown:{session.public_id}"
-    if not cache.add(cooldown_key, "1", timeout=_WAITER_CALL_COOLDOWN_SECONDS):
+    try:
+        acquired = cache.add(cooldown_key, "1", timeout=_WAITER_CALL_COOLDOWN_SECONDS)
+    except Exception:
+        # Mirrors _broadcast_staff_event's tolerance for a flaky cache/Redis:
+        # don't fail the guest's request over a rate-limit check, just skip
+        # rate-limiting for this call.
+        logger.exception("Waiter-call cooldown check failed for session %s", session.public_id)
+        acquired = True
+    if not acquired:
         raise WaiterCallCooldownError
 
     table = session.reservation.table
