@@ -125,6 +125,34 @@ class EmployeeCreateSerializer(serializers.ModelSerializer[User]):
         return value
 
 
+class EmployeeAssignSerializer(serializers.Serializer[Any]):
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(choices=RoleCode.choices)
+    first_name = serializers.CharField(required=False, allow_blank=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+    def validate_role(self, value: str) -> str:
+        if value == RoleCode.CUSTOMER:
+            raise serializers.ValidationError("An employee cannot be set to the customer role.")
+        return value
+
+    def validate_email(self, value: str) -> str:
+        try:
+            self._user = User.objects.get(email__iexact=value)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("No user found with this email.") from None
+        if self._user.role != RoleCode.CUSTOMER or self._user.restaurant_id is not None:
+            raise serializers.ValidationError(
+                "This user is already staff. Update their role through the employee record."
+            )
+        return value
+
+    @property
+    def user(self) -> User:
+        return self._user
+
+
 class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
     working_hours = working_hours_field(read_only=True)
 

@@ -40,6 +40,7 @@ from .models import Restaurant, RestaurantSettings, Table, Zone
 from .serializers import (
     AdminOverviewSerializer,
     BookingSettingsSerializer,
+    EmployeeAssignSerializer,
     EmployeeCreateSerializer,
     EmployeeSerializer,
     LayoutResponseSerializer,
@@ -323,6 +324,8 @@ class EmployeeViewSet(
     def get_serializer_class(self) -> type[BaseSerializer[User]]:
         if self.action == "create":
             return EmployeeCreateSerializer
+        if self.action == "assign":
+            return EmployeeAssignSerializer
         return EmployeeSerializer
 
     def safely_get_queryset(self, qs):  # type: ignore[no-untyped-def]
@@ -364,6 +367,27 @@ class EmployeeViewSet(
         )
         if not other_active_admin:
             raise ValidationError("You cannot demote or deactivate the last active admin.")
+
+    @extend_schema(
+        summary="Assign staff role to an existing user",
+        description="Looks up an existing user by email and assigns them a staff role "
+        "at the admin's restaurant. The user must already exist in the system "
+        "as a customer; use the employee update endpoint for existing staff.",
+        request=EmployeeAssignSerializer,
+        responses=EmployeeSerializer,
+    )
+    @action(detail=False, methods=["post"])
+    def assign(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        serializer = EmployeeAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        restaurant_id = require_restaurant_id_from_auth(request)
+        user = serializer.user
+        employee = services.assign_employee(
+            user=user,
+            restaurant_id=restaurant_id,
+            **serializer.validated_data,
+        )
+        return Response(EmployeeSerializer(employee, context=self.get_serializer_context()).data)
 
 
 @extend_schema(tags=["Restaurants"])

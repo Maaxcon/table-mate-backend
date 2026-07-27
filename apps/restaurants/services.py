@@ -76,6 +76,20 @@ def create_employee(*, restaurant_id: int, email: str, role: str, **data: Any) -
     )
 
 
+@transaction.atomic
+def assign_employee(*, user: User, restaurant_id: int, role: str, **data: Any) -> User:
+    user.role = role
+    user.restaurant_id = restaurant_id
+    user.is_active = data.get("is_active", True)
+    changed = ["role", "restaurant_id", "is_active"]
+    for field in ("first_name", "last_name", "phone"):
+        if field in data:
+            setattr(user, field, data[field])
+            changed.append(field)
+    user.save(update_fields=[*changed, "updated_at"])
+    return user
+
+
 def build_table_menu_url(table: Table) -> str:
     """Menu deep link a table's QR code encodes.
 
@@ -90,5 +104,6 @@ __all__ = [
     "update_restaurant_settings",
     "manage_employee",
     "create_employee",
+    "assign_employee",
     "build_table_menu_url",
 ]
