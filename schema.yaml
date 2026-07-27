@@ -472,6 +472,164 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedEditorTableList'
           description: ''
+  /api/menu/admin/allergens/:
+    get:
+      operationId: menu_admin_allergens_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAllergenList'
+          description: ''
+    post:
+      operationId: menu_admin_allergens_create
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Allergen'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Allergen'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Allergen'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Allergen'
+          description: ''
+  /api/menu/admin/allergens/{public_id}/:
+    get:
+      operationId: menu_admin_allergens_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Allergen'
+          description: ''
+    put:
+      operationId: menu_admin_allergens_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Allergen'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Allergen'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Allergen'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Allergen'
+          description: ''
+    patch:
+      operationId: menu_admin_allergens_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAllergen'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAllergen'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAllergen'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Allergen'
+          description: ''
+    delete:
+      operationId: menu_admin_allergens_destroy
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/menu/admin/categories/:
     get:
       operationId: menu_admin_categories_list
@@ -669,10 +827,21 @@ paths:
       operationId: menu_admin_items_list
       parameters:
       - in: query
+        name: allergens
+        schema:
+          type: array
+          items: {}
+        explode: true
+        style: form
+      - in: query
         name: category
         schema:
           type: string
           format: uuid
+      - in: query
+        name: ingredients
+        schema:
+          type: string
       - in: query
         name: is_available
         schema:
@@ -1080,8 +1249,7 @@ paths:
   /api/menu/allergens/:
     get:
       operationId: menu_allergens_list
-      description: The allowed allergen vocabulary — the single source of truth for
-        clients.
+      description: Database-managed allergen vocabulary for menu filtering and editing.
       tags:
       - Menu
       security:
@@ -1159,10 +1327,21 @@ paths:
       operationId: menu_items_list
       parameters:
       - in: query
+        name: allergens
+        schema:
+          type: array
+          items: {}
+        explode: true
+        style: form
+      - in: query
         name: category
         schema:
           type: string
           format: uuid
+      - in: query
+        name: ingredients
+        schema:
+          type: string
       - in: query
         name: is_available
         schema:
@@ -3832,6 +4011,29 @@ components:
       - menus_total
       - staff_active
       - staff_total
+    Allergen:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - name
+      - public_id
+      - updated_at
     BatchUpdate:
       type: object
       properties:
@@ -4911,6 +5113,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminMenu'
+    PaginatedAllergenList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Allergen'
     PaginatedBookingSettingsList:
       type: object
       required:
@@ -5456,6 +5681,24 @@ components:
         likes_count:
           type: integer
           readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedAllergen:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
         created_at:
           type: string
           format: date-time
