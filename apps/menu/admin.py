@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from django import forms
 from django.contrib import admin
@@ -16,8 +16,7 @@ class MenuItemForm(forms.ModelForm):  # type: ignore[type-arg]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        field = self.fields["allergens"]
-        assert isinstance(field, forms.MultipleChoiceField)
+        field = cast(forms.MultipleChoiceField, self.fields["allergens"])
         field.choices = Allergen.objects.values_list("name", "name")
 
     def clean_allergens(self) -> list[str]:
