@@ -3095,6 +3095,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/Employee'
           description: ''
+  /api/restaurants/employees/assign/:
+    post:
+      operationId: restaurants_employees_assign_create
+      description: Looks up an existing user by email and assigns them a staff role
+        at the admin's restaurant. The user must already exist in the system as a
+        customer; use the employee update endpoint for existing staff.
+      summary: Assign staff role to an existing user
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeAssign'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeAssign'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeAssign'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
   /api/restaurants/restaurant-settings/:
     get:
       operationId: restaurants_restaurant_settings_list
@@ -4234,6 +4265,24 @@ components:
       required:
       - email
       - public_id
+    EmployeeAssign:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+      required:
+      - email
+      - role
     EmployeeCreate:
       type: object
       properties:
