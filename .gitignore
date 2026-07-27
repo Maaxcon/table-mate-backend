@@ -17,3 +17,13 @@ table_mate.egg-info/
 *.sqlite3
 dump.rdb
 build/
+/.opencode/
+/.agents/
+
+# Speckit auto-generated files
+.specify/init-options.json
+.specify/integration.json
+.specify/integrations/*.manifest.json
+.specify/extensions/.registry
+.specify/scripts/
+.specify/workflows/
