@@ -9,7 +9,7 @@ from django.urls import reverse
 from rest_framework import status
 
 from apps.authentication.models import RoleCode
-from apps.menu.models import Menu, MenuCategory, MenuItem
+from apps.menu.models import Allergen, Menu, MenuCategory, MenuItem, MenuItemLike
 from apps.restaurants.models import Restaurant
 
 from ..conftest import MenuCategoryFactory as _MenuCategoryFactory
@@ -172,6 +172,86 @@ class TestPublicMenuItems:
         names = [r["name"] for r in data["results"]]
         assert names == sorted(names)
 
+    def test_filters_by_allergens_and_ingredients(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        excluded = MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            name="Tomato pasta",
+            ingredients=["Tomato", "Basil"],
+            allergens=["Глютен", "Молоко"],
+        )
+        matching = MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            name="Tomato salad",
+            ingredients=["Tomato"],
+            allergens=["Риба"],
+        )
+        url = reverse("menu-item-list")
+        response: Any = api_client.get(
+            url,
+            {
+                "restaurant": str(restaurant.public_id),
+                "allergens": ["Глютен", "Молоко"],
+                "ingredients": "tomato",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        results = response.json()["results"]
+        assert [result["public_id"] for result in results] == [str(matching.public_id)]
+        assert str(excluded.public_id) not in [result["public_id"] for result in results]
+
+    def test_rejects_unknown_allergen_filter(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        url = reverse("menu-item-list")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "allergens": "Unknown"})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_orders_by_popularity(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        popular = MenuItemFactory(restaurant=restaurant, menu=menu, category=category, name="Popular")
+        less_popular = MenuItemFactory(restaurant=restaurant, menu=menu, category=category, name="Less popular")
+        for guest_token in ("guest-1", "guest-2"):
+            MenuItemLike.objects.create(menu_item=popular, restaurant=restaurant, guest_token=guest_token)
+        MenuItemLike.objects.create(menu_item=less_popular, restaurant=restaurant, guest_token="guest-3")
+
+        url = reverse("menu-item-list")
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "ordering": "-likes_count"})
+
+        assert response.status_code == status.HTTP_200_OK
+        results = response.json()["results"]
+        assert [result["public_id"] for result in results[:2]] == [
+            str(popular.public_id),
+            str(less_popular.public_id),
+        ]
+
+    def test_price_ordering_is_opt_in(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        cheapest = MenuItemFactory(
+            restaurant=restaurant, menu=menu, category=category, name="Cheapest", price=Decimal("1.0000")
+        )
+        priciest = MenuItemFactory(
+            restaurant=restaurant, menu=menu, category=category, name="Priciest", price=Decimal("100.0000")
+        )
+        url = reverse("menu-item-list")
+
+        ascending: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "ordering": "price"})
+        descending: Any = api_client.get(url, {"restaurant": str(restaurant.public_id), "ordering": "-price"})
+
+        assert ascending.status_code == status.HTTP_200_OK
+        assert descending.status_code == status.HTTP_200_OK
+        assert ascending.json()["results"][0]["public_id"] == str(cheapest.public_id)
+        assert descending.json()["results"][0]["public_id"] == str(priciest.public_id)
+
     def test_pagination_response_structure(self, api_client: Client, restaurant: Restaurant, item: MenuItem) -> None:
         url = reverse("menu-item-list")
         response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
@@ -182,6 +262,63 @@ class TestPublicMenuItems:
         assert "next" in data
         assert "previous" in data
         assert "results" in data
+
+
+@pytest.mark.django_db(databases=["default"])
+class TestAllergenCatalog:
+    def test_public_list_reads_database_catalog(self, api_client: Client) -> None:
+        Allergen.objects.create(name="Custom allergen")
+
+        response: Any = api_client.get(reverse("allergens"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "Custom allergen" in response.json()
+
+    def test_admin_can_add_allergen_before_assigning_it_to_a_dish(
+        self, api: Any, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        create_allergen: Any = auth.client.post(
+            reverse("admin-allergen-list"),
+            data={"name": "Custom allergen"},
+            content_type="application/json",
+        )
+
+        assert create_allergen.status_code == status.HTTP_201_CREATED
+
+        create_item: Any = auth.client.post(
+            reverse("admin-menu-item-list"),
+            data={
+                "menu": str(menu.public_id),
+                "category": str(category.public_id),
+                "name": "Custom dish",
+                "price": "12.5000",
+                "allergens": ["Custom allergen"],
+            },
+            content_type="application/json",
+        )
+
+        assert create_item.status_code == status.HTTP_201_CREATED
+        assert create_item.json()["allergens"] == ["Custom allergen"]
+
+    def test_admin_deleting_allergen_removes_it_from_dishes(
+        self, api: Any, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        allergen = Allergen.objects.create(name="Custom allergen")
+        item = MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            allergens=[allergen.name],
+        )
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+
+        response: Any = auth.client.delete(reverse("admin-allergen-detail", kwargs={"public_id": allergen.public_id}))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        item.refresh_from_db()
+        assert item.allergens == []
+        assert not Allergen.objects.filter(public_id=allergen.public_id).exists()
 
 
 @pytest.mark.django_db(databases=["default"])
