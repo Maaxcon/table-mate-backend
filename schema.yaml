@@ -3640,6 +3640,173 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/shifts/:
+    get:
+      operationId: shifts_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - shifts
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedShiftList'
+          description: ''
+    post:
+      operationId: shifts_create
+      tags:
+      - shifts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShiftWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ShiftWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ShiftWrite'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftWrite'
+          description: ''
+  /api/shifts/{public_id}/:
+    get:
+      operationId: shifts_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - shifts
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shift'
+          description: ''
+    patch:
+      operationId: shifts_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - shifts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedShiftWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedShiftWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedShiftWrite'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftWrite'
+          description: ''
+    delete:
+      operationId: shifts_destroy
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - shifts
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/shifts/copy/:
+    post:
+      operationId: shifts_copy_create
+      tags:
+      - shifts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopyShifts'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CopyShifts'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CopyShifts'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopyShifts'
+          description: ''
+  /api/shifts/month_summary/:
+    get:
+      operationId: shifts_month_summary_retrieve
+      tags:
+      - shifts
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shift'
+          description: ''
 components:
   schemas:
     ActionEnum:
@@ -4124,6 +4291,24 @@ components:
       - subtotal
       - tax
       - total
+    CopyShifts:
+      type: object
+      properties:
+        source_date:
+          type: string
+          format: date
+        target_dates:
+          type: array
+          items:
+            type: string
+            format: date
+        employee_ids:
+          type: array
+          items:
+            type: string
+      required:
+      - source_date
+      - target_dates
     CreatedBySourceEnum:
       enum:
       - staff
@@ -5279,6 +5464,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Session'
+    PaginatedShiftList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shift'
     PaginatedTableList:
       type: object
       required:
@@ -5896,6 +6104,23 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PatchedShiftWrite:
+      type: object
+      properties:
+        employee:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        notes:
+          type: string
     PatchedTicket:
       type: object
       properties:
@@ -6644,6 +6869,78 @@ components:
         * `round` - round
         * `square` - square
         * `booth` - booth
+    Shift:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        employee:
+          type: string
+          format: uuid
+        employee_name:
+          type: string
+          readOnly: true
+        employee_role:
+          type: string
+          readOnly: true
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        notes:
+          type: string
+        duration_hours:
+          type: number
+          format: double
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - date
+      - duration_hours
+      - employee
+      - employee_name
+      - employee_role
+      - end_time
+      - public_id
+      - start_time
+      - updated_at
+    ShiftWrite:
+      type: object
+      properties:
+        employee:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        notes:
+          type: string
+      required:
+      - date
+      - employee
+      - end_time
+      - start_time
     SourceEnum:
       enum:
       - waiter_manual
