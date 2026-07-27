@@ -147,6 +147,9 @@ def ensure_active_cart_for_table(
     return session
 
 
+# Keep in sync with WAITER_CALL_SENT_RESET_MS in
+# table-mate-frontend/src/features/menu/pages/MenuPage/MenuPage.tsx — the
+# guest's button should re-enable right as this cooldown expires.
 _WAITER_CALL_COOLDOWN_SECONDS = 60
 
 
