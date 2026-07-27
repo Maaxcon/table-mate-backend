@@ -2,8 +2,9 @@
 
 **Feature Branch**: `001-tablemate-backend-mvp`
 **Created**: 2026-05-07
-**Updated**: 2026-05-12
-**Status**: Finalized
+**Updated**: 2026-07-27
+**Status**: Historical — most requirements implemented. See constitution v2.1.0 and
+`specs/019-realtime-shared-cart/` for active development.
 **Input**: User description: "Tablemate backend MVP with Constitution v2.0.0 alignment for roles, realtime contracts, webhook authority, immutable boundaries, canonical entities, and hot-path indexing."
 
 ## User Scenarios & Testing *(mandatory)*
