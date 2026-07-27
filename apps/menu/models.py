@@ -6,8 +6,6 @@ from django.db import models
 
 from common.models import BaseModel, RestaurantScopedModel
 
-from .allergens import ALLERGENS
-
 validate_hex_color = RegexValidator(r"^#[0-9a-fA-F]{6}$", message="Use hex color format #RRGGBB.")
 
 
@@ -16,12 +14,22 @@ def validate_str_list(value: object) -> None:
         raise ValidationError("Must be a list of strings.")
 
 
+class Allergen(BaseModel):
+    name = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 def validate_allergens(value: object) -> None:
-    if not isinstance(value, list):
-        raise ValidationError("Must be a list.")
-    invalid = [v for v in value if v not in ALLERGENS]
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValidationError("Must be a list of strings.")
+    invalid = set(value) - set(Allergen.objects.filter(name__in=value).values_list("name", flat=True))
     if invalid:
-        raise ValidationError(f"Invalid allergens: {invalid}. Choose from: {ALLERGENS}")
+        raise ValidationError(f"Unknown allergens: {', '.join(sorted(invalid))}.")
 
 
 class Menu(RestaurantScopedModel):

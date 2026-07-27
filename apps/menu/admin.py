@@ -4,31 +4,21 @@ from django import forms
 from django.contrib import admin
 from django.http import HttpRequest
 
-from .allergens import ALLERGENS
-from .models import Menu, MenuCategory, MenuItem
-
-
-class AllergenCheckboxWidget(forms.CheckboxSelectMultiple):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.setdefault("choices", [(a, a) for a in ALLERGENS])
-        super().__init__(*args, **kwargs)
-
-
-class AllergenField(forms.MultipleChoiceField):
-    widget = AllergenCheckboxWidget
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.setdefault("choices", [(a, a) for a in ALLERGENS])
-        kwargs.setdefault("required", False)
-        super().__init__(*args, **kwargs)
+from .models import Allergen, Menu, MenuCategory, MenuItem
 
 
 class MenuItemForm(forms.ModelForm):  # type: ignore[type-arg]
-    allergens = AllergenField()
+    allergens = forms.MultipleChoiceField(required=False, widget=forms.CheckboxSelectMultiple)
 
     class Meta:
         model = MenuItem
         fields = "__all__"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        field = self.fields["allergens"]
+        assert isinstance(field, forms.MultipleChoiceField)
+        field.choices = Allergen.objects.values_list("name", "name")
 
     def clean_allergens(self) -> list[str]:
         return self.cleaned_data.get("allergens") or []
@@ -48,6 +38,12 @@ class MenuAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 @admin.register(MenuCategory)
 class MenuCategoryAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ["name", "menu", "sort_order", "color"]
+
+
+@admin.register(Allergen)
+class AllergenAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ["name"]
+    search_fields = ["name"]
 
 
 @admin.register(MenuItem)

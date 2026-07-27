@@ -5,7 +5,14 @@ from rest_framework import serializers
 from apps.restaurants.models import Restaurant
 from common.api import PublicIdRelatedField
 
-from .models import Menu, MenuCategory, MenuItem
+from .models import Allergen, Menu, MenuCategory, MenuItem
+
+
+class AllergenSerializer(serializers.ModelSerializer[Allergen]):
+    class Meta:
+        model = Allergen
+        fields = ["public_id", "name", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "created_at", "updated_at"]
 
 
 class MenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):

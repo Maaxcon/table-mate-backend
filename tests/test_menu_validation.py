@@ -5,7 +5,7 @@ from typing import cast
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.menu.models import Menu, MenuCategory, MenuItem
+from apps.menu.models import Allergen, Menu, MenuCategory, MenuItem
 
 from .conftest import MenuCategoryFactory as _MenuCategoryFactory
 from .conftest import MenuFactory as _MenuFactory
@@ -61,3 +61,21 @@ def test_clean_allows_no_category() -> None:
     )
 
     item.full_clean()  # must not raise
+
+
+@pytest.mark.django_db
+def test_allergens_must_exist_in_catalog() -> None:
+    menu = MenuFactory()
+    item = MenuItem(
+        restaurant=menu.restaurant,
+        menu=menu,
+        name="Steak",
+        price=Decimal("29.9900"),
+        allergens=["Custom allergen"],
+    )
+
+    with pytest.raises(ValidationError, match="Unknown allergens"):
+        item.full_clean()
+
+    Allergen.objects.create(name="Custom allergen")
+    item.full_clean()

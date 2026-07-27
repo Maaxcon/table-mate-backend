@@ -24,9 +24,8 @@ from common.api import (
 from common.filters import StableOrderingFilter
 
 from . import services
-from .allergens import ALLERGENS
 from .filters import MenuCategoryFilter, MenuItemFilter
-from .models import Menu, MenuCategory, MenuItem, MenuItemLike
+from .models import Allergen, Menu, MenuCategory, MenuItem, MenuItemLike
 from .selectors import (
     get_active_menus,
     get_categories_by_restaurant,
@@ -37,6 +36,7 @@ from .serializers import (
     AdminMenuCategorySerializer,
     AdminMenuItemSerializer,
     AdminMenuSerializer,
+    AllergenSerializer,
     BulkItemActionSerializer,
     MenuCategorySerializer,
     MenuItemSerializer,
@@ -108,6 +108,25 @@ class AdminMenuViewSet(
 
     def perform_create(self, serializer: BaseSerializer[Menu]) -> None:
         serializer.save(restaurant_id=require_restaurant_id_from_auth(self.request))
+
+
+@extend_schema(tags=["Menu Admin"])
+class AdminAllergenViewSet(viewsets.ModelViewSet[Allergen]):
+    permission_classes = [IsAdmin]
+    queryset = Allergen.objects.all()
+    serializer_class = AllergenSerializer
+    lookup_field = "public_id"
+    ordering_fields = ["name", "created_at", "updated_at"]
+
+    def perform_destroy(self, instance: Allergen) -> None:
+        # Keep dish allergen values valid by removing this catalog entry everywhere
+        # before deleting it. JSON lists need per-row updates rather than a relation
+        # cascade.
+        with transaction.atomic():
+            for item in MenuItem.objects.filter(allergens__contains=[instance.name]).iterator():
+                item.allergens = [allergen for allergen in item.allergens if allergen != instance.name]
+                item.save(update_fields=["allergens"])
+            instance.delete()
 
 
 @extend_schema(tags=["Menu Admin"])
@@ -225,7 +244,7 @@ class MenuItemViewSet(
     serializer_class = MenuItemSerializer
     permission_classes = [AllowAny]
     filterset_class = MenuItemFilter
-    ordering_fields = ["created_at", "updated_at", "sort_order", "name", "price"]
+    ordering_fields = ["created_at", "updated_at", "sort_order", "name", "price", "likes_count"]
 
     def get_queryset(self) -> QuerySet[MenuItem]:
         restaurant_id = self.resolve_restaurant_or_not_found()
@@ -335,9 +354,9 @@ class MenuItemViewSet(
     responses={200: serializers.ListSerializer(child=serializers.CharField())},
 )
 class AllergenListView(APIView):
-    """The allowed allergen vocabulary — the single source of truth for clients."""
+    """Database-managed allergen vocabulary for menu filtering and editing."""
 
     permission_classes = [AllowAny]
 
     def get(self, request: Request) -> Response:
-        return Response(ALLERGENS)
+        return Response(list(Allergen.objects.values_list("name", flat=True)))
