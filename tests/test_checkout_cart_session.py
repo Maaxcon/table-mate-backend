@@ -26,6 +26,7 @@ from apps.orders.models import (
     OrderStatus,
     Session,
     SessionStatus,
+    VoidReason,
 )
 from apps.orders.services import (
     add_item_to_cart,
@@ -234,6 +235,7 @@ def test_concurrent_voids_keep_order_and_session_totals_reconciled(
     order_item_ids = list(OrderItem.objects.filter(order=order).values_list("id", flat=True))
     actor = user_factory()
     actor.save()
+    VoidReason.objects.get_or_create(code="mispick", defaults={"label": "Mispick"})
 
     def _void(order_item_id: int) -> None:
         try:
