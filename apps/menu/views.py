@@ -123,7 +123,10 @@ class AdminAllergenViewSet(viewsets.ModelViewSet[Allergen]):
         # before deleting it. JSON lists need per-row updates rather than a relation
         # cascade.
         with transaction.atomic():
-            for item in MenuItem.objects.filter(allergens__contains=[instance.name]).iterator():
+            restaurant_id = require_restaurant_id_from_auth(self.request)
+            for item in MenuItem.objects.filter(
+                restaurant_id=restaurant_id, allergens__contains=[instance.name]
+            ).iterator():
                 item.allergens = [allergen for allergen in item.allergens if allergen != instance.name]
                 item.save(update_fields=["allergens"])
             instance.delete()
