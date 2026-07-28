@@ -385,7 +385,7 @@ class EmployeeViewSet(
         employee = services.assign_employee(
             user=user,
             restaurant_id=restaurant_id,
-            **serializer.validated_data,
+            role=serializer.validated_data["role"],
         )
         return Response(EmployeeSerializer(employee, context=self.get_serializer_context()).data)
 

@@ -128,9 +128,6 @@ class EmployeeCreateSerializer(serializers.ModelSerializer[User]):
 class EmployeeAssignSerializer(serializers.Serializer[Any]):
     email = serializers.EmailField()
     role = serializers.ChoiceField(choices=RoleCode.choices)
-    first_name = serializers.CharField(required=False, allow_blank=True)
-    last_name = serializers.CharField(required=False, allow_blank=True)
-    phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def validate_role(self, value: str) -> str:
         if value == RoleCode.CUSTOMER:
@@ -141,11 +138,9 @@ class EmployeeAssignSerializer(serializers.Serializer[Any]):
         try:
             self._user = User.objects.get(email__iexact=value)
         except User.DoesNotExist:
-            raise serializers.ValidationError("No user found with this email.") from None
+            raise serializers.ValidationError("This user cannot be assigned as staff.") from None
         if self._user.role != RoleCode.CUSTOMER or self._user.restaurant_id is not None:
-            raise serializers.ValidationError(
-                "This user is already staff. Update their role through the employee record."
-            )
+            raise serializers.ValidationError("This user cannot be assigned as staff.")
         return value
 
     @property

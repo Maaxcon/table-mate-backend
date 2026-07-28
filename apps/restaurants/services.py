@@ -77,16 +77,10 @@ def create_employee(*, restaurant_id: int, email: str, role: str, **data: Any) -
 
 
 @transaction.atomic
-def assign_employee(*, user: User, restaurant_id: int, role: str, **data: Any) -> User:
+def assign_employee(*, user: User, restaurant_id: int, role: str) -> User:
     user.role = role
     user.restaurant_id = restaurant_id
-    user.is_active = data.get("is_active", True)
-    changed = ["role", "restaurant_id", "is_active"]
-    for field in ("first_name", "last_name", "phone"):
-        if field in data:
-            setattr(user, field, data[field])
-            changed.append(field)
-    user.save(update_fields=[*changed, "updated_at"])
+    user.save(update_fields=["role", "restaurant_id", "updated_at"])
     return user
 
 

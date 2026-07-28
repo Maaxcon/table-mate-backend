@@ -4273,13 +4273,6 @@ components:
           format: email
         role:
           $ref: '#/components/schemas/RoleEnum'
-        first_name:
-          type: string
-        last_name:
-          type: string
-        phone:
-          type: string
-          nullable: true
       required:
       - email
       - role
