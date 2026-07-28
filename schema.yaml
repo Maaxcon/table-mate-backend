@@ -6107,6 +6107,10 @@ components:
     PatchedShiftWrite:
       type: object
       properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
         employee:
           type: string
           format: uuid
@@ -6922,6 +6926,10 @@ components:
     ShiftWrite:
       type: object
       properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
         employee:
           type: string
           format: uuid
@@ -6940,6 +6948,7 @@ components:
       - date
       - employee
       - end_time
+      - public_id
       - start_time
     SourceEnum:
       enum:

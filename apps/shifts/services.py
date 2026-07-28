@@ -1,5 +1,6 @@
 from datetime import date as date_type
 from datetime import time as time_type
+from typing import Any
 
 from django.db import transaction
 
@@ -59,7 +60,7 @@ def create_shift(
 
 
 @transaction.atomic
-def update_shift(shift: Shift, **data: object) -> Shift:
+def update_shift(shift: Shift, **data: Any) -> Shift:
     allowed = frozenset({"employee", "date", "start_time", "end_time", "notes"})
     changed = [f for f in allowed if f in data]
     if changed:

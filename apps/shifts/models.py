@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -38,7 +40,7 @@ class Shift(BaseModel):
         if self.employee_id and self.employee.role not in (RoleCode.WAITER, RoleCode.COOK, RoleCode.ADMIN):
             raise ValidationError("Shifts can only be assigned to staff (waiter, cook, or admin).")
 
-    def save(self, *args: object, **kwargs: object) -> None:
+    def save(self, *args: Any, **kwargs: Any) -> None:
         self.full_clean()
         super().save(*args, **kwargs)
 

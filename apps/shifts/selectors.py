@@ -1,4 +1,5 @@
 from datetime import date as date_type
+from typing import Any
 
 from django.db.models import QuerySet
 
@@ -55,7 +56,7 @@ def get_month_summary(
     year: int,
     month: int,
     employee_id: str | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return total shift hours per employee for a given month."""
     qs = Shift.objects.filter(
         restaurant_id=restaurant_id,
@@ -66,7 +67,7 @@ def get_month_summary(
     if employee_id is not None:
         qs = qs.filter(employee__public_id=employee_id)
 
-    results: list[dict] = []
+    results: list[dict[str, Any]] = []
     for shift in qs:
         start_minutes = shift.start_time.hour * 60 + shift.start_time.minute
         end_minutes = shift.end_time.hour * 60 + shift.end_time.minute

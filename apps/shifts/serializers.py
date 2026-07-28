@@ -14,7 +14,8 @@ from .services import find_overlapping_shifts
 
 class _EmployeeSlugField(PublicIdRelatedField[User]):
     def get_queryset(self) -> QuerySet[User]:
-        user = self.context.get("request").user if self.context.get("request") else None
+        request = self.context.get("request")
+        user = request.user if request else None
         qs = User.objects.all()
         if user and user.restaurant_id:
             qs = qs.filter(restaurant_id=user.restaurant_id)
@@ -104,8 +105,8 @@ class ShiftWriteSerializer(serializers.ModelSerializer[Shift]):
                                 f"Shift must be within working hours ({open_str}–{close_str})."
                             )
 
-        if all(v is not None for v in [employee, date, start_time, end_time]):
-            restaurant_id = get_restaurant_id_from_auth(self.context.get("request"))
+        if employee is not None and date is not None and start_time is not None and end_time is not None:
+            restaurant_id = get_restaurant_id_from_auth(request) if request else None
             if restaurant_id is not None:
                 overlaps = find_overlapping_shifts(
                     restaurant_id=restaurant_id,

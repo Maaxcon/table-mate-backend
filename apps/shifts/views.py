@@ -1,6 +1,8 @@
 from datetime import date as date_type
+from typing import Any, cast
 
 from django.db import IntegrityError
+from django.db.models import QuerySet
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -31,25 +33,25 @@ class ShiftViewSet(
     queryset = Shift.objects.all()
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[Any]:
         if self.action in ("list", "retrieve", "month_summary"):
             return [IsStaff()]
         return [IsAdmin()]
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[Any]:
         if self.action in ("create", "partial_update", "update"):
             return ShiftWriteSerializer
         if self.action == "copy":
             return CopyShiftsSerializer
         return ShiftSerializer
 
-    def safely_get_queryset(self, qs):
+    def safely_get_queryset(self, qs: QuerySet[Shift]) -> QuerySet[Shift]:
         return qs.select_related("employee")
 
-    def create(self, request: Request, *args, **kwargs):
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         write_serializer = self.get_serializer(data=request.data)
         write_serializer.is_valid(raise_exception=True)
-        self.perform_create(write_serializer)
+        self.perform_create(cast(ShiftWriteSerializer, write_serializer))
         read_serializer = ShiftSerializer(
             write_serializer.instance,
             context=self.get_serializer_context(),
@@ -57,16 +59,16 @@ class ShiftViewSet(
         headers = self.get_success_headers(read_serializer.data)
         return Response(read_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
-    def update(self, request: Request, *args, **kwargs):
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
         write_serializer = self.get_serializer(instance, data=request.data, partial=partial)
         write_serializer.is_valid(raise_exception=True)
-        self.perform_update(write_serializer)
+        self.perform_update(cast(ShiftWriteSerializer, write_serializer))
         read_serializer = ShiftSerializer(instance, context=self.get_serializer_context())
         return Response(read_serializer.data)
 
-    def list(self, request: Request, *args, **kwargs):
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
             return Response([])
@@ -113,8 +115,11 @@ class ShiftViewSet(
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: ShiftWriteSerializer) -> None:  # type: ignore[override]
         restaurant_id = get_restaurant_id_from_auth(self.request)
+        if restaurant_id is None:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError("Restaurant not found.")
         try:
             shift = create_shift(
                 restaurant_id=restaurant_id,
@@ -125,8 +130,11 @@ class ShiftViewSet(
             raise DRFValidationError(str(e)) from e
         serializer.instance = shift
 
-    def perform_update(self, serializer):
+    def perform_update(self, serializer: ShiftWriteSerializer) -> None:  # type: ignore[override]
         shift = serializer.instance
+        if shift is None:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError("Shift instance is required for update.")
         try:
             update_shift(shift, **serializer.validated_data)
         except ValueError as e:
@@ -134,11 +142,11 @@ class ShiftViewSet(
             raise DRFValidationError(str(e)) from e
         serializer.instance = shift
 
-    def perform_destroy(self, instance):
+    def perform_destroy(self, instance: Shift) -> None:
         delete_shift(instance)
 
     @action(detail=False, methods=["post"])
-    def copy(self, request: Request, *args, **kwargs):
+    def copy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
             return Response(
@@ -165,7 +173,7 @@ class ShiftViewSet(
         return Response({"copied": total}, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["get"])
-    def month_summary(self, request: Request, *args, **kwargs):
+    def month_summary(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
             return Response({"total_hours": 0.0, "shifts": []})
