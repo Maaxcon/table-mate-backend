@@ -23,7 +23,7 @@ class MenuItemFilter(django_filters.FilterSet):  # type: ignore[misc]
         choices=allergen_choices,
         method="filter_allergens",
     )
-    ingredients = django_filters.CharFilter(field_name="ingredients", lookup_expr="icontains")
+    ingredients = django_filters.CharFilter(method="filter_ingredients")
 
     class Meta:
         model = MenuItem
@@ -48,3 +48,6 @@ class MenuItemFilter(django_filters.FilterSet):  # type: ignore[misc]
         for allergen in values:
             queryset = queryset.exclude(allergens__contains=[allergen])
         return queryset
+
+    def filter_ingredients(self, queryset: QuerySet[MenuItem], name: str, value: str) -> QuerySet[MenuItem]:
+        return queryset.filter(ingredients__contains=[value])
