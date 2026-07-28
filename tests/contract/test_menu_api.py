@@ -474,6 +474,43 @@ class TestMenuItemSearch:
         names = [r["name"] for r in response.json()["results"]]
         assert "Ribeye Steak" in names
 
+    def test_search_matches_ingredients_and_honours_allergen_filter(
+        self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
+    ) -> None:
+        excluded = MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            name="Cashew curry",
+            ingredients=["Cashew"],
+            allergens=["Горіхи"],
+            is_available=True,
+        )
+        matching = MenuItemFactory(
+            restaurant=restaurant,
+            menu=menu,
+            category=category,
+            name="Vegetable curry",
+            ingredients=["Cashew"],
+            is_available=True,
+        )
+
+        url = reverse("menu-item-search")
+        response: Any = api_client.get(
+            url,
+            {
+                "restaurant": str(restaurant.public_id),
+                "q": "cashew",
+                "category": str(category.public_id),
+                "allergens": "Горіхи",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        results = response.json()["results"]
+        assert [result["public_id"] for result in results] == [str(matching.public_id)]
+        assert str(excluded.public_id) not in [result["public_id"] for result in results]
+
     def test_search_orders_by_price(
         self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
     ) -> None:

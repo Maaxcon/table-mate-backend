@@ -52,7 +52,8 @@ def search_menu_items(
         .filter(
             Q(name__icontains=query)
             | Q(description__icontains=query)
-            | Q(category__name__icontains=query),
+            | Q(category__name__icontains=query)
+            | Q(ingredients__icontains=query),
         )
         .select_related("category")
     )
