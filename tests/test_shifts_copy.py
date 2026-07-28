@@ -1,7 +1,6 @@
 from typing import Any
 
 import pytest
-from django.utils import timezone
 
 from apps.authentication.models import RoleCode
 
@@ -58,7 +57,7 @@ class TestCopyShifts:
         assert resp.status_code == 201
         assert resp.data["copied"] == 1
 
-    def test_copy_returns_409_on_conflict(self, api: Any, restaurant: Any, user_factory: Any) -> None:
+    def test_copy_skips_overlapping_shifts(self, api: Any, restaurant: Any, user_factory: Any) -> None:
         emp = user_factory(role=RoleCode.WAITER)
         emp.save()
         emp.restaurant_id = restaurant.id
@@ -73,7 +72,51 @@ class TestCopyShifts:
             "target_dates": ["2026-07-08"],
         }, format="json")
 
-        assert resp.status_code == 409
+        assert resp.status_code == 201
+        assert resp.data["copied"] == 0
+
+    def test_copy_skips_partial_overlap(self, api: Any, restaurant: Any, user_factory: Any) -> None:
+        emp = user_factory(role=RoleCode.WAITER)
+        emp.save()
+        emp.restaurant_id = restaurant.id
+        emp.save(update_fields=["restaurant_id"])
+
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        self._create_shift(auth.client, str(emp.public_id), "2026-07-01", start="09:00", end="12:00")
+        self._create_shift(auth.client, str(emp.public_id), "2026-07-08", start="11:00", end="13:00")
+
+        resp = auth.client.post("/api/shifts/copy/", {
+            "source_date": "2026-07-01",
+            "target_dates": ["2026-07-08"],
+        }, format="json")
+
+        assert resp.status_code == 201
+        assert resp.data["copied"] == 0
+
+    def test_copy_skips_only_overlapping_on_multi_employee(
+        self, api: Any, restaurant: Any, user_factory: Any
+    ) -> None:
+        emp1 = user_factory(role=RoleCode.WAITER)
+        emp1.save()
+        emp1.restaurant_id = restaurant.id
+        emp1.save(update_fields=["restaurant_id"])
+        emp2 = user_factory(role=RoleCode.COOK)
+        emp2.save()
+        emp2.restaurant_id = restaurant.id
+        emp2.save(update_fields=["restaurant_id"])
+
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        self._create_shift(auth.client, str(emp1.public_id), "2026-07-01")
+        self._create_shift(auth.client, str(emp2.public_id), "2026-07-01")
+        self._create_shift(auth.client, str(emp1.public_id), "2026-07-08")
+
+        resp = auth.client.post("/api/shifts/copy/", {
+            "source_date": "2026-07-01",
+            "target_dates": ["2026-07-08"],
+        }, format="json")
+
+        assert resp.status_code == 201
+        assert resp.data["copied"] == 1
 
     def test_copy_empty_source_returns_0_copied(self, api: Any, restaurant: Any) -> None:
         auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)

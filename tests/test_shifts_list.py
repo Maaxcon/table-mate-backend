@@ -57,7 +57,7 @@ class TestListShifts:
 
         assert resp.status_code == 200
         assert len(resp.data["results"]) == 1
-        assert resp.data["results"][0]["employee"] == str(emp1.public_id)
+        assert resp.data["results"][0]["employee"] == emp1.public_id
 
     def test_list_filters_by_date_range(self, api: Any, restaurant: Any, user_factory: Any) -> None:
         emp = user_factory(role=RoleCode.WAITER)

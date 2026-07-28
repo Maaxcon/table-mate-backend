@@ -30,7 +30,7 @@ class TestCreateShift:
         resp = auth.client.post("/api/shifts/", data, format="json")
 
         assert resp.status_code == 201
-        assert resp.data["employee"] == str(employee.public_id)
+        assert resp.data["employee"] == employee.public_id
         assert resp.data["date"] == data["date"]
         assert resp.data["start_time"] == "09:00:00"
         assert resp.data["end_time"] == "17:00:00"
@@ -145,3 +145,114 @@ class TestValidation:
         resp = auth.client.post("/api/shifts/", data, format="json")
 
         assert resp.status_code == 400
+
+    def test_create_overlapping_shift_returns_400(self, api: Any, restaurant: Any, user_factory: Any) -> None:
+        employee = user_factory(role=RoleCode.WAITER)
+        employee.save()
+        employee.restaurant_id = restaurant.id
+        employee.save(update_fields=["restaurant_id"])
+
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        today = timezone.now().date().isoformat()
+        first = auth.client.post("/api/shifts/", {
+            "employee": str(employee.public_id),
+            "date": today,
+            "start_time": "09:00",
+            "end_time": "17:00",
+        }, format="json")
+        assert first.status_code == 201
+
+        resp = auth.client.post("/api/shifts/", {
+            "employee": str(employee.public_id),
+            "date": today,
+            "start_time": "12:00",
+            "end_time": "13:00",
+        }, format="json")
+        assert resp.status_code == 400
+        assert "overlap" in str(resp.data).lower()
+
+    def test_create_non_overlapping_shifts_same_day_succeeds(
+        self, api: Any, restaurant: Any, user_factory: Any
+    ) -> None:
+        employee = user_factory(role=RoleCode.WAITER)
+        employee.save()
+        employee.restaurant_id = restaurant.id
+        employee.save(update_fields=["restaurant_id"])
+
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        today = timezone.now().date().isoformat()
+        first = auth.client.post("/api/shifts/", {
+            "employee": str(employee.public_id),
+            "date": today,
+            "start_time": "09:00",
+            "end_time": "12:00",
+        }, format="json")
+        assert first.status_code == 201
+
+        second = auth.client.post("/api/shifts/", {
+            "employee": str(employee.public_id),
+            "date": today,
+            "start_time": "13:00",
+            "end_time": "17:00",
+        }, format="json")
+        assert second.status_code == 201
+
+    def test_update_shift_overlapping_returns_400(self, api: Any, restaurant: Any, user_factory: Any) -> None:
+        employee = user_factory(role=RoleCode.WAITER)
+        employee.save()
+        employee.restaurant_id = restaurant.id
+        employee.save(update_fields=["restaurant_id"])
+
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        today = timezone.now().date().isoformat()
+        first = auth.client.post("/api/shifts/", {
+            "employee": str(employee.public_id),
+            "date": today,
+            "start_time": "09:00",
+            "end_time": "12:00",
+        }, format="json")
+        assert first.status_code == 201
+
+        second = auth.client.post("/api/shifts/", {
+            "employee": str(employee.public_id),
+            "date": today,
+            "start_time": "13:00",
+            "end_time": "17:00",
+        }, format="json")
+        second_id = second.data["public_id"]
+        assert second.status_code == 201
+
+        patch_resp = auth.client.patch(
+            f"/api/shifts/{second_id}/",
+            {"start_time": "11:00"},
+            format="json",
+        )
+        assert patch_resp.status_code == 400
+        assert "overlap" in str(patch_resp.data).lower()
+
+    def test_update_patch_without_time_fields_ignores_overlap_check(
+        self, api: Any, restaurant: Any, user_factory: Any
+    ) -> None:
+        employee = user_factory(role=RoleCode.WAITER)
+        employee.save()
+        employee.restaurant_id = restaurant.id
+        employee.save(update_fields=["restaurant_id"])
+
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        today = timezone.now().date().isoformat()
+        first = auth.client.post("/api/shifts/", {
+            "employee": str(employee.public_id),
+            "date": today,
+            "start_time": "09:00",
+            "end_time": "17:00",
+        }, format="json")
+        shift_id = first.data["public_id"]
+        assert first.status_code == 201
+
+        patch_resp = auth.client.patch(
+            f"/api/shifts/{shift_id}/",
+            {"notes": "Updated notes"},
+            format="json",
+        )
+        assert patch_resp.status_code == 200
+        assert patch_resp.data["notes"] == "Updated notes"

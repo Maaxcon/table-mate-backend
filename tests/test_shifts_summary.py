@@ -1,7 +1,6 @@
 from typing import Any
 
 import pytest
-from django.utils import timezone
 
 from apps.authentication.models import RoleCode
 
