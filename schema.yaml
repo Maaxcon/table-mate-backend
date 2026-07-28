@@ -500,32 +500,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedAllergenList'
           description: ''
-    post:
-      operationId: menu_admin_allergens_create
-      tags:
-      - Menu Admin
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Allergen'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Allergen'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Allergen'
-        required: true
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Allergen'
-          description: ''
   /api/menu/admin/allergens/{public_id}/:
     get:
       operationId: menu_admin_allergens_retrieve
@@ -548,88 +522,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Allergen'
           description: ''
-    put:
-      operationId: menu_admin_allergens_update
-      parameters:
-      - in: path
-        name: public_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Menu Admin
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Allergen'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Allergen'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Allergen'
-        required: true
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Allergen'
-          description: ''
-    patch:
-      operationId: menu_admin_allergens_partial_update
-      parameters:
-      - in: path
-        name: public_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Menu Admin
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedAllergen'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedAllergen'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedAllergen'
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Allergen'
-          description: ''
-    delete:
-      operationId: menu_admin_allergens_destroy
-      parameters:
-      - in: path
-        name: public_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Menu Admin
-      security:
-      - jwtAuth: []
-      - jwt_Auth: []
-      responses:
-        '204':
-          description: No response body
   /api/menu/admin/categories/:
     get:
       operationId: menu_admin_categories_list
@@ -5681,24 +5573,6 @@ components:
         likes_count:
           type: integer
           readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-    PatchedAllergen:
-      type: object
-      properties:
-        public_id:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-          maxLength: 100
         created_at:
           type: string
           format: date-time
