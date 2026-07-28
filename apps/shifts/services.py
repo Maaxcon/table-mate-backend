@@ -7,6 +7,26 @@ from apps.authentication.models import User
 from .models import Shift
 
 
+def find_overlapping_shifts(
+    restaurant_id: int,
+    employee: User,
+    date: date_type,
+    start_time: str,
+    end_time: str,
+    exclude_shift_id: int | None = None,
+) -> list[Shift]:
+    qs = Shift.objects.filter(
+        restaurant_id=restaurant_id,
+        employee=employee,
+        date=date,
+        start_time__lt=end_time,
+        end_time__gt=start_time,
+    )
+    if exclude_shift_id is not None:
+        qs = qs.exclude(id=exclude_shift_id)
+    return list(qs)
+
+
 @transaction.atomic
 def create_shift(
     *,
