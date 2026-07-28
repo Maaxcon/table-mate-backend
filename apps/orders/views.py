@@ -298,9 +298,31 @@ class TicketViewSet(
         new_status = serializer.validated_data.get("status")
 
         if new_status == TicketStatus.ACTIVE and instance.status != TicketStatus.ACTIVE:
+            pending_items = list(instance.items.filter(status=OrderItemStatus.PENDING).select_related("menu_item"))
+            table_number = instance.session.table.public_number
+            active_cart = CartSession.objects.filter(
+                reservation=instance.session.reservation,
+                status=CartSessionStatus.ACTIVE,
+            ).first()
             instance.items.filter(status=OrderItemStatus.PENDING).update(
                 status=OrderItemStatus.IN_PROGRESS,
             )
+
+            if pending_items:
+
+                def _emit_item_status_changes() -> None:
+                    for item in pending_items:
+                        emit_order_item_status_changed(
+                            instance.restaurant_id,
+                            order_item_id=str(item.public_id),
+                            table_number=table_number,
+                            menu_item_name=item.menu_item.name,
+                            status=OrderItemStatus.IN_PROGRESS,
+                        )
+                    if active_cart is not None:
+                        cart_group_send(active_cart.public_id)
+
+                transaction.on_commit(_emit_item_status_changes)
 
         if new_status == TicketStatus.COMPLETED:
             restaurant_id = instance.restaurant_id
@@ -308,6 +330,8 @@ class TicketViewSet(
             tz = ZoneInfo(settings.timezone) if settings and settings.timezone else ZoneInfo("UTC")
             now_local = timezone.now().astimezone(tz)
             serializer.save(completed_at=now_local)
+        elif new_status == TicketStatus.ACTIVE and instance.status != TicketStatus.ACTIVE:
+            serializer.save(started_at=timezone.now())
         else:
             serializer.save()
 

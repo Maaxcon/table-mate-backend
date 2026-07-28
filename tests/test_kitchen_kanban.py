@@ -3,6 +3,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
+from unittest import mock
 
 import pytest
 from django.urls import reverse
@@ -11,6 +12,7 @@ from rest_framework import status
 from apps.authentication.models import RoleCode
 from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.orders.models import (
+    CartSession,
     OrderItemStatus,
     Session,
     Ticket,
@@ -923,6 +925,58 @@ class TestTicketDailyLabel:
 
 @pytest.mark.django_db(databases=["default"])
 class TestTicketStatusTransitions:
+    def test_incoming_to_active_broadcasts_item_changes_and_starts_ticket(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.COOK, restaurant_id=restaurant.id)
+        actor = auth.user
+        session = _build_session(table, restaurant.id, actor)
+        ticket = create_order_with_items(
+            session=session,
+            items=[
+                {"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None},
+                {"menu_item": item, "guest_slot": 2, "quantity": 1, "comment": None},
+            ],
+            actor=actor,
+        ).tickets.first()
+        assert ticket is not None
+        cart = CartSession.objects.create(restaurant=restaurant, reservation=session.reservation)
+
+        ticket_url = reverse("ticket-detail", kwargs={"public_id": str(ticket.public_id)})
+        with (
+            mock.patch("apps.orders.views.emit_order_item_status_changed") as emit_status,
+            mock.patch("apps.orders.views.cart_group_send") as send_cart,
+            mock.patch(
+                "apps.orders.views.transaction.on_commit",
+                side_effect=lambda callback: callback(),
+            ) as on_commit,
+        ):
+            response = auth.client.patch(
+                ticket_url,
+                {"status": "active"},
+                content_type="application/json",
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        ticket.refresh_from_db()
+        assert ticket.status == TicketStatus.ACTIVE
+        assert ticket.started_at is not None
+        assert list(ticket.items.values_list("status", flat=True)) == [
+            OrderItemStatus.IN_PROGRESS,
+            OrderItemStatus.IN_PROGRESS,
+        ]
+        assert emit_status.call_count == 2
+        assert {call.kwargs["order_item_id"] for call in emit_status.call_args_list} == {
+            str(item_id) for item_id in ticket.items.values_list("public_id", flat=True)
+        }
+        assert {call.kwargs["status"] for call in emit_status.call_args_list} == {OrderItemStatus.IN_PROGRESS}
+        send_cart.assert_called_once_with(cart.public_id)
+        on_commit.assert_called_once()
+
     def test_incoming_to_active(
         self,
         api: Callable[..., AuthContext],
