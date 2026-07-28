@@ -9,6 +9,7 @@ from apps.restaurants.selectors import get_working_hours_for_date
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
 from .models import Shift
+from .services import find_overlapping_shifts
 
 
 class _EmployeeSlugField(PublicIdRelatedField[User]):
@@ -75,6 +76,13 @@ class ShiftWriteSerializer(serializers.ModelSerializer[Shift]):
         start_time = attrs.get("start_time")
         end_time = attrs.get("end_time")
         date = attrs.get("date")
+        employee = attrs.get("employee")
+
+        if self.instance is not None:
+            start_time = start_time or self.instance.start_time
+            end_time = end_time or self.instance.end_time
+            date = date or self.instance.date
+            employee = employee or self.instance.employee
 
         if start_time is not None and end_time is not None and end_time <= start_time:
             raise serializers.ValidationError("end_time must be after start_time.")
@@ -95,6 +103,22 @@ class ShiftWriteSerializer(serializers.ModelSerializer[Shift]):
                             raise serializers.ValidationError(
                                 f"Shift must be within working hours ({open_str}–{close_str})."
                             )
+
+        if all(v is not None for v in [employee, date, start_time, end_time]):
+            restaurant_id = get_restaurant_id_from_auth(self.context.get("request"))
+            if restaurant_id is not None:
+                overlaps = find_overlapping_shifts(
+                    restaurant_id=restaurant_id,
+                    employee=employee,
+                    date=date,
+                    start_time=start_time,
+                    end_time=end_time,
+                    exclude_shift_id=self.instance.id if self.instance else None,
+                )
+                if overlaps:
+                    raise serializers.ValidationError(
+                        "This shift overlaps with an existing shift."
+                    )
 
         return attrs
 

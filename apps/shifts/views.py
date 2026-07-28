@@ -46,6 +46,26 @@ class ShiftViewSet(
     def safely_get_queryset(self, qs):
         return qs.select_related("employee")
 
+    def create(self, request: Request, *args, **kwargs):
+        write_serializer = self.get_serializer(data=request.data)
+        write_serializer.is_valid(raise_exception=True)
+        self.perform_create(write_serializer)
+        read_serializer = ShiftSerializer(
+            write_serializer.instance,
+            context=self.get_serializer_context(),
+        )
+        headers = self.get_success_headers(read_serializer.data)
+        return Response(read_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request: Request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        write_serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        write_serializer.is_valid(raise_exception=True)
+        self.perform_update(write_serializer)
+        read_serializer = ShiftSerializer(instance, context=self.get_serializer_context())
+        return Response(read_serializer.data)
+
     def list(self, request: Request, *args, **kwargs):
         restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
@@ -95,15 +115,23 @@ class ShiftViewSet(
 
     def perform_create(self, serializer):
         restaurant_id = get_restaurant_id_from_auth(self.request)
-        shift = create_shift(
-            restaurant_id=restaurant_id,
-            **serializer.validated_data,
-        )
+        try:
+            shift = create_shift(
+                restaurant_id=restaurant_id,
+                **serializer.validated_data,
+            )
+        except ValueError as e:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError(str(e)) from e
         serializer.instance = shift
 
     def perform_update(self, serializer):
-        shift = self.get_object()
-        update_shift(shift, **serializer.validated_data)
+        shift = serializer.instance
+        try:
+            update_shift(shift, **serializer.validated_data)
+        except ValueError as e:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError(str(e)) from e
         serializer.instance = shift
 
     def perform_destroy(self, instance):
