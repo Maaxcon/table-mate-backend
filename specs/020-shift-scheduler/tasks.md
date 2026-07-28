@@ -95,7 +95,7 @@
 - [x] T033 [US2] Fetch shifts filtered to authenticated user (derive employee_id from JWT, no manual filter)
 - [x] T034 [US2] Ensure no create/edit/delete UI is rendered for waiter/cook roles — read-only layout
 - [x] T035 [US2] Implement empty state ("No shifts this month"), loading skeleton (7-column grid), error state with retry
-- [x] T036 [US2] Add link/button "View Month Summary" navigating to month summary page
+- [-] T036 [US2] ~~Add link/button "View Month Summary" navigating to month summary page~~ **SKIPPED** — month summary page is admin-only; staff don't need a nav link
 - [x] T037 [US2] Add role-based redirect: admin navigating to `/my-schedule` redirects to `/shifts`
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
@@ -164,12 +164,15 @@
 - [x] T061 [P] Add backend tests for copy shifts (success, conflict, employee filter) in `apps/shifts/tests/test_copy.py`
 - [x] T062 [P] Add backend tests for month summary (with data, empty, employee filter) in `apps/shifts/tests/test_summary.py`
 - [x] T063 [P] Add backend tests for role-based access (admin vs staff vs customer) in `apps/shifts/tests/test_permissions.py`
-- [x] T064 Add overlap detection warning (FR-013 SHOULD) — service-layer check in `apps/shifts/services.py` when creating/updating
+- [x] T064 Add overlap detection warning (FR-013 SHOULD) — wired in `ShiftWriteSerializer.validate()` for create/update, in `copy_shifts` service for copy; covered by T073–T075 tests
 - [x] T065 [P] Run `ruff` lint on `apps/shifts/` — fix any issues
 - [x] T066 [P] Run `bandit` security checks on `apps/shifts/` — fix any issues
 - [x] T067 Run `quickstart.md` validation scenarios to verify end-to-end backend behavior
 - [x] T068 Verify frontend URL query param persistence for date-filtered admin schedule page
 - [x] T069 Verify frontend role-based redirect edge cases (admin→shifts, staff→my-schedule, customer→home)
+- [x] T073 [P] Add backend tests for overlap detection on create (same employee, same date, overlapping times → 400)
+- [x] T074 [P] Add backend tests for overlap detection on update (PATCH start_time causing overlap → 400; PATCH notes without time fields → allowed)
+- [x] T075 [P] Add backend tests for overlap detection during copy (overlapping shifts skipped, partial overlap skipped, multi-employee partial skip)
 - [ ] T070 [P] Add frontend unit tests for shift list, calendar grid, summary table components
 - [ ] T071 [P] Add frontend integration test for full shift CRUD flow
 - [ ] T072 [P] Add frontend integration test for staff schedule calendar flow
