@@ -1,3 +1,4 @@
+import concurrent.futures
 from collections.abc import Callable, Iterator
 from datetime import timedelta
 from decimal import Decimal
@@ -5,6 +6,7 @@ from typing import Any
 from unittest import mock
 
 import pytest
+from django.db import connection
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -137,9 +139,7 @@ def test_service_charge_distribution_sums_exactly_across_items(
     # Prices chosen so the proportional shares have sub-cent parts that must be
     # rounded; the remainder has to land on the last item for the sum to be exact.
     for index, price in enumerate((Decimal("3.3300"), Decimal("3.3300"), Decimal("3.3400"))):
-        menu_item = MenuItem.objects.create(
-            restaurant=restaurant, menu=item.menu, name=f"Dish {index}", price=price
-        )
+        menu_item = MenuItem.objects.create(restaurant=restaurant, menu=item.menu, name=f"Dish {index}", price=price)
         add_item_to_cart(session=cart, menu_item_id=str(menu_item.public_id), quantity=1)
 
     order = checkout_cart_session(cart_session=cart)
@@ -215,6 +215,44 @@ def test_voiding_item_keeps_bill_reconciled(
     session = Session.objects.get(reservation__table=table)
     assert session.total == session.subtotal + session.tax + session.service_charge
     assert session.total == order.total_amount
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_voids_keep_order_and_session_totals_reconciled(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+    user_factory: Callable[..., Any],
+) -> None:
+    _active_reservation(restaurant, table)
+    cart = ensure_active_cart_for_table(table=table)
+    side = MenuItem.objects.create(restaurant=restaurant, menu=item.menu, name="Side", price=Decimal("10.0000"))
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1)
+    add_item_to_cart(session=cart, menu_item_id=str(side.public_id), quantity=1)
+    order = checkout_cart_session(cart_session=cart)
+    order_item_ids = list(OrderItem.objects.filter(order=order).values_list("id", flat=True))
+    actor = user_factory()
+    actor.save()
+
+    def _void(order_item_id: int) -> None:
+        try:
+            order_item = OrderItem.objects.get(pk=order_item_id)
+            void_order_item(order_item, actor=actor, void_reason_code="mispick")
+        finally:
+            connection.close()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(_void, order_item_ids))
+
+    order.refresh_from_db()
+    session = Session.objects.get(pk=order.session_id)
+    assert order.total_amount == Decimal("0")
+    assert session.total == Decimal("0")
+    assert order.total_amount == sum(
+        (item.payable for item in OrderItem.objects.filter(order=order).exclude(status=OrderItemStatus.VOIDED)),
+        Decimal("0"),
+    )
 
 
 @pytest.mark.django_db

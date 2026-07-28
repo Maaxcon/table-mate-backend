@@ -615,6 +615,10 @@ def void_order_item(
     void_reason_code: str,
     note: str | None = None,
 ) -> OrderItem:
+    session = Session.objects.select_for_update().get(pk=order_item.order.session_id)
+    order = Order.objects.select_for_update().get(pk=order_item.order_id)
+    order_item = OrderItem.objects.select_for_update().get(pk=order_item.pk)
+
     if order_item.status == OrderItemStatus.VOIDED:
         raise ValueError("Order item is already voided.")
 
@@ -641,7 +645,6 @@ def void_order_item(
     # Re-derive the order totals from the surviving items so the bill stays
     # reconciled (total_amount == sum(item.payable)). Voiding a line just drops
     # its goods, tax and service share; the rest keep their frozen amounts.
-    order = order_item.order
     order_agg = (
         OrderItem.objects.filter(order=order)
         .exclude(status=OrderItemStatus.VOIDED)
@@ -658,7 +661,6 @@ def void_order_item(
 
     _recompute_order_payment_status({order.id})
 
-    session = order.session
     session_agg = (
         OrderItem.objects.filter(order__session=session)
         .exclude(status=OrderItemStatus.VOIDED)
