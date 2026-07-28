@@ -279,54 +279,28 @@ class TestAllergenCatalog:
         assert response.status_code == status.HTTP_200_OK
         assert "Custom allergen" in response.json()
 
-    def test_admin_can_add_allergen_before_assigning_it_to_a_dish(
-        self, api: Any, restaurant: Restaurant, menu: Menu, category: MenuCategory
-    ) -> None:
+    def test_admin_cannot_modify_global_catalog(self, api: Any, restaurant: Restaurant) -> None:
+        allergen = Allergen.objects.create(name="Custom allergen")
         auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
         create_allergen: Any = auth.client.post(
             reverse("admin-allergen-list"),
-            data={"name": "Custom allergen"},
+            data={"name": "Another allergen"},
             content_type="application/json",
         )
-
-        assert create_allergen.status_code == status.HTTP_201_CREATED
-
-        create_item: Any = auth.client.post(
-            reverse("admin-menu-item-list"),
-            data={
-                "menu": str(menu.public_id),
-                "category": str(category.public_id),
-                "name": "Custom dish",
-                "price": "12.5000",
-                "allergens": ["Custom allergen"],
-            },
+        update_allergen: Any = auth.client.patch(
+            reverse("admin-allergen-detail", kwargs={"public_id": allergen.public_id}),
+            data={"name": "Renamed allergen"},
             content_type="application/json",
         )
-
-        assert create_item.status_code == status.HTTP_201_CREATED
-        assert create_item.json()["allergens"] == ["Custom allergen"]
-
-    def test_admin_deleting_allergen_removes_it_from_dishes(
-        self, api: Any, restaurant: Restaurant, menu: Menu, category: MenuCategory
-    ) -> None:
-        allergen = Allergen.objects.create(name="Custom allergen")
-        item = MenuItemFactory(
-            restaurant=restaurant,
-            menu=menu,
-            category=category,
-            allergens=[allergen.name],
+        delete_allergen: Any = auth.client.delete(
+            reverse("admin-allergen-detail", kwargs={"public_id": allergen.public_id})
         )
-        other_item = MenuItemFactory(allergens=[allergen.name])
-        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
 
-        response: Any = auth.client.delete(reverse("admin-allergen-detail", kwargs={"public_id": allergen.public_id}))
-
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-        item.refresh_from_db()
-        other_item.refresh_from_db()
-        assert item.allergens == []
-        assert other_item.allergens == [allergen.name]
-        assert not Allergen.objects.filter(public_id=allergen.public_id).exists()
+        assert create_allergen.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert update_allergen.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert delete_allergen.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        allergen.refresh_from_db()
+        assert allergen.name == "Custom allergen"
 
 
 @pytest.mark.django_db(databases=["default"])

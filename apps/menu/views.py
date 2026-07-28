@@ -111,25 +111,12 @@ class AdminMenuViewSet(
 
 
 @extend_schema(tags=["Menu Admin"])
-class AdminAllergenViewSet(viewsets.ModelViewSet[Allergen]):
+class AdminAllergenViewSet(viewsets.ReadOnlyModelViewSet[Allergen]):
     permission_classes = [IsAdmin]
     queryset = Allergen.objects.all()
     serializer_class = AllergenSerializer
     lookup_field = "public_id"
     ordering_fields = ["name", "created_at", "updated_at"]
-
-    def perform_destroy(self, instance: Allergen) -> None:
-        # Keep dish allergen values valid by removing this catalog entry everywhere
-        # before deleting it. JSON lists need per-row updates rather than a relation
-        # cascade.
-        with transaction.atomic():
-            restaurant_id = require_restaurant_id_from_auth(self.request)
-            for item in MenuItem.objects.filter(
-                restaurant_id=restaurant_id, allergens__contains=[instance.name]
-            ).iterator():
-                item.allergens = [allergen for allergen in item.allergens if allergen != instance.name]
-                item.save(update_fields=["allergens"])
-            instance.delete()
 
 
 @extend_schema(tags=["Menu Admin"])
