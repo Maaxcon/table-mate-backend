@@ -124,6 +124,28 @@ def emit_order_item_status_changed(
     )
 
 
+def emit_waiter_called(
+    restaurant_id: int,
+    *,
+    session_id: str,
+    table_number: str,
+    guest_name: str | None = None,
+) -> None:
+    _broadcast_staff_event(
+        restaurant_id,
+        {
+            "type": "WAITER_CALLED",
+            "data": {
+                "id": str(uuid.uuid4()),
+                "session_id": session_id,
+                "table_number": table_number,
+                "guest_name": guest_name,
+                "timestamp": timezone.now().isoformat(),
+            },
+        },
+    )
+
+
 def emit_kitchen_ticket_injected(
     restaurant_id: int,
     *,

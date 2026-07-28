@@ -20,6 +20,7 @@ from .cart import (
 from .sessions import (
     auto_extend_all_sessions,
     auto_extend_session,
+    call_waiter,
     close_overdue_visit_sessions,
     close_stale_cart_sessions,
     create_cart_session,
@@ -37,6 +38,7 @@ __all__ = [
     "add_item_to_cart",
     "auto_extend_all_sessions",
     "auto_extend_session",
+    "call_waiter",
     "close_overdue_visit_sessions",
     "close_stale_cart_sessions",
     "create_cart_session",

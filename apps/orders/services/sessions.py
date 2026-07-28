@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import cast
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
@@ -16,9 +17,14 @@ from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import Table
 from apps.restaurants.selectors import get_working_hours_close_at
-from common.exceptions import NoActiveReservationError, ReservationConflictError, ReservationNotFoundError
+from common.exceptions import (
+    NoActiveReservationError,
+    ReservationConflictError,
+    ReservationNotFoundError,
+    WaiterCallCooldownError,
+)
 from common.hall_events import emit_hall_reservations_updated, emit_hall_session_auto_extended
-from common.notification_events import emit_cart_created
+from common.notification_events import emit_cart_created, emit_waiter_called
 
 from ..models import CartSession, CartSessionStatus, Session, SessionStatus
 from ..selectors import _resolve_allowed_reservation_participant_ids, get_reservation
@@ -139,6 +145,40 @@ def ensure_active_cart_for_table(
         if user is not None:
             session.participants.add(user)
     return session
+
+
+# Keep in sync with WAITER_CALL_SENT_RESET_MS in
+# table-mate-frontend/src/features/menu/pages/MenuPage/MenuPage.tsx — the
+# guest's button should re-enable right as this cooldown expires.
+_WAITER_CALL_COOLDOWN_SECONDS = 60
+
+
+def call_waiter(*, session: CartSession, guest_name: str | None = None) -> None:
+    """Notify staff that the guests at this table want a waiter.
+
+    Rate-limited per cart session so a guest tapping the button repeatedly
+    doesn't flood the staff notification stream.
+    """
+    cooldown_key = f"waiter_call_cooldown:{session.public_id}"
+    try:
+        acquired = cache.add(cooldown_key, "1", timeout=_WAITER_CALL_COOLDOWN_SECONDS)
+    except Exception:
+        # Mirrors _broadcast_staff_event's tolerance for a flaky cache/Redis:
+        # don't fail the guest's request over a rate-limit check, just skip
+        # rate-limiting for this call.
+        logger.exception("Waiter-call cooldown check failed for session %s", session.public_id)
+        acquired = True
+    if not acquired:
+        raise WaiterCallCooldownError
+
+    table = session.reservation.table
+    table_number = table.public_number if table else ""
+    emit_waiter_called(
+        session.restaurant_id,
+        session_id=str(session.public_id),
+        table_number=table_number,
+        guest_name=guest_name,
+    )
 
 
 _STALE_CART_BATCH_SIZE = 500
