@@ -539,6 +539,26 @@ preserving a stable public API surface.
   CI also enforces `drf-spectacular` schema drift detection and migration
   drift checks.
 
+## Specification Process
+
+### I. Cross-Repo Specification Principle
+
+Feature specifications in `specs/<feature>/spec.md` are the shared source of
+truth for BOTH frontend and backend development. Each spec MUST include:
+
+- **Backend changes**: API endpoints, models, services, selectors, permissions,
+  data contracts, events.
+- **Frontend changes**: Pages, components, navigation, state management,
+  user-facing flows, error/loading/empty states, accessibility notes.
+
+Design artifacts (plan.md, tasks.md, data-model.md, contracts/README.md) are
+also shared. Frontend and backend branches are developed simultaneously from the
+same spec. Where a change affects only one surface, note the exclusion explicitly
+to avoid ambiguity.
+
+Rationale: parallel frontend/backend development requires a single spec both
+teams can implement against. Separate specs diverge and create integration debt.
+
 ## Governance
 
 - This constitution supersedes conflicting local conventions.
@@ -554,4 +574,4 @@ preserving a stable public API surface.
 - Compliance reviews are mandatory at planning, task generation, code review,
   and CI.
 
-**Version**: 2.1.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-07-27
+**Version**: 2.2.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-07-27

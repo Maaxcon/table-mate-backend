@@ -88,8 +88,8 @@ All endpoints are scoped to `/api/shifts/` and require authentication.
 | Role | List | Retrieve | Create | Update | Delete | Copy | Month Summary |
 |------|------|----------|--------|--------|--------|------|---------------|
 | Admin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Waiter | ✅ (own) | ✅ (own) | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Cook | ✅ (own) | ✅ (own) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Waiter | ✅ (own) | ✅ (own) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Cook | ✅ (own) | ✅ (own) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Customer | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 ## Errors
