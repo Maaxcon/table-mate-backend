@@ -197,7 +197,7 @@ class TestPublicMenuItems:
             {
                 "restaurant": str(restaurant.public_id),
                 "allergens": ["Глютен", "Молоко"],
-                "ingredients": "tomato",
+                "ingredients": "Tomato",
             },
         )
 
@@ -205,6 +205,11 @@ class TestPublicMenuItems:
         results = response.json()["results"]
         assert [result["public_id"] for result in results] == [str(matching.public_id)]
         assert str(excluded.public_id) not in [result["public_id"] for result in results]
+
+        response = api_client.get(url, {"restaurant": str(restaurant.public_id), "ingredients": ","})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["results"] == []
 
     def test_rejects_unknown_allergen_filter(
         self, api_client: Client, restaurant: Restaurant, menu: Menu, category: MenuCategory
@@ -311,13 +316,16 @@ class TestAllergenCatalog:
             category=category,
             allergens=[allergen.name],
         )
+        other_item = MenuItemFactory(allergens=[allergen.name])
         auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
 
         response: Any = auth.client.delete(reverse("admin-allergen-detail", kwargs={"public_id": allergen.public_id}))
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
         item.refresh_from_db()
+        other_item.refresh_from_db()
         assert item.allergens == []
+        assert other_item.allergens == [allergen.name]
         assert not Allergen.objects.filter(public_id=allergen.public_id).exists()
 
 
