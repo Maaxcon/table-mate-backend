@@ -1,7 +1,8 @@
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Count, QuerySet
+from django.db.models import Avg, Count, DecimalField, QuerySet
+from django.db.models.functions import Coalesce
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers, status, viewsets
@@ -166,6 +167,14 @@ class AdminMenuItemViewSet(
         return (
             qs.select_related("menu", "category")
             .annotate(likes_count=Count("likes", distinct=True))
+            .annotate(
+                average_rating=Coalesce(
+                    Avg("dish_feedback__rating"),
+                    None,
+                    output_field=DecimalField(max_digits=3, decimal_places=2),
+                ),
+                rating_count=Count("dish_feedback", distinct=True),
+            )
             .order_by("menu_id", "sort_order", "id")
         )
 

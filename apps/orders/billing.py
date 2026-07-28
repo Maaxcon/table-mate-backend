@@ -159,6 +159,8 @@ def _finalize_session_orders_for_history(session: Session) -> None:
 
     for order in orders:
         create_receipt_from_order(order)
+
+
 def close_visit_session(*, session: Session, actor: User | None = None) -> Session:
     """End a visit and free the table.
 
@@ -188,9 +190,7 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
             if reservation.status == ReservationStatus.ACTIVE:
                 reservation.status = ReservationStatus.COMPLETED
                 now = timezone.now()
-                reservation.end_at = (
-                    now if now > reservation.start_at else reservation.start_at + timedelta(seconds=1)
-                )
+                reservation.end_at = now if now > reservation.start_at else reservation.start_at + timedelta(seconds=1)
                 reservation.save(update_fields=["status", "end_at"])
             close_reservation_carts(reservation)
 
@@ -325,6 +325,7 @@ def checkout_cart_session(
                     ticket=ticket,
                     menu_item=cart_item.menu_item,
                     guest_slot=cart_item.guest_slot or 0,
+                    guest_identity=cart_item.guest_identity,
                     guest_display_name=(
                         guest_names.get(cart_item.guest_identity) if cart_item.guest_identity else None
                     ),

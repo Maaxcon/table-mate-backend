@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Any, cast
 
 from django.db.models import Q, QuerySet
@@ -8,6 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.authentication.authentication import GuestJWTAuthentication
 from apps.authentication.models import User
@@ -66,6 +68,15 @@ def _get_guest_identity_from_request(request: Request) -> str | None:
         if payload.get("is_guest"):
             return payload.get("guest_id")
     return None
+
+
+def _issue_feedback_token(guest_id: str) -> str:
+    token = AccessToken()
+    token.payload["is_guest"] = True
+    token.payload["guest_id"] = guest_id
+    token.payload["feedback_only"] = True
+    token.set_exp(lifetime=timedelta(days=7))
+    return str(token)
 
 
 _MAX_CLIENT_ID_LENGTH = 64
@@ -313,6 +324,11 @@ class CartCheckoutView(GuestFallbackAuthMixin, APIView):
                 "service_charge": str(order.service_charge),
                 "total": str(order.total_amount),
                 "currency": order.currency,
+                **(
+                    {"feedback_token": _issue_feedback_token(guest_id)}
+                    if (guest_id := _get_guest_identity_from_request(request))
+                    else {}
+                ),
             },
             status=status.HTTP_201_CREATED,
         )

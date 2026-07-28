@@ -166,6 +166,7 @@ class CheckoutResponseSerializer(serializers.Serializer[None]):
     service_charge = serializers.CharField()
     total = serializers.CharField()
     currency = serializers.CharField()
+    feedback_token = serializers.CharField(required=False)
 
 
 class UpdateCartItemSerializer(serializers.Serializer[None]):

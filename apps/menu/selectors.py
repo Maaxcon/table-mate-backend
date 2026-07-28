@@ -1,4 +1,15 @@
-from django.db.models import BooleanField, Count, Exists, OuterRef, Q, QuerySet, Value
+from django.db.models import (
+    Avg,
+    BooleanField,
+    Count,
+    DecimalField,
+    Exists,
+    OuterRef,
+    Q,
+    QuerySet,
+    Value,
+)
+from django.db.models.functions import Coalesce
 
 from .models import Menu, MenuCategory, MenuItem, MenuItemLike
 
@@ -28,11 +39,23 @@ def _with_like_annotations(qs: QuerySet[MenuItem], *, guest_token: str | None) -
     return qs.annotate(is_liked=Value(False, output_field=BooleanField()))
 
 
+def _with_rating_annotations(qs: QuerySet[MenuItem]) -> QuerySet[MenuItem]:
+    return qs.annotate(
+        average_rating=Coalesce(
+            Avg("dish_feedback__rating"),
+            None,
+            output_field=DecimalField(max_digits=3, decimal_places=2),
+        ),
+        rating_count=Count("dish_feedback", distinct=True),
+    )
+
+
 def get_menu_items_by_restaurant(*, restaurant_id: int, guest_token: str | None = None) -> QuerySet[MenuItem]:
     qs = MenuItem.objects.filter(
         restaurant_id=restaurant_id,
         menu__is_active=True,
     ).select_related("category")
+    qs = _with_rating_annotations(qs)
     # Explicit order: the likes_count aggregate adds a GROUP BY, which makes
     # Django drop Meta.ordering and warn under pagination.
     return _with_like_annotations(qs, guest_token=guest_token).order_by("menu_id", "sort_order", "id")
@@ -50,10 +73,9 @@ def search_menu_items(
             is_available=True,
         )
         .filter(
-            Q(name__icontains=query)
-            | Q(description__icontains=query)
-            | Q(category__name__icontains=query),
+            Q(name__icontains=query) | Q(description__icontains=query) | Q(category__name__icontains=query),
         )
         .select_related("category")
     )
+    qs = _with_rating_annotations(qs)
     return _with_like_annotations(qs, guest_token=guest_token).order_by("menu_id", "sort_order", "id")

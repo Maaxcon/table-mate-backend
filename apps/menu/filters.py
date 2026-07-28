@@ -15,10 +15,16 @@ class MenuCategoryFilter(django_filters.FilterSet):  # type: ignore[misc]
 class MenuItemFilter(django_filters.FilterSet):  # type: ignore[misc]
     menu = django_filters.UUIDFilter(field_name="menu__public_id")
     category = django_filters.UUIDFilter(field_name="category__public_id")
+    min_rating = django_filters.NumberFilter(method="filter_min_rating")
 
     class Meta:
         model = MenuItem
-        fields = ["menu", "category", "is_available"]
+        fields = ["menu", "category", "is_available", "min_rating"]
+
+    def filter_min_rating(self, queryset: QuerySet[MenuItem], name: str, value: float) -> QuerySet[MenuItem]:
+        if value is None:
+            return queryset
+        return queryset.filter(rating_count__gte=5, average_rating__gte=value)  # type: ignore[misc]
 
     def filter_queryset(self, queryset: QuerySet[MenuItem]) -> QuerySet[MenuItem]:
         menu_uuid = self.form.cleaned_data.get("menu")

@@ -36,6 +36,8 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     allergens = serializers.ListField(child=serializers.CharField(), read_only=True)
     likes_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
+    average_rating = serializers.SerializerMethodField()
+    rating_count = serializers.SerializerMethodField()
 
     def get_likes_count(self, obj: MenuItem) -> int:
         val = getattr(obj, "likes_count", None)
@@ -44,6 +46,16 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     def get_is_liked(self, obj: MenuItem) -> bool:
         val = getattr(obj, "is_liked", None)
         return bool(val) if val is not None else False
+
+    def get_average_rating(self, obj: MenuItem) -> float | None:
+        val = getattr(obj, "average_rating", None)
+        if val is None:
+            return None
+        return round(float(val), 2)
+
+    def get_rating_count(self, obj: MenuItem) -> int:
+        val = getattr(obj, "rating_count", None)
+        return int(val) if val is not None else 0
 
     class Meta:
         model = MenuItem
@@ -60,6 +72,8 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
             "image",
             "likes_count",
             "is_liked",
+            "average_rating",
+            "rating_count",
             "price",
             "is_available",
             "sort_order",
@@ -132,6 +146,8 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     allergens = serializers.ListField(child=serializers.CharField(), required=False)
     # Annotated in AdminMenuItemViewSet.get_queryset; read-only for the dashboard.
     likes_count = serializers.SerializerMethodField()
+    average_rating = serializers.SerializerMethodField()
+    rating_count = serializers.SerializerMethodField()
 
     class Meta:
         model = MenuItem
@@ -149,14 +165,26 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
             "is_available",
             "sort_order",
             "likes_count",
+            "average_rating",
+            "rating_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["public_id", "likes_count", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "likes_count", "average_rating", "rating_count", "created_at", "updated_at"]
 
     def get_likes_count(self, obj: MenuItem) -> int:
         value = getattr(obj, "likes_count", None)
         return value if value is not None else 0
+
+    def get_average_rating(self, obj: MenuItem) -> float | None:
+        val = getattr(obj, "average_rating", None)
+        if val is None:
+            return None
+        return round(float(val), 2)
+
+    def get_rating_count(self, obj: MenuItem) -> int:
+        val = getattr(obj, "rating_count", None)
+        return int(val) if val is not None else 0
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         menu = attrs.get("menu") or getattr(self.instance, "menu", None)

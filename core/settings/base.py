@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.menu",
     "apps.payments",
     "apps.receipts",
+    "apps.feedback",
 ]
 
 MIDDLEWARE = [

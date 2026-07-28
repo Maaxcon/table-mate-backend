@@ -12,7 +12,7 @@ from apps.menu.models import MenuItem
 from apps.reservations.models import Reservation
 from apps.reservations.selectors import get_reservation_participant_ids
 
-from .models import CartItem, CartSession, OrderItem, OrderItemStatus, Session, Ticket, TicketStatus
+from .models import CartItem, CartSession, Order, OrderItem, OrderItemStatus, Session, Ticket, TicketStatus
 
 
 def get_session(session_id: uuid.UUID, restaurant_id: int) -> Session | None:
@@ -184,6 +184,10 @@ def get_cart_item(restaurant_id: int, item_id: str, session: CartSession) -> Car
 
 def get_reservation(restaurant_id: int, reservation_id: str) -> Reservation | None:
     return Reservation.objects.filter(public_id=reservation_id, restaurant_id=restaurant_id).first()
+
+
+def get_order_by_public_id(order_id: str) -> Order | None:
+    return Order.objects.filter(public_id=order_id).first()
 
 
 def get_menu_item(restaurant_id: int, menu_item_id: str, *, for_update: bool = False) -> MenuItem | None:

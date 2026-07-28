@@ -322,6 +322,7 @@ class OrderItem(RestaurantScopedModel):
         related_name="order_items",
     )
     guest_slot = models.PositiveIntegerField()
+    guest_identity = models.CharField(max_length=255, null=True, blank=True)
     guest_display_name = models.CharField(max_length=128, null=True, blank=True)
     quantity = models.PositiveIntegerField()
     comment = models.TextField(null=True, blank=True)
