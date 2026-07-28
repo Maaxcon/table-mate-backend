@@ -72,14 +72,18 @@ class ShiftWriteSerializer(serializers.ModelSerializer[Shift]):
         read_only_fields = ["public_id"]
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        if attrs["end_time"] <= attrs["start_time"]:
+        start_time = attrs.get("start_time")
+        end_time = attrs.get("end_time")
+        date = attrs.get("date")
+
+        if start_time is not None and end_time is not None and end_time <= start_time:
             raise serializers.ValidationError("end_time must be after start_time.")
 
         request = self.context.get("request")
-        if request is not None:
+        if request is not None and date is not None and start_time is not None and end_time is not None:
             restaurant_id = get_restaurant_id_from_auth(request)
             if restaurant_id is not None:
-                hours = get_working_hours_for_date(restaurant_id, attrs["date"])
+                hours = get_working_hours_for_date(restaurant_id, date)
                 if hours is not None:
                     open_str, close_str = hours
                     if open_str < close_str:
@@ -87,7 +91,7 @@ class ShiftWriteSerializer(serializers.ModelSerializer[Shift]):
                         close_h, close_m = map(int, close_str.split(":"))
                         open_time = time_cls(open_h, open_m)
                         close_time = time_cls(close_h, close_m)
-                        if attrs["start_time"] < open_time or attrs["end_time"] > close_time:
+                        if start_time < open_time or end_time > close_time:
                             raise serializers.ValidationError(
                                 f"Shift must be within working hours ({open_str}–{close_str})."
                             )
