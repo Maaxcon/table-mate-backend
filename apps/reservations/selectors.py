@@ -1,14 +1,23 @@
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, QuerySet
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from apps.orders.models import Session, SessionStatus
+from apps.orders.models import Order, OrderPaymentStatus, Session, SessionStatus
 from apps.restaurants.models import Table
 
 from .models import Reservation, ReservationParticipant, ReservationStatus
+
+
+def _annotate_has_preorder(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
+    """Whether a paid pre-order (confirm_and_pay_preorder) exists for each reservation."""
+    preorder_paid = Order.objects.filter(
+        session__reservation=OuterRef("pk"),
+        payment_status=OrderPaymentStatus.PAID,
+    )
+    return qs.annotate(has_preorder=Exists(preorder_paid))
 
 
 def get_active_reservation_for_table(table: Table) -> Reservation | None:
@@ -70,21 +79,23 @@ def get_customer_reservations(
     restaurant_id: int,
     statuses: list[str] | None = None,
 ) -> QuerySet[Reservation]:
-    return Reservation.objects.filter(
+    qs = Reservation.objects.filter(
         customer_id=customer_id,
         restaurant_id=restaurant_id,
         status__in=statuses or ACTIVE_STATUSES,
     ).select_related("table", "restaurant", "customer")
+    return _annotate_has_preorder(qs)
 
 
 def get_customer_global_reservations(
     customer_id: int,
     statuses: list[str] | None = None,
 ) -> QuerySet[Reservation]:
-    return Reservation.objects.filter(
+    qs = Reservation.objects.filter(
         customer_id=customer_id,
         status__in=statuses or ACTIVE_STATUSES,
     ).select_related("table", "restaurant", "customer")
+    return _annotate_has_preorder(qs)
 
 
 def get_reservation_by_id(reservation_id: str, restaurant_id: int) -> Reservation | None:
