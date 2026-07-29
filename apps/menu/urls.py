@@ -6,6 +6,7 @@ from .views import (
     AdminMenuItemViewSet,
     AdminMenuViewSet,
     AllergenListView,
+    IngredientListView,
     MenuCategoryViewSet,
     MenuItemViewSet,
     MenuViewSet,
@@ -21,5 +22,6 @@ router.register("admin/items", AdminMenuItemViewSet, basename="admin-menu-item")
 
 urlpatterns = [
     path("allergens/", AllergenListView.as_view(), name="allergens"),
+    path("ingredients/", IngredientListView.as_view(), name="ingredients"),
     path("", include(router.urls)),
 ]

@@ -1,12 +1,20 @@
 from typing import Any
 
+from django.db import models
 from rest_framework import serializers
 
 from apps.restaurants.models import Restaurant
 from common.api import PublicIdRelatedField
 
-from .allergens import get_allergen_labels
-from .models import Menu, MenuCategory, MenuItem
+from .models import (
+    Allergen,
+    Ingredient,
+    Menu,
+    MenuCategory,
+    MenuItem,
+    MenuItemAllergen,
+    MenuItemIngredient,
+)
 from .services.localization import get_localized_content
 
 
@@ -56,8 +64,8 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         read_only=True,
         allow_null=True,
     )
-    ingredients = serializers.ListField(child=serializers.CharField(), read_only=True)
-    allergens = serializers.ListField(child=serializers.CharField(), read_only=True)
+    ingredients = serializers.SerializerMethodField()
+    allergens = serializers.SerializerMethodField()
     likes_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
     _lang = serializers.SerializerMethodField(read_only=True)
@@ -79,6 +87,23 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         request = self.context.get("request")
         return getattr(request, "active_language_is_fallback", False) if request else False
 
+    def get_ingredients(self, obj: MenuItem) -> list[str]:
+        return self._localized_m2m_names(obj.item_ingredients.all(), "ingredient")
+
+    def get_allergens(self, obj: MenuItem) -> list[str]:
+        return self._localized_m2m_names(obj.item_allergens.all(), "allergen")
+
+    def _localized_m2m_names(self, through_qs: models.QuerySet, fk_name: str) -> list[str]:
+        request = self.context.get("request")
+        lang = getattr(request, "active_language", None) if request else None
+        names: list[str] = []
+        for through in through_qs:
+            entity = getattr(through, fk_name)
+            by_code = {t.language_code: t.name for t in entity.translations.all()}
+            name = by_code.get(lang, by_code.get("uk", entity.key))
+            names.append(name)
+        return names
+
     def to_representation(self, instance: MenuItem) -> dict[str, Any]:
         data = super().to_representation(instance)
         request = self.context.get("request")
@@ -88,11 +113,6 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
             for field in ("name", "description"):
                 if field in localized and localized[field] is not None:
                     data[field] = localized[field]
-            if "allergens" in data and isinstance(data["allergens"], list):
-                en_labels = get_allergen_labels("en")
-                localized_labels = get_allergen_labels(lang)
-                allergen_labels_map = dict(zip(en_labels, localized_labels, strict=False))
-                data["allergens"] = [allergen_labels_map.get(a, a) for a in data["allergens"]]
         return data
 
     class Meta:
@@ -234,12 +254,53 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         menu = attrs.get("menu") or getattr(self.instance, "menu", None)
-        # Fall back to the existing category when the PATCH doesn't touch it, so
-        # changing only the menu still re-checks the current category.
         category = attrs["category"] if "category" in attrs else getattr(self.instance, "category", None)
         if category is not None and menu is not None and category.menu_id != menu.id:
             raise serializers.ValidationError({"category": "Category must belong to the selected menu."})
         return attrs
+
+    def create(self, validated_data: dict[str, Any], **kwargs: Any) -> MenuItem:
+        ingredient_keys = validated_data.pop("ingredients", [])
+        allergen_keys = validated_data.pop("allergens", [])
+        instance = MenuItem.objects.create(**validated_data, **kwargs)
+        self._set_allergens(instance, allergen_keys)
+        self._set_ingredients(instance, ingredient_keys)
+        return instance
+
+    def update(self, instance: MenuItem, validated_data: dict[str, Any]) -> MenuItem:
+        ingredient_keys = validated_data.pop("ingredients", None)
+        allergen_keys = validated_data.pop("allergens", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if allergen_keys is not None:
+            instance.item_allergens.all().delete()
+            self._set_allergens(instance, allergen_keys)
+        if ingredient_keys is not None:
+            instance.item_ingredients.all().delete()
+            self._set_ingredients(instance, ingredient_keys)
+        return instance
+
+    def _set_allergens(self, instance: MenuItem, keys: list[str]) -> None:
+        for sort_order, key in enumerate(keys):
+            allergen = Allergen.objects.get(key=key)
+            MenuItemAllergen.objects.create(
+                menu_item=instance,
+                allergen=allergen,
+                sort_order=sort_order,
+            )
+
+    def _set_ingredients(self, instance: MenuItem, keys: list[str]) -> None:
+        for sort_order, key in enumerate(keys):
+            ingredient = Ingredient.objects.get(
+                restaurant_id=instance.restaurant_id,
+                key=key,
+            )
+            MenuItemIngredient.objects.create(
+                menu_item=instance,
+                ingredient=ingredient,
+                sort_order=sort_order,
+            )
 
 
 class ToggleMenuItemLikeRequestSerializer(serializers.Serializer[Any]):
@@ -279,10 +340,9 @@ class MenuItemTranslationSerializer(serializers.Serializer[Any]):
     language_code = serializers.CharField(max_length=10)
     name = serializers.CharField(max_length=255)
     description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    ingredients = serializers.ListField(child=serializers.CharField(), required=False)
 
     class Meta:
-        fields = ["language_code", "name", "description", "ingredients"]
+        fields = ["language_code", "name", "description"]
 
 
 class BulkItemActionSerializer(serializers.Serializer[Any]):

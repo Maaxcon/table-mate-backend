@@ -7,6 +7,8 @@ from django.db import models
 from common.models import BaseModel, RestaurantScopedModel
 
 from ..allergens import ALLERGEN_KEYS
+from .translations import AllergenTranslation as AllergenTranslation
+from .translations import IngredientTranslation as IngredientTranslation
 from .translations import MenuCategoryTranslation as MenuCategoryTranslation
 from .translations import MenuItemTranslation as MenuItemTranslation
 from .translations import MenuTranslation as MenuTranslation
@@ -25,6 +27,34 @@ def validate_allergens(value: object) -> None:
     invalid = [v for v in value if v not in ALLERGEN_KEYS]
     if invalid:
         raise ValidationError(f"Invalid allergens: {invalid}. Choose from: {ALLERGEN_KEYS}")
+
+
+class Allergen(models.Model):
+    key = models.CharField(max_length=50, unique=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order"]
+
+    def __str__(self) -> str:
+        return self.key
+
+
+class Ingredient(RestaurantScopedModel):
+    key = models.SlugField(max_length=100)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["restaurant", "key"],
+                name="ingredient_restaurant_key_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.key
 
 
 class Menu(RestaurantScopedModel):
@@ -90,8 +120,16 @@ class MenuItem(RestaurantScopedModel):
     )
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
-    ingredients = models.JSONField(default=list, blank=True, validators=[validate_str_list])
-    allergens = models.JSONField(default=list, blank=True, validators=[validate_allergens])
+    ingredients = models.ManyToManyField(
+        "menu.Ingredient",
+        through="menu.MenuItemIngredient",
+        blank=True,
+    )
+    allergens = models.ManyToManyField(
+        "menu.Allergen",
+        through="menu.MenuItemAllergen",
+        blank=True,
+    )
     weight_grams = models.PositiveIntegerField(null=True, blank=True)
     image = models.ImageField(upload_to="menu_items/", null=True, blank=True)
     price = models.DecimalField(max_digits=14, decimal_places=4)
@@ -124,6 +162,56 @@ class MenuItem(RestaurantScopedModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class MenuItemAllergen(models.Model):
+    menu_item = models.ForeignKey(
+        "menu.MenuItem",
+        on_delete=models.CASCADE,
+        related_name="item_allergens",
+    )
+    allergen = models.ForeignKey(
+        "menu.Allergen",
+        on_delete=models.CASCADE,
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["menu_item", "allergen"],
+                name="menu_item_allergen_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.menu_item_id} → {self.allergen_id}"
+
+
+class MenuItemIngredient(models.Model):
+    menu_item = models.ForeignKey(
+        "menu.MenuItem",
+        on_delete=models.CASCADE,
+        related_name="item_ingredients",
+    )
+    ingredient = models.ForeignKey(
+        "menu.Ingredient",
+        on_delete=models.CASCADE,
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["menu_item", "ingredient"],
+                name="menu_item_ingredient_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.menu_item_id} → {self.ingredient_id}"
 
 
 class MenuItemLike(RestaurantScopedModel):

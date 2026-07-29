@@ -24,9 +24,8 @@ from common.api import (
 from common.filters import StableOrderingFilter
 
 from . import services
-from .allergens import get_allergen_labels
 from .filters import MenuCategoryFilter, MenuItemFilter
-from .models import Menu, MenuCategory, MenuItem, MenuItemLike
+from .models import Allergen, Menu, MenuCategory, MenuItem, MenuItemLike
 from .selectors import (
     get_active_menus,
     get_categories_by_restaurant,
@@ -317,6 +316,10 @@ class AdminMenuItemViewSet(
         # Meta.ordering and warns).
         return (
             qs.select_related("menu", "category")
+            .prefetch_related(
+                "item_ingredients__ingredient__translations",
+                "item_allergens__allergen__translations",
+            )
             .annotate(likes_count=Count("likes", distinct=True))
             .order_by("menu_id", "sort_order", "id")
         )
@@ -547,5 +550,59 @@ class AllergenListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request: Request) -> Response:
-        lang = getattr(request, "active_language", "en")
-        return Response(get_allergen_labels(lang))
+        lang = getattr(request, "active_language", "uk")
+        allergens = (
+            Allergen.objects.all()
+            .prefetch_related("translations")
+            .order_by("sort_order")
+        )
+        result = []
+        for a in allergens:
+            by_code = {t.language_code: t.name for t in a.translations.all()}
+            name = by_code.get(lang, by_code.get("uk", a.key))
+            result.append({"key": a.key, "name": name})
+        return Response(result)
+
+
+@extend_schema(
+    tags=["Menu"],
+    parameters=[
+        OpenApiParameter(
+            name="restaurant",
+            description="Restaurant public UUID",
+            required=True,
+            type=str,
+        ),
+    ],
+)
+class IngredientListView(APIView):
+    """Ingredient vocabulary for a restaurant, localized to the active language."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request) -> Response:
+        from django.http import Http404
+
+        from apps.restaurants.models import Restaurant
+
+        from .models import Ingredient
+
+        public_id = request.query_params.get("restaurant")
+        if not public_id:
+            raise Http404("restaurant query param is required")
+        try:
+            restaurant_id: int = Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
+        except Restaurant.DoesNotExist:
+            raise Http404("Restaurant not found.") from None
+        lang = getattr(request, "active_language", "uk")
+        ingredients = (
+            Ingredient.objects.filter(restaurant_id=restaurant_id)
+            .prefetch_related("translations")
+            .order_by("sort_order")
+        )
+        result = []
+        for ing in ingredients:
+            by_code = {t.language_code: t.name for t in ing.translations.all()}
+            name = by_code.get(lang, by_code.get("uk", ing.key))
+            result.append({"key": ing.key, "name": name})
+        return Response(result)
