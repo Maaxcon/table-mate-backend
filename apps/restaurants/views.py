@@ -8,8 +8,6 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
-from typing import Any, cast
-
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -144,10 +142,7 @@ class PublicRestaurantViewSet(
 
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         instance = self.get_object()
-        setattr(request, "active_language", resolve_restaurant_language(
-            instance,
-            request.META.get("HTTP_ACCEPT_LANGUAGE", ""),
-        ))
+        request.active_language = resolve_restaurant_language(instance, request.META.get("HTTP_ACCEPT_LANGUAGE", ""))
         return super().retrieve(request, *args, **kwargs)
 
 

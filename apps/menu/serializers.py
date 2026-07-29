@@ -1,6 +1,5 @@
 from typing import Any
 
-from django.db import models
 from django.db.models import QuerySet
 from rest_framework import serializers
 

@@ -1,5 +1,5 @@
 import re
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 LANGUAGE_CODE_REGEX = re.compile(r"^[a-z]{2,3}(-[a-zA-Z0-9]+)?$")
 
@@ -36,7 +36,7 @@ def parse_accept_language_header(header: str) -> list[tuple[str, float]]:
 def select_best_match(
     preferred: list[tuple[str, float]],
     supported: list[str],
-) -> Optional[str]:
+) -> str | None:
     """Select the best supported language from the preferred list.
 
     Tries exact match first, then falls back to matching just the primary
