@@ -261,7 +261,7 @@ def _derive_english_name_obj(ingredient: Any, uk_name: str) -> str:
         return INGREDIENT_ENGLISH[uk_name.lower()]
     key = ingredient.key
     if key and all(c.isascii() and (c.isalpha() or c in "-' ") for c in key):
-        return key.replace("-", " ").replace("_", " ").strip().title()
+        return str(key.replace("-", " ").replace("_", " ").strip().title())
     return uk_name
 
 
@@ -269,7 +269,7 @@ def populate_ingredient_en_translations(apps: Any, schema_editor: Any) -> None:
     Ingredient = apps.get_model("menu", "Ingredient")
     IngredientTranslation = apps.get_model("menu", "IngredientTranslation")
 
-    batch: list[IngredientTranslation] = []
+    batch: list[Any] = []
     batch_size = 200
 
     for ingredient in Ingredient.objects.iterator(chunk_size=batch_size):

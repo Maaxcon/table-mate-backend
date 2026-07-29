@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.db import models
+from django.db.models import QuerySet
 from rest_framework import serializers
 
 from apps.restaurants.models import Restaurant
@@ -93,7 +94,7 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     def get_allergens(self, obj: MenuItem) -> list[str]:
         return self._localized_m2m_names(obj.item_allergens.all(), "allergen")
 
-    def _localized_m2m_names(self, through_qs: models.QuerySet, fk_name: str) -> list[str]:
+    def _localized_m2m_names(self, through_qs: QuerySet[Any], fk_name: str) -> list[str]:
         request = self.context.get("request")
         lang = getattr(request, "active_language", None) if request else None
         names: list[str] = []

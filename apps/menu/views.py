@@ -618,6 +618,7 @@ class IngredientListView(APIView):
     """Ingredient vocabulary for a restaurant, localized to the active language."""
 
     permission_classes = [AllowAny]
+    serializer_class = None
 
     def get(self, request: Request) -> Response:
         from django.http import Http404

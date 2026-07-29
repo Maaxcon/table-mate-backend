@@ -1,5 +1,5 @@
 import re
-from typing import Optional
+from typing import Any, Optional, cast
 
 LANGUAGE_CODE_REGEX = re.compile(r"^[a-z]{2,3}(-[a-zA-Z0-9]+)?$")
 
@@ -63,7 +63,7 @@ SUPPORTED_LANGUAGE_CODES = frozenset(
 
 
 def resolve_restaurant_language(
-    restaurant: object,
+    restaurant: Any,
     accept_language_header: str,
     default: str = "en",
 ) -> str:
@@ -74,12 +74,12 @@ def resolve_restaurant_language(
     """
     from django.core.exceptions import ObjectDoesNotExist
     try:
-        settings = restaurant.settings  # type: ignore[union-attr]
+        settings: Any = restaurant.settings
     except (ObjectDoesNotExist, AttributeError):
         return default
-    supported = settings.supported_languages or [settings.locale]
+    supported: list[str] = settings.supported_languages or [settings.locale]
     preferred = parse_accept_language_header(accept_language_header)
     best = select_best_match(preferred, supported)
     if best:
         return best
-    return settings.locale
+    return cast(str, settings.locale)

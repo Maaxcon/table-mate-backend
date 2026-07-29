@@ -1,11 +1,12 @@
 from collections import defaultdict
+from typing import Any
 
 from django.db import migrations
 
 from ..allergens import ALLERGEN_KEYS, ALLERGEN_LABELS
 
 
-def seed_allergens(apps, schema_editor):
+def seed_allergens(apps: Any, schema_editor: Any) -> None:
     Allergen = apps.get_model("menu", "Allergen")
     AllergenTranslation = apps.get_model("menu", "AllergenTranslation")
     for sort_order, key in enumerate(ALLERGEN_KEYS):
@@ -18,7 +19,7 @@ def seed_allergens(apps, schema_editor):
             )
 
 
-def migrate_allergen_data(apps, schema_editor):
+def migrate_allergen_data(apps: Any, schema_editor: Any) -> None:
     MenuItem = apps.get_model("menu", "MenuItem")
     Allergen = apps.get_model("menu", "Allergen")
     MenuItemAllergen = apps.get_model("menu", "MenuItemAllergen")
@@ -38,7 +39,7 @@ def migrate_allergen_data(apps, schema_editor):
             sort_order += 1
 
 
-def migrate_ingredient_data(apps, schema_editor):
+def migrate_ingredient_data(apps: Any, schema_editor: Any) -> None:
     MenuItem = apps.get_model("menu", "MenuItem")
     Ingredient = apps.get_model("menu", "Ingredient")
     IngredientTranslation = apps.get_model("menu", "IngredientTranslation")
@@ -85,7 +86,7 @@ def migrate_ingredient_data(apps, schema_editor):
                 )
 
 
-def _slugify(value):
+def _slugify(value: str) -> str:
     import re
     value = value.lower().strip()
     value = re.sub(r"[^a-z0-9а-яіїєґ'\u0301]+", "-", value)
