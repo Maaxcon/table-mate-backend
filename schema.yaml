@@ -1677,6 +1677,38 @@ paths:
                 items:
                   $ref: '#/components/schemas/BillItem'
           description: ''
+  /api/orders/cart/sessions/{session_pk}/preorder-checkout/:
+    post:
+      operationId: orders_cart_sessions_preorder_checkout_create
+      description: |-
+        Guest action: confirm and pay for a pre-order before the reservation starts.
+
+        Same response shape as CartCheckoutView, but the order is paid immediately
+        (simulated) and holds no kitchen Ticket yet — see confirm_and_pay_preorder.
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+          description: ''
+        '400':
+          description: Cart is empty.
+        '409':
+          description: Cart changed (code CART_CHANGED), or reservation already started
+            (code preorder_not_allowed).
   /api/orders/order-items/:
     get:
       operationId: orders_order_items_list
@@ -5799,6 +5831,9 @@ components:
           type: string
           nullable: true
           readOnly: true
+        has_preorder:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6433,6 +6468,9 @@ components:
           type: string
           nullable: true
           readOnly: true
+        has_preorder:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6454,6 +6492,7 @@ components:
       - customer_name
       - end_at
       - guest_count
+      - has_preorder
       - opened_at
       - public_id
       - restaurant
