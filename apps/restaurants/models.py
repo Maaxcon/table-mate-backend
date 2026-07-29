@@ -148,6 +148,30 @@ class Zone(BaseModel):
         return f"{self.restaurant.name} / {self.name}"
 
 
+class ZoneTranslation(models.Model):
+    zone = models.ForeignKey(
+        Zone,
+        on_delete=models.CASCADE,
+        related_name="translations",
+    )
+    language_code = models.CharField(max_length=10)
+    name = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["zone_id", "language_code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["zone", "language_code"],
+                name="zone_translation_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"[{self.language_code}] {self.name}"
+
+
 class Table(RestaurantScopedModel):
     public_number = models.CharField(max_length=64, db_index=True)
     capacity = models.PositiveIntegerField()
@@ -170,3 +194,27 @@ class Table(RestaurantScopedModel):
 
     def __str__(self) -> str:
         return f"{self.restaurant.name} / {self.public_number}"
+
+
+class TableTranslation(models.Model):
+    table = models.ForeignKey(
+        Table,
+        on_delete=models.CASCADE,
+        related_name="translations",
+    )
+    language_code = models.CharField(max_length=10)
+    public_number = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["table_id", "language_code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["table", "language_code"],
+                name="table_translation_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"[{self.language_code}] {self.public_number}"

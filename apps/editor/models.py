@@ -84,3 +84,28 @@ class LayoutDraft(models.Model):
 
     def __str__(self) -> str:
         return f"LayoutDraft for restaurant {self.restaurant_id}, owner {self.owner_id}"
+
+
+class LayoutEntityTranslation(models.Model):
+    layout_version = models.ForeignKey(
+        LayoutVersion,
+        on_delete=models.CASCADE,
+        related_name="entity_translations",
+    )
+    entity_id = models.UUIDField(db_index=True)
+    language_code = models.CharField(max_length=10)
+    label = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["layout_version_id", "entity_id", "language_code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["layout_version", "entity_id", "language_code"],
+                name="layout_entity_translation_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"[{self.language_code}] entity {self.entity_id}"
