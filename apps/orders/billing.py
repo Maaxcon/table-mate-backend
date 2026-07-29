@@ -11,7 +11,7 @@ __all__ = [
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -27,6 +27,7 @@ from common.exceptions import (
     PreorderNotAllowedError,
     ReservationConflictError,
     RestaurantClosedError,
+    TableOccupiedError,
 )
 from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
 from common.money import quantize_money
@@ -100,18 +101,29 @@ def ensure_visit_session(
         raise DomainError("Reservation has no table; cannot open a bill.")
     if currency is None:
         currency, _, _ = _restaurant_billing(reservation.restaurant_id)
-    session, _ = Session.objects.get_or_create(
-        reservation=reservation,
-        defaults={
-            "restaurant_id": reservation.restaurant_id,
-            "table_id": table_id,
-            "opened_by": opened_by,
-            "guest_count": reservation.guest_count,
-            "currency": currency,
-            "opened_at": timezone.now(),
-            "ends_at": reservation.end_at,
-        },
-    )
+    try:
+        session, _ = Session.objects.get_or_create(
+            reservation=reservation,
+            defaults={
+                "restaurant_id": reservation.restaurant_id,
+                "table_id": table_id,
+                "opened_by": opened_by,
+                "guest_count": reservation.guest_count,
+                "currency": currency,
+                "opened_at": timezone.now(),
+                "ends_at": reservation.end_at,
+            },
+        )
+    except IntegrityError as exc:
+        # orders_one_open_session_per_table: another reservation's visit is
+        # still open on this table (e.g. running over its slot). Surface a
+        # clear, specific error instead of a generic "conflicts" 409 — this
+        # is a real, if rare, race for a pre-order opening its bill early.
+        if "orders_one_open_session_per_table" not in str(exc):
+            raise
+        raise TableOccupiedError(
+            "This table's previous visit hasn't ended yet — try again shortly."
+        ) from exc
     return session
 
 
