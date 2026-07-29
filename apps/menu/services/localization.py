@@ -17,10 +17,12 @@ def _register(model_class: type[Model], translation_class: type[Model]) -> None:
 
 
 from ..models import Menu, MenuCategory, MenuItem  # noqa: E402
+from apps.restaurants.models import Restaurant, RestaurantTranslation  # noqa: E402
 
 _register(Menu, MenuTranslation)
 _register(MenuCategory, MenuCategoryTranslation)
 _register(MenuItem, MenuItemTranslation)
+_register(Restaurant, RestaurantTranslation)
 
 
 def get_translation_model(entity_class: type[Model]) -> type[Model] | None:
