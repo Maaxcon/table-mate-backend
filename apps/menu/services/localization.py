@@ -16,7 +16,14 @@ def _register(model_class: type[Model], translation_class: type[Model]) -> None:
     _TRANSLATION_MODEL_MAP[model_class] = translation_class
 
 
-from apps.restaurants.models import Restaurant, RestaurantTranslation  # noqa: E402
+from apps.restaurants.models import (  # noqa: E402
+    Restaurant,
+    RestaurantTranslation,
+    Table,
+    TableTranslation,
+    Zone,
+    ZoneTranslation,
+)
 
 from ..models import Menu, MenuCategory, MenuItem  # noqa: E402
 
@@ -24,6 +31,8 @@ _register(Menu, MenuTranslation)
 _register(MenuCategory, MenuCategoryTranslation)
 _register(MenuItem, MenuItemTranslation)
 _register(Restaurant, RestaurantTranslation)
+_register(Zone, ZoneTranslation)
+_register(Table, TableTranslation)
 
 
 def get_translation_model(entity_class: type[Model]) -> type[Model] | None:
