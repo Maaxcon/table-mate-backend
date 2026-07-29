@@ -102,11 +102,11 @@ def duplicate_item(item: MenuItem) -> MenuItem:
             ingredient=thru.ingredient,
             sort_order=thru.sort_order,
         )
-    for thru in item.item_allergens.all():
+    for athru in item.item_allergens.all():
         MenuItemAllergen.objects.create(
             menu_item=copy,
-            allergen=thru.allergen,
-            sort_order=thru.sort_order,
+            allergen=athru.allergen,
+            sort_order=athru.sort_order,
         )
     for t in MenuItemTranslation.objects.filter(menu_item=item):
         MenuItemTranslation.objects.create(
