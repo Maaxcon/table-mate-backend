@@ -5,11 +5,15 @@ from rest_framework import serializers
 from apps.restaurants.models import Restaurant
 from common.api import PublicIdRelatedField
 
+from .allergens import get_allergen_labels
 from .models import Menu, MenuCategory, MenuItem
+from .services.localization import get_localized_content
 
 
 class MenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
     menu: PublicIdRelatedField[Menu] = PublicIdRelatedField(read_only=True)
+    _lang = serializers.SerializerMethodField(read_only=True)
+    _is_fallback = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = MenuCategory
@@ -19,10 +23,30 @@ class MenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
             "name",
             "sort_order",
             "color",
+            "_lang",
+            "_is_fallback",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["public_id", "created_at", "updated_at"]
+
+    def get__lang(self, obj: MenuCategory) -> str | None:
+        request = self.context.get("request")
+        return getattr(request, "active_language", None) if request else None
+
+    def get__is_fallback(self, obj: MenuCategory) -> bool:
+        request = self.context.get("request")
+        return getattr(request, "active_language_is_fallback", False) if request else False
+
+    def to_representation(self, instance: MenuCategory) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        lang = getattr(request, "active_language", None) if request else None
+        if lang:
+            _localized = getattr(instance, "_localized", None)
+            if _localized and isinstance(_localized, dict) and "name" in _localized:
+                data["name"] = _localized["name"]
+        return data
 
 
 class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
@@ -36,6 +60,8 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     allergens = serializers.ListField(child=serializers.CharField(), read_only=True)
     likes_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
+    _lang = serializers.SerializerMethodField(read_only=True)
+    _is_fallback = serializers.SerializerMethodField(read_only=True)
 
     def get_likes_count(self, obj: MenuItem) -> int:
         val = getattr(obj, "likes_count", None)
@@ -44,6 +70,30 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     def get_is_liked(self, obj: MenuItem) -> bool:
         val = getattr(obj, "is_liked", None)
         return bool(val) if val is not None else False
+
+    def get__lang(self, obj: MenuItem) -> str | None:
+        request = self.context.get("request")
+        return getattr(request, "active_language", None) if request else None
+
+    def get__is_fallback(self, obj: MenuItem) -> bool:
+        request = self.context.get("request")
+        return getattr(request, "active_language_is_fallback", False) if request else False
+
+    def to_representation(self, instance: MenuItem) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        lang = getattr(request, "active_language", None) if request else None
+        if lang:
+            localized = get_localized_content(instance, lang)
+            for field in ("name", "description"):
+                if field in localized and localized[field] is not None:
+                    data[field] = localized[field]
+            if "allergens" in data and isinstance(data["allergens"], list):
+                en_labels = get_allergen_labels("en")
+                localized_labels = get_allergen_labels(lang)
+                allergen_labels_map = dict(zip(en_labels, localized_labels, strict=False))
+                data["allergens"] = [allergen_labels_map.get(a, a) for a in data["allergens"]]
+        return data
 
     class Meta:
         model = MenuItem
@@ -60,6 +110,8 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
             "image",
             "likes_count",
             "is_liked",
+            "_lang",
+            "_is_fallback",
             "price",
             "is_available",
             "sort_order",
@@ -79,6 +131,8 @@ class MenuSerializer(serializers.ModelSerializer[Menu]):
         many=True,
         read_only=True,
     )
+    _lang = serializers.SerializerMethodField(read_only=True)
+    _is_fallback = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Menu
@@ -89,10 +143,30 @@ class MenuSerializer(serializers.ModelSerializer[Menu]):
             "is_active",
             "items",
             "categories",
+            "_lang",
+            "_is_fallback",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["public_id", "created_at", "updated_at"]
+
+    def get__lang(self, obj: Menu) -> str | None:
+        request = self.context.get("request")
+        return getattr(request, "active_language", None) if request else None
+
+    def get__is_fallback(self, obj: Menu) -> bool:
+        request = self.context.get("request")
+        return getattr(request, "active_language_is_fallback", False) if request else False
+
+    def to_representation(self, instance: Menu) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        lang = getattr(request, "active_language", None) if request else None
+        if lang:
+            _localized = getattr(instance, "_localized", None)
+            if _localized and isinstance(_localized, dict) and "name" in _localized:
+                data["name"] = _localized["name"]
+        return data
 
 
 class AdminMenuSerializer(serializers.ModelSerializer[Menu]):
@@ -183,6 +257,32 @@ class ReorderEntrySerializer(serializers.Serializer[Any]):
 
     public_id = serializers.UUIDField()
     sort_order = serializers.IntegerField(min_value=0)
+
+
+class MenuTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    name = serializers.CharField(max_length=255)
+
+    class Meta:
+        fields = ["language_code", "name"]
+
+
+class MenuCategoryTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    name = serializers.CharField(max_length=255)
+
+    class Meta:
+        fields = ["language_code", "name"]
+
+
+class MenuItemTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    name = serializers.CharField(max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    ingredients = serializers.ListField(child=serializers.CharField(), required=False)
+
+    class Meta:
+        fields = ["language_code", "name", "description", "ingredients"]
 
 
 class BulkItemActionSerializer(serializers.Serializer[Any]):

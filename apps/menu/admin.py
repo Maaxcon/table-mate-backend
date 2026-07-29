@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.http import HttpRequest
 
 from .allergens import ALLERGENS
-from .models import Menu, MenuCategory, MenuItem
+from .models import Menu, MenuCategory, MenuCategoryTranslation, MenuItem, MenuItemTranslation, MenuTranslation
 
 
 class AllergenCheckboxWidget(forms.CheckboxSelectMultiple):
@@ -39,15 +39,31 @@ class MenuCategoryInline(admin.TabularInline):  # type: ignore[type-arg]
     extra = 0
 
 
+class MenuTranslationInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = MenuTranslation
+    extra = 0
+
+
+class MenuCategoryTranslationInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = MenuCategoryTranslation
+    extra = 0
+
+
+class MenuItemTranslationInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = MenuItemTranslation
+    extra = 0
+
+
 @admin.register(Menu)
 class MenuAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ["name", "restaurant", "is_active"]
-    inlines = [MenuCategoryInline]
+    inlines = [MenuCategoryInline, MenuTranslationInline]
 
 
 @admin.register(MenuCategory)
 class MenuCategoryAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ["name", "menu", "sort_order", "color"]
+    inlines = [MenuCategoryTranslationInline]
 
 
 @admin.register(MenuItem)

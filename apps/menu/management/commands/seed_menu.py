@@ -21,24 +21,24 @@ class _Menu(TypedDict):
 
 
 _ALLERGEN_RULES: list[tuple[str, tuple[str, ...]]] = [
-    ("глютен", ("борошно", "паста", "спагеті", "хліб", "сухар", "тісто", "савоярд", "печиво", "лазань")),
-    ("молочні продукти", ("молоко", "вершк", "сир", "моцарел", "пармез", "маскарпон", "фета", "рикот", "масло")),
-    ("яйця", ("яйце", "яйця", "жовток")),
-    ("риба", ("лосос", "тунец", "риба", "анчоус")),
-    ("морепродукти", ("кревет", "міді", "устриц", "кальмар")),
-    ("горіхи", ("горіх", "мигдал", "фундук", "кедров")),
-    ("соя", ("соєв", "соус териякі", "тофу")),
-    ("гірчиця", ("гірчиц",)),
-    ("алкоголь", ("білий ром", "чорний ром", "джин", "текіл", "лікер", "алк.", "вино")),
+    ("gluten", ("борошно", "паста", "спагеті", "хліб", "сухар", "тісто", "савоярд", "печиво", "лазань")),
+    ("milk", ("молоко", "вершк", "сир", "моцарел", "пармез", "маскарпон", "фета", "рикот", "масло")),
+    ("eggs", ("яйце", "яйця", "жовток")),
+    ("fish", ("лосос", "тунец", "риба", "анчоус")),
+    ("crustaceans", ("кревет", "міді", "устриц", "кальмар")),
+    ("tree_nuts", ("горіх", "мигдал", "фундук", "кедров")),
+    ("soy", ("соєв", "соус териякі", "тофу")),
+    ("mustard", ("гірчиц",)),
 ]
 
 
 def _infer_allergens(ingredients: list[str]) -> list[str]:
+    """Return list of allergen keys inferred from ingredient keywords."""
     allergens: list[str] = []
     normalized = " ".join(ing.lower() for ing in ingredients)
-    for allergen_label, needles in _ALLERGEN_RULES:
+    for allergen_key, needles in _ALLERGEN_RULES:
         if any(needle in normalized for needle in needles):
-            allergens.append(allergen_label)
+            allergens.append(allergen_key)
     return allergens
 
 
