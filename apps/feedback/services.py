@@ -20,11 +20,15 @@ def _validate_order_for_feedback(
 ) -> None:
     if order.status != OrderStatus.COMPLETED:
         raise DomainError("Feedback can only be submitted for completed orders.")
-    if order.created_by_id is not None and order.created_by_id != getattr(guest, "id", None):
-        raise DomainError("You can only submit feedback for your own orders.")
-    if order.created_by_id is None and (
-        not guest_identity or not order.items.filter(guest_identity=guest_identity).exists()
-    ):
+    if guest is not None:
+        owns_order = order.created_by_id == guest.id
+        if not owns_order:
+            from apps.receipts.models import Receipt
+
+            owns_order = Receipt.objects.filter(order=order, customer=guest).exists()
+        if not owns_order:
+            raise DomainError("You can only submit feedback for your own orders.")
+    elif not guest_identity or not order.items.filter(guest_identity=guest_identity).exists():
         raise DomainError("You can only submit feedback for your own orders.")
     if order.restaurant_id is None:
         raise DomainError("Order has no associated restaurant.")

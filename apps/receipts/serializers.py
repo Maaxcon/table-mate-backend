@@ -4,13 +4,16 @@ from .models import Receipt, ReceiptItem
 
 
 class ReceiptItemSerializer(serializers.ModelSerializer[ReceiptItem]):
+    menu_item_public_id = serializers.UUIDField(source="menu_item.public_id", read_only=True, allow_null=True)
+
     class Meta:
         model = ReceiptItem
-        fields = ["name", "quantity", "unit_price"]
+        fields = ["menu_item_public_id", "name", "quantity", "unit_price"]
 
 
 class ReceiptSerializer(serializers.ModelSerializer[Receipt]):
     items = ReceiptItemSerializer(many=True, read_only=True)
+    order_public_id = serializers.UUIDField(source="order.public_id", read_only=True, allow_null=True)
     restaurant_public_id = serializers.CharField(source="restaurant.public_id", read_only=True)
     restaurant_name = serializers.CharField(source="restaurant.name", read_only=True)
     restaurant_address = serializers.CharField(source="restaurant.address", read_only=True)
@@ -23,6 +26,7 @@ class ReceiptSerializer(serializers.ModelSerializer[Receipt]):
         model = Receipt
         fields = [
             "public_id",
+            "order_public_id",
             "order_number",
             "restaurant_public_id",
             "restaurant_name",

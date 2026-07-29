@@ -11,12 +11,14 @@ from .models import DishFeedback, Feedback, FeedbackReviewStatus
 
 class DishFeedbackSerializer(serializers.ModelSerializer[DishFeedback]):
     menu_item: PublicIdRelatedField[MenuItem] = PublicIdRelatedField(read_only=True)
+    menu_item_name = serializers.CharField(source="menu_item.name", read_only=True)
 
     class Meta:
         model = DishFeedback
         fields = [
             "public_id",
             "menu_item",
+            "menu_item_name",
             "rating",
             "comment",
             "created_at",
@@ -29,6 +31,8 @@ class FeedbackListSerializer(serializers.ModelSerializer[Feedback]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     guest: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
     order: PublicIdRelatedField[Order] = PublicIdRelatedField(read_only=True)
+    guest_name = serializers.SerializerMethodField()
+    guest_identity = serializers.CharField(read_only=True)
 
     class Meta:
         model = Feedback
@@ -36,6 +40,8 @@ class FeedbackListSerializer(serializers.ModelSerializer[Feedback]):
             "public_id",
             "restaurant",
             "guest",
+            "guest_name",
+            "guest_identity",
             "order",
             "overall_rating",
             "service_rating",
@@ -50,6 +56,8 @@ class FeedbackListSerializer(serializers.ModelSerializer[Feedback]):
             "public_id",
             "restaurant",
             "guest",
+            "guest_name",
+            "guest_identity",
             "order",
             "overall_rating",
             "service_rating",
@@ -59,6 +67,11 @@ class FeedbackListSerializer(serializers.ModelSerializer[Feedback]):
             "created_at",
             "updated_at",
         ]
+
+    def get_guest_name(self, obj: Feedback) -> str:
+        if obj.guest:
+            return obj.guest.get_full_name()
+        return "Guest"
 
 
 class FeedbackDetailSerializer(FeedbackListSerializer):
