@@ -9,7 +9,7 @@ from .models import DishFeedback, Feedback
 
 def get_feedback_list(
     *,
-    restaurant_id: int | None = None,
+    queryset: QuerySet[Feedback],
     review_status: str | None = None,
     overall_rating: int | None = None,
     service_rating: int | None = None,
@@ -18,10 +18,8 @@ def get_feedback_list(
     date_to: datetime | str | None = None,
     ordering: str | None = None,
 ) -> QuerySet[Feedback]:
-    qs = Feedback.objects.select_related("restaurant", "guest", "order").prefetch_related("dish_feedback__menu_item")
+    qs = queryset.select_related("restaurant", "guest", "order").prefetch_related("dish_feedback__menu_item")
 
-    if restaurant_id is not None:
-        qs = qs.filter(restaurant_id=restaurant_id)
     if review_status is not None:
         qs = qs.filter(review_status=review_status)
     if overall_rating is not None:

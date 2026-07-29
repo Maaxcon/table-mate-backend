@@ -21,7 +21,7 @@ from .serializers import (
     GuestFeedbackCreateSerializer,
     GuestFeedbackListSerializer,
 )
-from .services import create_feedback, mark_feedback_reviewed
+from .services import create_feedback, mark_feedback_reviewed, update_feedback
 
 
 class IsAuthenticatedOrTableGuest(BasePermission):
@@ -49,7 +49,6 @@ class AdminFeedbackViewSet(
         return FeedbackListSerializer
 
     def safely_get_queryset(self, qs: QuerySet[Feedback]) -> QuerySet[Feedback]:
-        restaurant_id = self.request.query_params.get("restaurant_id")
         review_status = self.request.query_params.get("review_status")
         overall_rating_param = self.request.query_params.get("overall_rating")
         service_rating_param = self.request.query_params.get("service_rating")
@@ -62,7 +61,7 @@ class AdminFeedbackViewSet(
         service_rating = int(service_rating_param) if service_rating_param is not None else None
 
         return get_feedback_list(
-            restaurant_id=int(restaurant_id) if restaurant_id else None,
+            queryset=qs,
             review_status=review_status,
             overall_rating=overall_rating,
             service_rating=service_rating,
@@ -90,6 +89,8 @@ class GuestFeedbackViewSet(
     permission_classes = [IsAuthenticatedOrTableGuest]
     authentication_classes = [GuestJWTAuthentication, TokenVersionJWTAuthentication]
     serializer_class = GuestFeedbackListSerializer
+    lookup_field = "public_id"
+    lookup_url_kwarg = "pk"
 
     def _get_guest(self, request: Request) -> User | None:
         return request.user if request.user.is_authenticated else None
@@ -151,26 +152,13 @@ class GuestFeedbackViewSet(
         serializer.is_valid(raise_exception=True)
 
         try:
-            from apps.menu.models import MenuItem
-
-            feedback.dish_feedback.all().delete()
-
-            feedback.overall_rating = serializer.validated_data["overall_rating"]
-            feedback.service_rating = serializer.validated_data["service_rating"]
-            feedback.comment = serializer.validated_data.get("comment", "")
-            feedback.save(update_fields=["overall_rating", "service_rating", "comment", "updated_at"])
-
-            from .models import DishFeedback
-
-            dish_data = serializer.validated_data.get("dish_feedback", [])
-            for item_data in dish_data:
-                menu_item = MenuItem.objects.get(public_id=item_data["menu_item"])
-                DishFeedback.objects.create(
-                    feedback=feedback,
-                    menu_item=menu_item,
-                    rating=item_data["rating"],
-                    comment=item_data.get("comment", ""),
-                )
+            feedback = update_feedback(
+                feedback=feedback,
+                overall_rating=serializer.validated_data["overall_rating"],
+                service_rating=serializer.validated_data["service_rating"],
+                comment=serializer.validated_data.get("comment", ""),
+                dish_feedback_data=serializer.validated_data.get("dish_feedback", []),
+            )
         except DomainError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

@@ -11,6 +11,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.authentication.models import RoleCode
 from apps.feedback.models import Feedback
+from apps.menu.models import Menu, MenuItem
 from apps.orders.billing import checkout_cart_session
 from apps.orders.models import OrderItemStatus, OrderStatus
 from apps.orders.services import add_item_to_cart, ensure_active_cart_for_table
@@ -33,6 +34,7 @@ def _feedback_client(guest_id: str) -> APIClient:
 def test_table_guest_can_submit_feedback_for_own_order(
     api: Any,
     restaurant: Restaurant,
+    empty_restaurant: Restaurant,
     table: Table,
     item: Any,
     restaurant_settings: Any,
@@ -63,6 +65,7 @@ def test_table_guest_can_submit_feedback_for_own_order(
             "order": str(order.public_id),
             "overall_rating": 5,
             "service_rating": 4,
+            "dish_feedback": [{"menu_item": str(item.public_id), "rating": 5}],
         },
         format="json",
     )
@@ -72,7 +75,7 @@ def test_table_guest_can_submit_feedback_for_own_order(
     assert feedback.guest_id is None
     assert feedback.guest_identity == guest_id
 
-    admin = api(role=RoleCode.ADMIN)
+    admin = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
     detail_response = admin.client.get(
         reverse("admin-feedback-detail", kwargs={"public_id": feedback.public_id}),
     )
@@ -81,6 +84,55 @@ def test_table_guest_can_submit_feedback_for_own_order(
     assert detail_response.data["review_status"] == "reviewed"
     feedback.refresh_from_db()
     assert feedback.review_status == "reviewed"
+
+    list_response = admin.client.get(f"{reverse('admin-feedback-list')}?restaurant_id=999999")
+
+    assert list_response.status_code == status.HTTP_200_OK
+    assert [entry["public_id"] for entry in list_response.data["results"]] == [str(feedback.public_id)]
+
+    foreign_menu = Menu.objects.create(restaurant=empty_restaurant, name="Foreign menu")
+    foreign_item = MenuItem.objects.create(
+        restaurant=empty_restaurant,
+        menu=foreign_menu,
+        name="Foreign dish",
+        price="12.00",
+    )
+    invalid_update = _feedback_client(guest_id).put(
+        reverse("guest-feedback-detail", kwargs={"pk": feedback.public_id}),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 1,
+            "service_rating": 1,
+            "dish_feedback": [{"menu_item": str(foreign_item.public_id), "rating": 1}],
+        },
+        format="json",
+    )
+
+    assert invalid_update.status_code == status.HTTP_400_BAD_REQUEST
+    feedback.refresh_from_db()
+    assert feedback.overall_rating == 5
+    assert feedback.service_rating == 4
+    assert list(feedback.dish_feedback.values_list("menu_item_id", "rating")) == [(item.id, 5)]
+
+    duplicate_update = _feedback_client(guest_id).put(
+        reverse("guest-feedback-detail", kwargs={"pk": feedback.public_id}),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 1,
+            "service_rating": 1,
+            "dish_feedback": [
+                {"menu_item": str(item.public_id), "rating": 1},
+                {"menu_item": str(item.public_id), "rating": 1},
+            ],
+        },
+        format="json",
+    )
+
+    assert duplicate_update.status_code == status.HTTP_400_BAD_REQUEST
+    feedback.refresh_from_db()
+    assert feedback.overall_rating == 5
+    assert feedback.service_rating == 4
+    assert list(feedback.dish_feedback.values_list("menu_item_id", "rating")) == [(item.id, 5)]
 
 
 @pytest.mark.django_db

@@ -41,6 +41,35 @@ def _validate_order_for_feedback(
         raise DomainError("Feedback already exists for this order.")
 
 
+def _resolve_dish_feedback_data(
+    *,
+    order: Order,
+    restaurant_id: int,
+    dish_feedback_data: list[dict[str, Any]],
+) -> list[tuple[MenuItem, dict[str, Any]]]:
+    resolved: list[tuple[MenuItem, dict[str, Any]]] = []
+    menu_item_ids: set[str] = set()
+
+    for item_data in dish_feedback_data:
+        menu_item_public_id = item_data["menu_item"]
+        menu_item_key = str(menu_item_public_id)
+        if menu_item_key in menu_item_ids:
+            raise DomainError("Each dish can only be rated once.")
+        menu_item_ids.add(menu_item_key)
+
+        menu_item = MenuItem.objects.filter(
+            public_id=menu_item_public_id,
+            restaurant_id=restaurant_id,
+        ).first()
+        if menu_item is None:
+            raise DomainError(f"Menu item {menu_item_public_id} not found.")
+        if not order.items.filter(menu_item_id=menu_item.id).exists():
+            raise DomainError(f"Menu item {menu_item_public_id} is not part of this order.")
+        resolved.append((menu_item, item_data))
+
+    return resolved
+
+
 @transaction.atomic
 def create_feedback(
     *,
@@ -59,6 +88,11 @@ def create_feedback(
         raise DomainError("Order not found.")
 
     _validate_order_for_feedback(order=order, guest=guest, guest_identity=guest_identity)
+    resolved_dish_feedback = _resolve_dish_feedback_data(
+        order=order,
+        restaurant_id=order.restaurant_id,
+        dish_feedback_data=dish_feedback_data or [],
+    )
 
     feedback = Feedback.objects.create(
         restaurant_id=order.restaurant_id,
@@ -70,27 +104,50 @@ def create_feedback(
         comment=comment,
     )
 
-    if dish_feedback_data:
-        for item_data in dish_feedback_data:
-            menu_item_public_id = item_data["menu_item"]
-            try:
-                menu_item = MenuItem.objects.get(public_id=menu_item_public_id)
-            except MenuItem.DoesNotExist:
-                raise DomainError(f"Menu item {menu_item_public_id} not found.") from None
+    for menu_item, item_data in resolved_dish_feedback:
+        DishFeedback.objects.create(
+            feedback=feedback,
+            menu_item=menu_item,
+            rating=item_data["rating"],
+            comment=item_data.get("comment", ""),
+        )
 
-            order_item_ids = order.items.filter(
-                menu_item=menu_item,
-            ).values_list("id", flat=True)
-            if not order_item_ids.exists():
-                raise DomainError(f"Menu item {menu_item_public_id} is not part of this order.")
+    return feedback
 
-            DishFeedback.objects.create(
+
+@transaction.atomic
+def update_feedback(
+    *,
+    feedback: Feedback,
+    overall_rating: int,
+    service_rating: int,
+    comment: str,
+    dish_feedback_data: list[dict[str, Any]],
+) -> Feedback:
+    resolved_dish_feedback = _resolve_dish_feedback_data(
+        order=feedback.order,
+        restaurant_id=feedback.restaurant_id,
+        dish_feedback_data=dish_feedback_data,
+    )
+
+    feedback.dish_feedback.all().delete()
+    feedback.overall_rating = overall_rating
+    feedback.service_rating = service_rating
+    feedback.comment = comment
+    feedback.save(update_fields=["overall_rating", "service_rating", "comment", "updated_at"])
+
+    DishFeedback.objects.bulk_create(
+        [
+            DishFeedback(
                 feedback=feedback,
                 menu_item=menu_item,
                 rating=item_data["rating"],
                 comment=item_data.get("comment", ""),
             )
-
+            for menu_item, item_data in resolved_dish_feedback
+        ],
+    )
+    feedback.refresh_from_db()
     return feedback
 
 
