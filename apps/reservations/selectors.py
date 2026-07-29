@@ -5,19 +5,30 @@ from django.db.models import Exists, OuterRef, QuerySet
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from apps.orders.models import Order, OrderPaymentStatus, Session, SessionStatus
+from apps.orders.models import Order, OrderPaymentStatus, Session, SessionStatus, Ticket
 from apps.restaurants.models import Table
 
 from .models import Reservation, ReservationParticipant, ReservationStatus
 
 
 def _annotate_has_preorder(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
-    """Whether a paid pre-order (confirm_and_pay_preorder) exists for each reservation."""
+    """Whether a paid pre-order exists for each reservation, and whether the
+    kitchen has already picked it up (inject_scheduled_preorders created a
+    Ticket for it) — lets the UI show "paid" vs "being prepared" without a
+    second request.
+    """
     preorder_paid = Order.objects.filter(
         session__reservation=OuterRef("pk"),
         payment_status=OrderPaymentStatus.PAID,
     )
-    return qs.annotate(has_preorder=Exists(preorder_paid))
+    preorder_cooking = Ticket.objects.filter(
+        order__session__reservation=OuterRef("pk"),
+        order__payment_status=OrderPaymentStatus.PAID,
+    )
+    return qs.annotate(
+        has_preorder=Exists(preorder_paid),
+        preorder_cooking=Exists(preorder_cooking),
+    )
 
 
 def get_active_reservation_for_table(table: Table) -> Reservation | None:
