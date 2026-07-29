@@ -472,6 +472,188 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedEditorTableList'
           description: ''
+  /api/feedback/:
+    post:
+      operationId: feedback_create
+      tags:
+      - Feedback
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestFeedbackCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GuestFeedbackCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GuestFeedbackCreate'
+        required: true
+      security:
+      - guestJwtAuth: []
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestFeedbackList'
+          description: ''
+  /api/feedback/admin/:
+    get:
+      operationId: feedback_admin_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Feedback Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFeedbackListList'
+          description: ''
+  /api/feedback/admin/{public_id}/:
+    get:
+      operationId: feedback_admin_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Feedback Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackDetail'
+          description: ''
+  /api/feedback/my/:
+    get:
+      operationId: feedback_my_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Feedback
+      security:
+      - guestJwtAuth: []
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGuestFeedbackListList'
+          description: ''
+  /api/feedback/my/{id}/:
+    get:
+      operationId: feedback_my_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Feedback
+      security:
+      - guestJwtAuth: []
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestFeedbackList'
+          description: ''
+    put:
+      operationId: feedback_my_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Feedback
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestFeedbackCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GuestFeedbackCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GuestFeedbackCreate'
+        required: true
+      security:
+      - guestJwtAuth: []
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestFeedbackList'
+          description: ''
+    delete:
+      operationId: feedback_my_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Feedback
+      security:
+      - guestJwtAuth: []
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/menu/admin/categories/:
     get:
       operationId: menu_admin_categories_list
@@ -682,6 +864,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: min_rating
+        schema:
+          type: number
+          format: double
       - name: ordering
         required: false
         in: query
@@ -1172,6 +1359,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: min_rating
+        schema:
+          type: number
+          format: double
       - name: ordering
         required: false
         in: query
@@ -3790,6 +3982,14 @@ components:
         likes_count:
           type: integer
           readOnly: true
+        average_rating:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        rating_count:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3799,12 +3999,14 @@ components:
           format: date-time
           readOnly: true
       required:
+      - average_rating
       - created_at
       - likes_count
       - menu
       - name
       - price
       - public_id
+      - rating_count
       - updated_at
     AdminOverview:
       type: object
@@ -4117,6 +4319,8 @@ components:
           type: string
         currency:
           type: string
+        feedback_token:
+          type: string
       required:
       - currency
       - order_id
@@ -4165,6 +4369,57 @@ components:
           format: uuid
       required:
       - reservation
+    DishFeedback:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        menu_item:
+          type: string
+          format: uuid
+          readOnly: true
+        menu_item_name:
+          type: string
+          readOnly: true
+        rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - menu_item
+      - menu_item_name
+      - public_id
+      - rating
+      - updated_at
+    DishFeedbackInput:
+      type: object
+      properties:
+        menu_item:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+        comment:
+          type: string
+          default: ''
+      required:
+      - menu_item
+      - rating
     EditorTable:
       type: object
       properties:
@@ -4264,6 +4519,144 @@ components:
       - email
       - is_active
       - public_id
+    FeedbackDetail:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        guest:
+          type: string
+          format: uuid
+          readOnly: true
+        guest_name:
+          type: string
+          readOnly: true
+        guest_identity:
+          type: string
+          readOnly: true
+        order:
+          type: string
+          format: uuid
+          readOnly: true
+        overall_rating:
+          type: integer
+          readOnly: true
+        service_rating:
+          type: integer
+          readOnly: true
+        comment:
+          type: string
+          readOnly: true
+        review_status:
+          $ref: '#/components/schemas/ReviewStatusEnum'
+        prompt_shown_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        dismissed:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        dish_feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishFeedback'
+          readOnly: true
+      required:
+      - comment
+      - created_at
+      - dish_feedback
+      - dismissed
+      - guest
+      - guest_identity
+      - guest_name
+      - order
+      - overall_rating
+      - prompt_shown_at
+      - public_id
+      - restaurant
+      - service_rating
+      - updated_at
+    FeedbackList:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        guest:
+          type: string
+          format: uuid
+          readOnly: true
+        guest_name:
+          type: string
+          readOnly: true
+        guest_identity:
+          type: string
+          readOnly: true
+        order:
+          type: string
+          format: uuid
+          readOnly: true
+        overall_rating:
+          type: integer
+          readOnly: true
+        service_rating:
+          type: integer
+          readOnly: true
+        comment:
+          type: string
+          readOnly: true
+        review_status:
+          $ref: '#/components/schemas/ReviewStatusEnum'
+        prompt_shown_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        dismissed:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - comment
+      - created_at
+      - dismissed
+      - guest
+      - guest_identity
+      - guest_name
+      - order
+      - overall_rating
+      - prompt_shown_at
+      - public_id
+      - restaurant
+      - service_rating
+      - updated_at
     GoogleAuth:
       type: object
       properties:
@@ -4302,6 +4695,78 @@ components:
           readOnly: true
       required:
       - access
+    GuestFeedbackCreate:
+      type: object
+      properties:
+        order:
+          type: string
+          format: uuid
+        overall_rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+        service_rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+        comment:
+          type: string
+          default: ''
+        dish_feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishFeedbackInput'
+      required:
+      - order
+      - overall_rating
+      - service_rating
+    GuestFeedbackList:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        restaurant:
+          type: string
+          format: uuid
+          readOnly: true
+        order:
+          type: string
+          format: uuid
+          readOnly: true
+        overall_rating:
+          type: integer
+          readOnly: true
+        service_rating:
+          type: integer
+          readOnly: true
+        comment:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        dish_feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/DishFeedback'
+          readOnly: true
+      required:
+      - comment
+      - created_at
+      - dish_feedback
+      - order
+      - overall_rating
+      - public_id
+      - restaurant
+      - service_rating
+      - updated_at
     GuestInit:
       type: object
       properties:
@@ -4559,6 +5024,14 @@ components:
         is_liked:
           type: boolean
           readOnly: true
+        average_rating:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        rating_count:
+          type: integer
+          readOnly: true
         price:
           type: string
           format: decimal
@@ -4579,6 +5052,7 @@ components:
           readOnly: true
       required:
       - allergens
+      - average_rating
       - category
       - created_at
       - ingredients
@@ -4588,6 +5062,7 @@ components:
       - name
       - price
       - public_id
+      - rating_count
       - restaurant
       - updated_at
     ObstacleEntity:
@@ -5026,6 +5501,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Employee'
+    PaginatedFeedbackListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedbackList'
+    PaginatedGuestFeedbackListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GuestFeedbackList'
     PaginatedLayoutList:
       type: object
       required:
@@ -5454,6 +5975,14 @@ components:
           maximum: 2147483647
           minimum: 0
         likes_count:
+          type: integer
+          readOnly: true
+        average_rating:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        rating_count:
           type: integer
           readOnly: true
         created_at:
@@ -6244,6 +6773,11 @@ components:
           type: string
           format: uuid
           readOnly: true
+        order_public_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
         order_number:
           type: string
           maxLength: 40
@@ -6314,6 +6848,7 @@ components:
       required:
       - items
       - order_number
+      - order_public_id
       - public_id
       - restaurant_address
       - restaurant_image
@@ -6326,6 +6861,11 @@ components:
     ReceiptItem:
       type: object
       properties:
+        menu_item_public_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
         name:
           type: string
           maxLength: 120
@@ -6338,6 +6878,8 @@ components:
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
           nullable: true
+      required:
+      - menu_item_public_id
     ReorderEntry:
       type: object
       description: One {public_id, sort_order} pair for a bulk reorder request.
@@ -6516,6 +7058,14 @@ components:
       required:
       - name
       - public_id
+    ReviewStatusEnum:
+      enum:
+      - new
+      - reviewed
+      type: string
+      description: |-
+        * `new` - New
+        * `reviewed` - Reviewed
     RoleEnum:
       enum:
       - admin
@@ -7129,6 +7679,10 @@ components:
       required:
       - public_id
   securitySchemes:
+    guestJwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
     jwtAuth:
       type: http
       scheme: bearer

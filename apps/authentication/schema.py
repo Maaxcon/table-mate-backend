@@ -13,3 +13,15 @@ class TokenVersionJWTAuthenticationScheme(OpenApiAuthenticationExtension):
             "scheme": "bearer",
             "bearerFormat": "JWT",
         }
+
+
+class GuestJWTAuthenticationScheme(OpenApiAuthenticationExtension):
+    target_class = "apps.authentication.authentication.GuestJWTAuthentication"
+    name = "guestJwtAuth"
+
+    def get_security_definition(self, auto_schema: object) -> dict[str, str]:
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
