@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -54,6 +56,7 @@ class RestaurantSettings(BaseModel):
     timezone = models.CharField(max_length=64, default="UTC")
     currency = models.CharField(max_length=3)
     locale = models.CharField(max_length=16, default="en")
+    supported_languages = models.JSONField(default=list, blank=True)
     default_tax_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0)
     default_service_charge = models.DecimalField(max_digits=5, decimal_places=4, default=0)
     working_hours = models.JSONField(default=dict, validators=[validate_working_hours])
@@ -80,6 +83,17 @@ class RestaurantSettings(BaseModel):
                 name="restaurant_settings_eta_range_valid",
             )
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.supported_languages:
+            if self.locale not in self.supported_languages:
+                raise ValidationError(
+                    {"locale": f"'{self.locale}' must be in supported_languages: {self.supported_languages}"}
+                )
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"Settings for {self.restaurant.name}"

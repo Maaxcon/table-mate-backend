@@ -13,6 +13,7 @@ SETTINGS_UPDATABLE = frozenset(
         "timezone",
         "currency",
         "locale",
+        "supported_languages",
         "default_tax_rate",
         "default_service_charge",
         "working_hours",

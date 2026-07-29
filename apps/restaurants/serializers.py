@@ -171,6 +171,7 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
             "timezone",
             "currency",
             "locale",
+            "supported_languages",
             "default_tax_rate",
             "default_service_charge",
             "working_hours",
@@ -182,6 +183,27 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
             "updated_at",
         ]
         read_only_fields = ["public_id", "rating", "created_at", "updated_at"]
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        locale = attrs.get("locale")
+        supported = attrs.get("supported_languages")
+        if supported is not None:
+            for code in supported:
+                if not isinstance(code, str) or not code.islower() or len(code) not in (2, 3):
+                    raise serializers.ValidationError(
+                        {"supported_languages": f"Invalid language code: {code!r}"}
+                    )
+            if not supported:
+                raise serializers.ValidationError(
+                    {"supported_languages": "At least one language must be configured"}
+                )
+            if locale is None:
+                locale = self.instance.locale if self.instance else "en"
+            if locale not in supported:
+                raise serializers.ValidationError(
+                    {"locale": "Default locale must be in supported_languages"}
+                )
+        return attrs
 
 
 class ZoneSerializer(serializers.ModelSerializer[Zone]):
