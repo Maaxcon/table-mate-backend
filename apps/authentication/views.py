@@ -302,7 +302,14 @@ class GuestInitView(APIView):
         cart_session_id = str(session.public_id)
         guest_id = _carry_forward_guest_id(request)
         token = _issue_guest_token(cart_session_id=cart_session_id, guest_id=guest_id)
-        return Response({"access": token})
+        # Authoritative pre-order flag: whether the reservation behind this
+        # cart has actually started yet. Computed from the session's own
+        # reservation rather than left for the frontend to infer from which
+        # branch succeeded — a cart opened by an earlier pre-order round is
+        # found here via the ACTIVE-cart lookup, not the PENDING fallback,
+        # so that inference was wrong for a second visit to the same cart.
+        is_preorder = session.reservation.status == ReservationStatus.PENDING
+        return Response({"access": token, "is_preorder": is_preorder})
 
 
 def _ensure_session_for_table(table_id: str) -> CartSession:
