@@ -307,7 +307,6 @@ def publish_layout(
     }
 
 
-<<<<<<< HEAD
 @transaction.atomic
 def save_draft(
     *,
