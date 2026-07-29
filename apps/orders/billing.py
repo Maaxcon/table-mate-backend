@@ -1,4 +1,5 @@
 __all__ = [
+    "cancel_preorder",
     "checkout_cart_session",
     "close_reservation_carts",
     "close_visit_session",
@@ -449,4 +450,34 @@ def confirm_and_pay_preorder(
         order.save(update_fields=["payment_status"])
 
     _broadcast_cart_updated(cart_session)
+    return order
+
+
+def cancel_preorder(*, order: Order, user: User | None = None) -> Order:
+    """Cancel a paid pre-order and simulate a refund, before the kitchen has it.
+
+    Only allowed while no Ticket exists yet for the order — once
+    inject_scheduled_preorders has picked it up, the kitchen is already
+    working on it and it's too late to cancel from the guest side.
+    """
+    with transaction.atomic():
+        order = Order.objects.select_for_update().select_related("session").get(pk=order.pk)
+        if order.payment_status != OrderPaymentStatus.PAID:
+            raise PreorderNotAllowedError("This pre-order isn't paid, so there's nothing to cancel.")
+        if Ticket.objects.filter(order=order).exists():
+            raise PreorderNotAllowedError(
+                "The kitchen has already started this pre-order — it can't be cancelled."
+            )
+
+        OrderItem.objects.filter(order=order).update(status=OrderItemStatus.VOIDED, is_paid=False)
+        order.status = OrderStatus.CANCELLED
+        order.payment_status = OrderPaymentStatus.REFUNDED
+        order.tax_total = Decimal("0")
+        order.service_charge = Decimal("0")
+        order.total_amount = Decimal("0")
+        order.save(
+            update_fields=["status", "payment_status", "tax_total", "service_charge", "total_amount"]
+        )
+        _recompute_session_totals(order.session)
+
     return order
