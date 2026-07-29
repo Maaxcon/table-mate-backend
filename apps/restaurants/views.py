@@ -142,7 +142,7 @@ class PublicRestaurantViewSet(
 
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         instance = self.get_object()
-        request.active_language = resolve_restaurant_language(instance, request.META.get("HTTP_ACCEPT_LANGUAGE", ""))
+        request.active_language = resolve_restaurant_language(instance, request.META.get("HTTP_ACCEPT_LANGUAGE", ""))  # type: ignore[attr-defined]
         return super().retrieve(request, *args, **kwargs)
 
 

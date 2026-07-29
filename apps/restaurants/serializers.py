@@ -222,7 +222,18 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
         return attrs
 
 
+class ZoneTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    name = serializers.CharField(max_length=128)
+
+    class Meta:
+        fields = ["language_code", "name"]
+
+
 class ZoneSerializer(serializers.ModelSerializer[Zone]):
+    _lang = serializers.SerializerMethodField(read_only=True)
+    _is_fallback = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Zone
         fields = [
@@ -232,14 +243,44 @@ class ZoneSerializer(serializers.ModelSerializer[Zone]):
             "edge_styles",
             "canvas_cols",
             "canvas_rows",
+            "_lang",
+            "_is_fallback",
         ]
         read_only_fields = ["public_id"]
+
+    def get__lang(self, obj: Zone) -> str | None:
+        request = self.context.get("request")
+        return getattr(request, "active_language", None) if request else None
+
+    def get__is_fallback(self, obj: Zone) -> bool:
+        request = self.context.get("request")
+        return getattr(request, "active_language_is_fallback", False) if request else False
+
+    def to_representation(self, instance: Zone) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        lang = getattr(request, "active_language", None) if request else None
+        if lang:
+            localized = get_localized_content(instance, lang)
+            if "name" in localized and localized["name"] is not None:
+                data["name"] = localized["name"]
+        return data
+
+
+class TableTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    public_number = serializers.CharField(max_length=64)
+
+    class Meta:
+        fields = ["language_code", "public_number"]
 
 
 class TableSerializer(serializers.ModelSerializer[Table]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     zone = ZoneSerializer(read_only=True, allow_null=True)
     is_occupied = serializers.BooleanField(read_only=True)
+    _lang = serializers.SerializerMethodField(read_only=True)
+    _is_fallback = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Table
@@ -251,10 +292,30 @@ class TableSerializer(serializers.ModelSerializer[Table]):
             "is_occupied",
             "active",
             "zone",
+            "_lang",
+            "_is_fallback",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["public_id", "is_occupied", "created_at", "updated_at"]
+
+    def get__lang(self, obj: Table) -> str | None:
+        request = self.context.get("request")
+        return getattr(request, "active_language", None) if request else None
+
+    def get__is_fallback(self, obj: Table) -> bool:
+        request = self.context.get("request")
+        return getattr(request, "active_language_is_fallback", False) if request else False
+
+    def to_representation(self, instance: Table) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        lang = getattr(request, "active_language", None) if request else None
+        if lang:
+            localized = get_localized_content(instance, lang)
+            if "public_number" in localized and localized["public_number"] is not None:
+                data["public_number"] = localized["public_number"]
+        return data
 
 
 class VerifyScanResponseSerializer(serializers.Serializer[None]):

@@ -4,10 +4,12 @@ from django.core.validators import MaxValueValidator
 from rest_framework import serializers
 
 from apps.authentication.models import User
+from apps.menu.services.localization import get_localized_content
 from apps.restaurants.models import Restaurant, Table, Zone
 from common.api import PublicIdRelatedField
 
 from .models import Layout, LayoutVersion
+from .services import localize_layout_json
 
 GRID = 100
 DEFAULT_CANVAS_COLS = 20
@@ -36,6 +38,8 @@ class LayoutSerializer(serializers.ModelSerializer[Layout]):
 class EditorTableSerializer(serializers.ModelSerializer[Table]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     zone: PublicIdRelatedField[Zone] = PublicIdRelatedField(read_only=True, allow_null=True)
+    _lang = serializers.SerializerMethodField(read_only=True)
+    _is_fallback = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Table
@@ -46,6 +50,8 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
             "public_number",
             "capacity",
             "active",
+            "_lang",
+            "_is_fallback",
             "created_at",
             "updated_at",
         ]
@@ -58,6 +64,24 @@ class EditorTableSerializer(serializers.ModelSerializer[Table]):
             "created_at",
             "updated_at",
         ]
+
+    def get__lang(self, obj: Table) -> str | None:
+        request = self.context.get("request")
+        return getattr(request, "active_language", None) if request else None
+
+    def get__is_fallback(self, obj: Table) -> bool:
+        request = self.context.get("request")
+        return getattr(request, "active_language_is_fallback", False) if request else False
+
+    def to_representation(self, instance: Table) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        lang = getattr(request, "active_language", None) if request else None
+        if lang:
+            localized = get_localized_content(instance, lang)
+            if "public_number" in localized and localized["public_number"] is not None:
+                data["public_number"] = localized["public_number"]
+        return data
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +260,15 @@ class DraftLayoutSerializer(serializers.Serializer[Any]):
     owner_id = serializers.CharField(read_only=True, allow_null=True, default=None)
 
 
+class LayoutEntityTranslationSerializer(serializers.Serializer[Any]):
+    entity_id = serializers.UUIDField()
+    language_code = serializers.CharField(max_length=10)
+    entity_label = serializers.CharField(max_length=255, source="label")
+
+    class Meta:
+        fields = ["entity_id", "language_code", "entity_label"]
+
+
 class LayoutVersionSerializer(serializers.ModelSerializer[LayoutVersion]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     published_by: PublicIdRelatedField[User] = PublicIdRelatedField(read_only=True)
@@ -252,3 +285,11 @@ class LayoutVersionSerializer(serializers.ModelSerializer[LayoutVersion]):
             "created_at",
         ]
         read_only_fields = fields
+
+    def to_representation(self, instance: LayoutVersion) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        lang = getattr(request, "active_language", None) if request else None
+        if lang and instance.layout_json:
+            data["layout_json"] = localize_layout_json(instance.layout_json, lang, instance.pk)
+        return data
