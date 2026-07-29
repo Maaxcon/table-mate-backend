@@ -2,6 +2,7 @@ __all__ = [
     "checkout_cart_session",
     "close_reservation_carts",
     "close_visit_session",
+    "confirm_and_pay_preorder",
     "ensure_visit_session",
 ]
 
@@ -22,6 +23,7 @@ from common.exceptions import (
     CartSessionClosedError,
     DomainError,
     EmptyCartError,
+    PreorderNotAllowedError,
     ReservationConflictError,
     RestaurantClosedError,
 )
@@ -250,6 +252,85 @@ def _prune_unavailable_cart_items(cart_session: CartSession) -> list[dict[str, s
     return removed
 
 
+def _build_order_from_cart(
+    *,
+    cart_session: CartSession,
+    session: Session,
+    user: User | None,
+    currency: str,
+    tax_rate: Decimal,
+    service_charge_rate: Decimal,
+) -> tuple[Order, list[OrderItem]]:
+    """Turn a cart's items into an Order + OrderItems, closing the cart.
+
+    Leaves OrderItem.ticket unset — callers attach a Ticket themselves, either
+    immediately (checkout_cart_session) or later (confirm_and_pay_preorder,
+    picked up by inject_scheduled_preorders near the reservation's start_at).
+    """
+    cart_items = list(CartItem.objects.filter(cart_session=cart_session).select_related("menu_item"))
+    if not cart_items:
+        raise EmptyCartError("Cart has no items to check out.")
+
+    order = Order.objects.create(
+        restaurant_id=cart_session.restaurant_id,
+        session=session,
+        created_by=user,
+        created_by_source=CreatedBySource.CUSTOMER if user is not None else CreatedBySource.SYSTEM,
+        source=OrderSource.CUSTOMER_PREPAID,
+        status=OrderStatus.SUBMITTED,
+        payment_status=OrderPaymentStatus.UNPAID,
+        currency=currency,
+    )
+
+    order_items: list[OrderItem] = []
+    order_subtotal = Decimal("0")
+    order_tax = Decimal("0")
+    # Build a map of guest_identity → display_name for this session.
+    from apps.orders.models import GuestProfile
+
+    guest_names = dict(
+        GuestProfile.objects.filter(cart_session=cart_session).values_list("guest_identity", "display_name")
+    )
+    for cart_item in cart_items:
+        unit_price = cart_item.menu_item.price
+        line_total = quantize_money(unit_price * cart_item.quantity)
+        line_tax = quantize_money(line_total * tax_rate)
+        order_items.append(
+            OrderItem.objects.create(
+                restaurant_id=cart_session.restaurant_id,
+                order=order,
+                menu_item=cart_item.menu_item,
+                guest_slot=cart_item.guest_slot or 0,
+                guest_display_name=(
+                    guest_names.get(cart_item.guest_identity) if cart_item.guest_identity else None
+                ),
+                quantity=cart_item.quantity,
+                comment=cart_item.comment,
+                unit_price=unit_price,
+                total_price=line_total,
+                tax_rate=tax_rate,
+                tax_amount=line_tax,
+            )
+        )
+        order_subtotal += line_total
+        order_tax += line_tax
+
+    # Service charge applies to the goods subtotal and is not itself taxed.
+    order_service_charge = quantize_money(order_subtotal * service_charge_rate)
+    _distribute_service_charge(order_items, order_subtotal, order_service_charge)
+    order.tax_total = order_tax
+    order.service_charge = order_service_charge
+    order.total_amount = order_subtotal + order_tax + order_service_charge
+    order.save(update_fields=["tax_total", "service_charge", "total_amount"])
+
+    cart_session.status = CartSessionStatus.CLOSED
+    cart_session.save(update_fields=["status"])
+
+    _recompute_session_totals(session)
+
+    return order, order_items
+
+
 def checkout_cart_session(
     *,
     cart_session: CartSession,
@@ -278,23 +359,17 @@ def checkout_cart_session(
         if not is_restaurant_open(cart_session.restaurant_id):
             raise RestaurantClosedError()
 
-        cart_items = list(CartItem.objects.filter(cart_session=cart_session).select_related("menu_item"))
-        if not cart_items:
-            raise EmptyCartError("Cart has no items to check out.")
-
         reservation = cart_session.reservation
         currency, tax_rate, service_charge_rate = _restaurant_billing(reservation.restaurant_id)
         session = ensure_visit_session(reservation, opened_by=user, currency=currency)
 
-        order = Order.objects.create(
-            restaurant_id=cart_session.restaurant_id,
+        order, order_items = _build_order_from_cart(
+            cart_session=cart_session,
             session=session,
-            created_by=user,
-            created_by_source=CreatedBySource.CUSTOMER if user is not None else CreatedBySource.SYSTEM,
-            source=OrderSource.CUSTOMER_PREPAID,
-            status=OrderStatus.SUBMITTED,
-            payment_status=OrderPaymentStatus.UNPAID,
+            user=user,
             currency=currency,
+            tax_rate=tax_rate,
+            service_charge_rate=service_charge_rate,
         )
 
         ticket = Ticket.objects.create(
@@ -304,53 +379,7 @@ def checkout_cart_session(
             status=TicketStatus.INCOMING,
             injected_at=timezone.now(),
         )
-
-        order_items: list[OrderItem] = []
-        order_subtotal = Decimal("0")
-        order_tax = Decimal("0")
-        # Build a map of guest_identity → display_name for this session.
-        from apps.orders.models import GuestProfile
-
-        guest_names = dict(
-            GuestProfile.objects.filter(cart_session=cart_session).values_list("guest_identity", "display_name")
-        )
-        for cart_item in cart_items:
-            unit_price = cart_item.menu_item.price
-            line_total = quantize_money(unit_price * cart_item.quantity)
-            line_tax = quantize_money(line_total * tax_rate)
-            order_items.append(
-                OrderItem.objects.create(
-                    restaurant_id=cart_session.restaurant_id,
-                    order=order,
-                    ticket=ticket,
-                    menu_item=cart_item.menu_item,
-                    guest_slot=cart_item.guest_slot or 0,
-                    guest_display_name=(
-                        guest_names.get(cart_item.guest_identity) if cart_item.guest_identity else None
-                    ),
-                    quantity=cart_item.quantity,
-                    comment=cart_item.comment,
-                    unit_price=unit_price,
-                    total_price=line_total,
-                    tax_rate=tax_rate,
-                    tax_amount=line_tax,
-                )
-            )
-            order_subtotal += line_total
-            order_tax += line_tax
-
-        # Service charge applies to the goods subtotal and is not itself taxed.
-        order_service_charge = quantize_money(order_subtotal * service_charge_rate)
-        _distribute_service_charge(order_items, order_subtotal, order_service_charge)
-        order.tax_total = order_tax
-        order.service_charge = order_service_charge
-        order.total_amount = order_subtotal + order_tax + order_service_charge
-        order.save(update_fields=["tax_total", "service_charge", "total_amount"])
-
-        cart_session.status = CartSessionStatus.CLOSED
-        cart_session.save(update_fields=["status"])
-
-        _recompute_session_totals(session)
+        OrderItem.objects.filter(pk__in=[item.pk for item in order_items]).update(ticket=ticket)
 
         transaction.on_commit(
             lambda: emit_cart_checked_out(
@@ -365,10 +394,59 @@ def checkout_cart_session(
                 cart_session.restaurant_id,
                 ticket_id=str(ticket.public_id),
                 table_number=session.table.public_number,
-                items_count=len(cart_items),
+                items_count=len(order_items),
             )
         )
 
     # Broadcast after commit so websocket consumers don't read a pre-commit cart.
+    _broadcast_cart_updated(cart_session)
+    return order
+
+
+def confirm_and_pay_preorder(
+    *,
+    cart_session: CartSession,
+    user: User | None = None,
+) -> Order:
+    """Guest confirms and pays for a pre-order, ahead of their reservation's start_at.
+
+    Builds the Order/OrderItems now, same as checkout, but leaves them without
+    a Ticket — the kitchen doesn't see them until inject_scheduled_preorders
+    creates one closer to arrival. Payment is the same simulated pattern used
+    to split the bill (_pay_order_items_for_session in services/cart.py): no
+    real money moves, items are simply marked paid.
+
+    Only allowed while the reservation is still PENDING — once it's ACTIVE the
+    guest just orders normally through checkout_cart_session.
+    """
+    removed = _prune_unavailable_cart_items(cart_session)
+    if removed:
+        raise CartChangedError(removed=removed)
+
+    with transaction.atomic():
+        cart_session = CartSession.objects.select_for_update().select_related("reservation").get(pk=cart_session.pk)
+        if cart_session.status != CartSessionStatus.ACTIVE:
+            raise CartSessionClosedError("Cart session is closed.")
+
+        reservation = cart_session.reservation
+        if reservation.status != ReservationStatus.PENDING:
+            raise PreorderNotAllowedError()
+
+        currency, tax_rate, service_charge_rate = _restaurant_billing(reservation.restaurant_id)
+        session = ensure_visit_session(reservation, opened_by=user, currency=currency)
+
+        order, order_items = _build_order_from_cart(
+            cart_session=cart_session,
+            session=session,
+            user=user,
+            currency=currency,
+            tax_rate=tax_rate,
+            service_charge_rate=service_charge_rate,
+        )
+
+        OrderItem.objects.filter(pk__in=[item.pk for item in order_items]).update(is_paid=True)
+        order.payment_status = OrderPaymentStatus.PAID
+        order.save(update_fields=["payment_status"])
+
     _broadcast_cart_updated(cart_session)
     return order

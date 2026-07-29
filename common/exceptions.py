@@ -113,3 +113,9 @@ class WaiterCallCooldownError(DomainError):
     default_detail = "The waiter was already called for this table recently."
     default_code = "waiter_call_cooldown"
     default_status_code = HTTPStatus.TOO_MANY_REQUESTS
+
+
+class PreorderNotAllowedError(DomainError):
+    default_detail = "Pre-order is only available before the reservation starts."
+    default_code = "preorder_not_allowed"
+    default_status_code = HTTPStatus.CONFLICT
