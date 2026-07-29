@@ -4,7 +4,7 @@ from django.utils.deprecation import MiddlewareMixin
 
 from apps.restaurants.models import RestaurantSettings
 
-from .language import parse_accept_language_header, resolve_restaurant_language, select_best_match
+from .language import resolve_restaurant_language
 
 STAFF_ROLES = frozenset({"waiter", "cook", "admin"})
 

@@ -709,6 +709,122 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/menu/admin/categories/{public_id}/translations/:
+    get:
+      operationId: menu_admin_categories_translations_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuCategory'
+          description: ''
+    post:
+      operationId: menu_admin_categories_translations_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuCategoryTranslation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MenuCategoryTranslation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MenuCategoryTranslation'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuCategoryTranslation'
+          description: ''
+  /api/menu/admin/categories/{public_id}/translations/{lang}/:
+    put:
+      operationId: menu_admin_categories_translations_update
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuCategoryTranslation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MenuCategoryTranslation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MenuCategoryTranslation'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuCategoryTranslation'
+          description: ''
+    delete:
+      operationId: menu_admin_categories_translations_destroy
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/menu/admin/categories/reorder/:
     post:
       operationId: menu_admin_categories_reorder_create
@@ -933,6 +1049,122 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdminMenuItem'
           description: ''
+  /api/menu/admin/items/{public_id}/translations/:
+    get:
+      operationId: menu_admin_items_translations_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenuItem'
+          description: ''
+    post:
+      operationId: menu_admin_items_translations_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MenuItemTranslation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MenuItemTranslation'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuItemTranslation'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItemTranslation'
+          description: ''
+  /api/menu/admin/items/{public_id}/translations/{lang}/:
+    put:
+      operationId: menu_admin_items_translations_update
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MenuItemTranslation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MenuItemTranslation'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuItemTranslation'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItemTranslation'
+          description: ''
+    delete:
+      operationId: menu_admin_items_translations_destroy
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/menu/admin/items/bulk/:
     post:
       operationId: menu_admin_items_bulk_create
@@ -1151,6 +1383,122 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/menu/admin/menus/{public_id}/translations/:
+    get:
+      operationId: menu_admin_menus_translations_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMenu'
+          description: ''
+    post:
+      operationId: menu_admin_menus_translations_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuTranslation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MenuTranslation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MenuTranslation'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuTranslation'
+          description: ''
+  /api/menu/admin/menus/{public_id}/translations/{lang}/:
+    put:
+      operationId: menu_admin_menus_translations_update
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuTranslation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MenuTranslation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MenuTranslation'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuTranslation'
+          description: ''
+    delete:
+      operationId: menu_admin_menus_translations_destroy
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/menu/allergens/:
     get:
       operationId: menu_allergens_list
@@ -1228,6 +1576,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/MenuCategory'
           description: ''
+  /api/menu/ingredients/:
+    get:
+      operationId: menu_ingredients_retrieve
+      description: Ingredient vocabulary for a restaurant, localized to the active
+        language.
+      parameters:
+      - in: query
+        name: restaurant
+        schema:
+          type: string
+        description: Restaurant public UUID
+        required: true
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/menu/items/:
     get:
       operationId: menu_items_list
@@ -4961,6 +5330,15 @@ components:
             type: string
             format: uuid
           readOnly: true
+        _lang:
+          type: string
+          nullable: true
+          readOnly: true
+          title: ' lang'
+        _is_fallback:
+          type: boolean
+          readOnly: true
+          title: ' is fallback'
         created_at:
           type: string
           format: date-time
@@ -4970,6 +5348,8 @@ components:
           format: date-time
           readOnly: true
       required:
+      - _is_fallback
+      - _lang
       - categories
       - created_at
       - items
@@ -5001,6 +5381,15 @@ components:
           description: Hex color used for category theming.
           pattern: ^#[0-9a-fA-F]{6}$
           maxLength: 7
+        _lang:
+          type: string
+          nullable: true
+          readOnly: true
+          title: ' lang'
+        _is_fallback:
+          type: boolean
+          readOnly: true
+          title: ' is fallback'
         created_at:
           type: string
           format: date-time
@@ -5010,11 +5399,25 @@ components:
           format: date-time
           readOnly: true
       required:
+      - _is_fallback
+      - _lang
       - created_at
       - menu
       - name
       - public_id
       - updated_at
+    MenuCategoryTranslation:
+      type: object
+      properties:
+        language_code:
+          type: string
+          maxLength: 10
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - language_code
+      - name
     MenuItem:
       type: object
       properties:
@@ -5066,6 +5469,15 @@ components:
         is_liked:
           type: boolean
           readOnly: true
+        _lang:
+          type: string
+          nullable: true
+          readOnly: true
+          title: ' lang'
+        _is_fallback:
+          type: boolean
+          readOnly: true
+          title: ' is fallback'
         price:
           type: string
           format: decimal
@@ -5085,6 +5497,8 @@ components:
           format: date-time
           readOnly: true
       required:
+      - _is_fallback
+      - _lang
       - allergens
       - category
       - created_at
@@ -5097,6 +5511,33 @@ components:
       - public_id
       - restaurant
       - updated_at
+    MenuItemTranslation:
+      type: object
+      properties:
+        language_code:
+          type: string
+          maxLength: 10
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+      required:
+      - language_code
+      - name
+    MenuTranslation:
+      type: object
+      properties:
+        language_code:
+          type: string
+          maxLength: 10
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - language_code
+      - name
     ObstacleEntity:
       type: object
       properties:
