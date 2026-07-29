@@ -25,7 +25,7 @@ from common.api import (
 from common.filters import StableOrderingFilter
 
 from . import services
-from .allergens import ALLERGENS
+from .allergens import get_allergen_labels
 from .filters import MenuCategoryFilter, MenuItemFilter
 from .models import Menu, MenuCategory, MenuItem, MenuItemLike
 from .selectors import (
@@ -40,13 +40,17 @@ from .serializers import (
     AdminMenuSerializer,
     BulkItemActionSerializer,
     MenuCategorySerializer,
+    MenuCategoryTranslationSerializer,
     MenuItemSerializer,
+    MenuItemTranslationSerializer,
     MenuSerializer,
+    MenuTranslationSerializer,
     ReorderEntrySerializer,
     ToggleMenuItemLikeRequestSerializer,
     ToggleMenuItemLikeResponseSerializer,
     UpsellSuggestionResponseSerializer,
 )
+from .services.localization import get_localized_content
 
 
 def _reorder_view(viewset: Any, request: Request) -> Response:
@@ -78,6 +82,38 @@ class MenuViewSet(
             return Menu.objects.none()
         return get_active_menus(restaurant_id=restaurant_id)
 
+    def _localize_queryset(self, queryset: QuerySet[Menu], lang: str) -> list[Menu]:
+        items = list(queryset)
+        for obj in items:
+            localized = get_localized_content(obj, lang)
+            if localized:
+                obj._localized = localized  # type: ignore[attr-defined]
+        return items
+
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        lang = getattr(request, "active_language", None)
+        if lang:
+            items = self._localize_queryset(queryset, lang)
+        else:
+            items = list(queryset)
+        page = self.paginate_queryset(items)  # type: ignore[arg-type]
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(items, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        instance = self.get_object()
+        lang = getattr(request, "active_language", None)
+        if lang:
+            localized = get_localized_content(instance, lang)
+            if localized:
+                instance._localized = localized  # type: ignore[attr-defined]
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
 
 @extend_schema(tags=["Menu"])
 class MenuCategoryViewSet(
@@ -96,6 +132,38 @@ class MenuCategoryViewSet(
             return MenuCategory.objects.none()
         return get_categories_by_restaurant(restaurant_id=restaurant_id)
 
+    def _localize_queryset(self, queryset: QuerySet[MenuCategory], lang: str) -> list[MenuCategory]:
+        items = list(queryset)
+        for obj in items:
+            localized = get_localized_content(obj, lang)
+            if localized:
+                obj._localized = localized  # type: ignore[attr-defined]
+        return items
+
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        lang = getattr(request, "active_language", None)
+        if lang:
+            items = self._localize_queryset(queryset, lang)
+        else:
+            items = list(queryset)
+        page = self.paginate_queryset(items)  # type: ignore[arg-type]
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(items, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        instance = self.get_object()
+        lang = getattr(request, "active_language", None)
+        if lang:
+            localized = get_localized_content(instance, lang)
+            if localized:
+                instance._localized = localized  # type: ignore[attr-defined]
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
 
 @extend_schema(tags=["Menu Admin"])
 class AdminMenuViewSet(
@@ -110,6 +178,49 @@ class AdminMenuViewSet(
 
     def perform_create(self, serializer: BaseSerializer[Menu]) -> None:
         serializer.save(restaurant_id=require_restaurant_id_from_auth(self.request))
+
+    @extend_schema(
+        request=MenuTranslationSerializer,
+        responses={201: MenuTranslationSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="translations")
+    def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        serializer = MenuTranslationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        menu = self.get_object()
+        translation = services.create_menu_translation(
+            menu_id=menu.id,
+            language_code=serializer.validated_data["language_code"],
+            name=serializer.validated_data["name"],
+        )
+        return Response(MenuTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        request=MenuTranslationSerializer,
+        responses={200: MenuTranslationSerializer},
+    )
+    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
+    def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        lang = kwargs.pop("lang")
+        serializer = MenuTranslationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        translation = services.update_menu_translation(
+            menu_id=self.get_object().id,
+            language_code=lang,
+            name=serializer.validated_data["name"],
+        )
+        return Response(MenuTranslationSerializer(translation).data)
+
+    @action(detail=True, methods=["delete"], url_path="translations/(?P<lang>[^/.]+)")
+    def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        lang = kwargs.pop("lang")
+        services.delete_menu_translation(menu_id=self.get_object().id, language_code=lang)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get"], url_path="translations")
+    def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        translations = services.get_menu_translations(menu_id=self.get_object().id)
+        return Response(MenuTranslationSerializer(translations, many=True).data)
 
 
 @extend_schema(tags=["Menu Admin"])
@@ -144,6 +255,47 @@ class AdminMenuCategoryViewSet(
     @action(detail=False, methods=["post"])
     def reorder(self, request: Request) -> Response:
         return _reorder_view(self, request)
+
+    @extend_schema(
+        request=MenuCategoryTranslationSerializer,
+        responses={201: MenuCategoryTranslationSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="translations")
+    def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        serializer = MenuCategoryTranslationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        translation = services.create_category_translation(
+            category_id=self.get_object().id,
+            **serializer.validated_data,
+        )
+        return Response(MenuCategoryTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        request=MenuCategoryTranslationSerializer,
+        responses={200: MenuCategoryTranslationSerializer},
+    )
+    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
+    def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        lang = kwargs.pop("lang")
+        serializer = MenuCategoryTranslationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        translation = services.update_category_translation(
+            category_id=self.get_object().id,
+            language_code=lang,
+            name=serializer.validated_data["name"],
+        )
+        return Response(MenuCategoryTranslationSerializer(translation).data)
+
+    @action(detail=True, methods=["delete"], url_path="translations/(?P<lang>[^/.]+)")
+    def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        lang = kwargs.pop("lang")
+        services.delete_category_translation(category_id=self.get_object().id, language_code=lang)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get"], url_path="translations")
+    def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        translations = services.get_category_translations(category_id=self.get_object().id)
+        return Response(MenuCategoryTranslationSerializer(translations, many=True).data)
 
 
 @extend_schema(tags=["Menu Admin"])
@@ -217,6 +369,47 @@ class AdminMenuItemViewSet(
         copy = services.duplicate_item(self.get_object())
         return Response(self.get_serializer(copy).data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(
+        request=MenuItemTranslationSerializer,
+        responses={201: MenuItemTranslationSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="translations")
+    def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        serializer = MenuItemTranslationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        translation = services.create_item_translation(
+            menu_item_id=self.get_object().id,
+            **serializer.validated_data,
+        )
+        return Response(MenuItemTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        request=MenuItemTranslationSerializer,
+        responses={200: MenuItemTranslationSerializer},
+    )
+    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
+    def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        lang = kwargs.pop("lang")
+        serializer = MenuItemTranslationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        translation = services.update_item_translation(
+            menu_item_id=self.get_object().id,
+            language_code=lang,
+            **serializer.validated_data,
+        )
+        return Response(MenuItemTranslationSerializer(translation).data)
+
+    @action(detail=True, methods=["delete"], url_path="translations/(?P<lang>[^/.]+)")
+    def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        lang = kwargs.pop("lang")
+        services.delete_item_translation(menu_item_id=self.get_object().id, language_code=lang)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get"], url_path="translations")
+    def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        translations = services.get_item_translations(menu_item_id=self.get_object().id)
+        return Response(MenuItemTranslationSerializer(translations, many=True).data)
+
 
 @extend_schema(tags=["Menu"])
 class MenuItemViewSet(
@@ -228,6 +421,20 @@ class MenuItemViewSet(
     permission_classes = [AllowAny]
     filterset_class = MenuItemFilter
     ordering_fields = ["created_at", "updated_at", "sort_order", "name", "price"]
+
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     def get_queryset(self) -> QuerySet[MenuItem]:
         restaurant_id = self.resolve_restaurant_or_not_found()
@@ -379,4 +586,5 @@ class AllergenListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request: Request) -> Response:
-        return Response(ALLERGENS)
+        lang = getattr(request, "active_language", "en")
+        return Response(get_allergen_labels(lang))
