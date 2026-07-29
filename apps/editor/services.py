@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
     from .models import LayoutDraft
 
+from .models import LayoutEntityTranslation
+
 
 class TableInUseError(Exception):
     """Raised when attempting to soft-delete a table with active reservations/sessions."""
@@ -305,6 +307,7 @@ def publish_layout(
     }
 
 
+<<<<<<< HEAD
 @transaction.atomic
 def save_draft(
     *,
@@ -345,3 +348,71 @@ def delete_draft(*, restaurant_id: int, owner_id: int) -> bool:
 
     deleted, _ = LayoutDraft.objects.filter(restaurant_id=restaurant_id, owner_id=owner_id).delete()
     return deleted > 0
+
+
+def create_layout_entity_translation(
+    *, layout_version_id: int, entity_id: str, language_code: str, label: str
+) -> LayoutEntityTranslation:
+    return LayoutEntityTranslation.objects.create(
+        layout_version_id=layout_version_id,
+        entity_id=entity_id,
+        language_code=language_code,
+        label=label,
+    )
+
+
+def update_layout_entity_translation(
+    *, layout_version_id: int, entity_id: str, language_code: str, label: str
+) -> LayoutEntityTranslation:
+    translation = LayoutEntityTranslation.objects.get(
+        layout_version_id=layout_version_id,
+        entity_id=entity_id,
+        language_code=language_code,
+    )
+    translation.label = label
+    translation.save(update_fields=["label", "updated_at"])
+    return translation
+
+
+def delete_layout_entity_translation(
+    *, layout_version_id: int, entity_id: str, language_code: str
+) -> None:
+    LayoutEntityTranslation.objects.filter(
+        layout_version_id=layout_version_id,
+        entity_id=entity_id,
+        language_code=language_code,
+    ).delete()
+
+
+def get_layout_entity_translations(
+    *, layout_version_id: int, language_code: str | None = None
+) -> list[LayoutEntityTranslation]:
+    qs = LayoutEntityTranslation.objects.filter(layout_version_id=layout_version_id)
+    if language_code:
+        qs = qs.filter(language_code=language_code)
+    return list(qs)
+
+
+def localize_layout_json(
+    layout_json: dict[str, Any], language_code: str, layout_version_id: int
+) -> dict[str, Any]:
+    """Apply entity label translations to a layout JSON payload."""
+    translations = LayoutEntityTranslation.objects.filter(
+        layout_version_id=layout_version_id,
+        language_code=language_code,
+    )
+    translation_map: dict[str, str] = {}
+    for t in translations:
+        translation_map[str(t.entity_id)] = t.label
+
+    if not translation_map:
+        return layout_json
+
+    result = dict(layout_json)
+    for entity_type in ("thresholds", "portals"):
+        entities = result.get(entity_type, [])
+        for entity in entities:
+            eid = entity.get("id")
+            if eid and str(eid) in translation_map:
+                entity["label"] = translation_map[str(eid)]
+    return result
