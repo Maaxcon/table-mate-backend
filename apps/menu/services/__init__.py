@@ -9,7 +9,7 @@ from django.db.models import Max, QuerySet
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Menu, MenuCategory, MenuItem
+from ..models import Menu, MenuCategory, MenuCategoryTranslation, MenuItem, MenuItemTranslation, MenuTranslation
 
 
 def reorder(queryset: QuerySet[Any], entries: list[dict[str, Any]]) -> None:
@@ -89,7 +89,96 @@ def duplicate_item(item: MenuItem) -> MenuItem:
         finally:
             item.image.close()
     copy.save()
+    for t in MenuItemTranslation.objects.filter(menu_item=item):
+        MenuItemTranslation.objects.create(
+            menu_item=copy,
+            language_code=t.language_code,
+            name=t.name,
+            description=t.description,
+            ingredients=list(t.ingredients or []),
+        )
     return copy
+
+
+def create_menu_translation(*, menu_id: int, language_code: str, name: str) -> MenuTranslation:
+    return MenuTranslation.objects.create(
+        menu_id=menu_id,
+        language_code=language_code,
+        name=name,
+    )
+
+
+def update_menu_translation(*, menu_id: int, language_code: str, name: str) -> MenuTranslation:
+    translation = MenuTranslation.objects.get(menu_id=menu_id, language_code=language_code)
+    translation.name = name
+    translation.save(update_fields=["name", "updated_at"])
+    return translation
+
+
+def delete_menu_translation(*, menu_id: int, language_code: str) -> None:
+    MenuTranslation.objects.filter(menu_id=menu_id, language_code=language_code).delete()
+
+
+def get_menu_translations(*, menu_id: int) -> list[MenuTranslation]:
+    return list(MenuTranslation.objects.filter(menu_id=menu_id))
+
+
+def create_category_translation(*, category_id: int, language_code: str, name: str) -> MenuCategoryTranslation:
+    return MenuCategoryTranslation.objects.create(
+        category_id=category_id,
+        language_code=language_code,
+        name=name,
+    )
+
+
+def update_category_translation(*, category_id: int, language_code: str, name: str) -> MenuCategoryTranslation:
+    translation = MenuCategoryTranslation.objects.get(category_id=category_id, language_code=language_code)
+    translation.name = name
+    translation.save(update_fields=["name", "updated_at"])
+    return translation
+
+
+def delete_category_translation(*, category_id: int, language_code: str) -> None:
+    MenuCategoryTranslation.objects.filter(category_id=category_id, language_code=language_code).delete()
+
+
+def get_category_translations(*, category_id: int) -> list[MenuCategoryTranslation]:
+    return list(MenuCategoryTranslation.objects.filter(category_id=category_id))
+
+
+def create_item_translation(
+    *, menu_item_id: int, language_code: str, name: str,
+    description: str | None = None, ingredients: list[str] | None = None,
+) -> MenuItemTranslation:
+    return MenuItemTranslation.objects.create(
+        menu_item_id=menu_item_id,
+        language_code=language_code,
+        name=name,
+        description=description or "",
+        ingredients=ingredients or [],
+    )
+
+
+def update_item_translation(
+    *, menu_item_id: int, language_code: str, name: str,
+    description: str | None = None, ingredients: list[str] | None = None,
+) -> MenuItemTranslation:
+    translation = MenuItemTranslation.objects.get(menu_item_id=menu_item_id, language_code=language_code)
+    translation.name = name
+    if description is not None:
+        translation.description = description
+    if ingredients is not None:
+        translation.ingredients = ingredients
+    translation.save(update_fields=["name", "description", "ingredients", "updated_at"])
+    return translation
+
+
+def delete_item_translation(*, menu_item_id: int, language_code: str) -> None:
+    MenuItemTranslation.objects.filter(menu_item_id=menu_item_id, language_code=language_code).delete()
+
+
+def get_item_translations(*, menu_item_id: int) -> list[MenuItemTranslation]:
+    return list(MenuItemTranslation.objects.filter(menu_item_id=menu_item_id))
 
 
 def _unique_copy_name(menu: Menu, base: str) -> str:
