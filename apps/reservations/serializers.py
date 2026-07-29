@@ -45,6 +45,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
     session_ends_at = serializers.SerializerMethodField()
     session_table = serializers.SerializerMethodField()
     session_table_number = serializers.SerializerMethodField()
+    has_preorder = serializers.SerializerMethodField()
 
     class Meta:
         model = Reservation
@@ -65,6 +66,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "session_ends_at",
             "session_table",
             "session_table_number",
+            "has_preorder",
             "status",
             "created_by_staff",
             "notes",
@@ -80,6 +82,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "session_ends_at",
             "session_table",
             "session_table_number",
+            "has_preorder",
             "created_at",
             "updated_at",
         ]
@@ -98,6 +101,9 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
 
     def get_session_table_number(self, obj: Reservation) -> str | None:
         return getattr(obj, "session_table_number", None)
+
+    def get_has_preorder(self, obj: Reservation) -> bool:
+        return bool(getattr(obj, "has_preorder", False))
 
     def get_customer_name(self, obj: Reservation) -> str:
         if obj.guest_name:

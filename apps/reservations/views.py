@@ -6,7 +6,7 @@ from datetime import time as time_type
 from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from django.db.models import OuterRef, QuerySet, Subquery
+from django.db.models import Exists, OuterRef, QuerySet, Subquery
 from django.utils import timezone
 from drf_spectacular.plumbing import build_array_type, build_basic_type, build_object_type
 from drf_spectacular.types import OpenApiTypes
@@ -21,7 +21,7 @@ from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
 from apps.orders.billing import close_visit_session
-from apps.orders.models import Session, SessionStatus
+from apps.orders.models import Order, OrderPaymentStatus, Session, SessionStatus
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
 from common.api import (
@@ -171,11 +171,19 @@ class ReservationViewSet(
         open_session = Session.objects.filter(
             reservation=OuterRef("pk"), status=SessionStatus.OPEN
         ).order_by("opened_at")
+        # A paid pre-order (confirm_and_pay_preorder) exists for this reservation,
+        # whether or not the kitchen has picked it up yet — lets the waiter see a
+        # table has food coming before the guest even arrives.
+        preorder_paid = Order.objects.filter(
+            session__reservation=OuterRef("pk"),
+            payment_status=OrderPaymentStatus.PAID,
+        )
         qs = qs.annotate(
             session_opened_at=Subquery(open_session.values("opened_at")[:1]),
             session_ends_at=Subquery(open_session.values("ends_at")[:1]),
             session_table_id=Subquery(open_session.values("table__public_id")[:1]),
             session_table_number=Subquery(open_session.values("table__public_number")[:1]),
+            has_preorder=Exists(preorder_paid),
         )
         role = getattr(self.request.user, "role", None)
         if role and role in (RoleCode.ADMIN, RoleCode.WAITER):
