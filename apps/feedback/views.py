@@ -18,11 +18,10 @@ from .selectors import get_feedback_list, get_guest_feedback_list
 from .serializers import (
     FeedbackDetailSerializer,
     FeedbackListSerializer,
-    FeedbackReviewStatusSerializer,
     GuestFeedbackCreateSerializer,
     GuestFeedbackListSerializer,
 )
-from .services import create_feedback, update_feedback_review_status
+from .services import create_feedback, mark_feedback_reviewed
 
 
 class IsAuthenticatedOrTableGuest(BasePermission):
@@ -40,13 +39,11 @@ class AdminFeedbackViewSet(
     permission_classes = [IsAuthenticated, IsAdmin]
     queryset = Feedback.objects.all()
     restaurant_lookup = "restaurant_id"
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "head", "options"]
 
     def get_serializer_class(
         self,
-    ) -> type[FeedbackReviewStatusSerializer] | type[FeedbackDetailSerializer] | type[FeedbackListSerializer]:
-        if self.action == "partial_update":
-            return FeedbackReviewStatusSerializer
+    ) -> type[FeedbackDetailSerializer] | type[FeedbackListSerializer]:
         if self.action == "retrieve":
             return FeedbackDetailSerializer
         return FeedbackListSerializer
@@ -75,25 +72,10 @@ class AdminFeedbackViewSet(
             ordering=ordering,
         )
 
-    @extend_schema(
-        request=FeedbackReviewStatusSerializer,
-        responses={200: FeedbackListSerializer},
-    )
-    def partial_update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         feedback = self.get_object()
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        try:
-            updated = update_feedback_review_status(
-                feedback=feedback,
-                review_status=serializer.validated_data["review_status"],
-            )
-        except DomainError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        result = FeedbackListSerializer(updated)
-        return Response(result.data, status=status.HTTP_200_OK)
+        feedback = mark_feedback_reviewed(feedback=feedback)
+        return Response(FeedbackDetailSerializer(feedback).data, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=["Feedback"])

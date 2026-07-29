@@ -95,15 +95,10 @@ def create_feedback(
 
 
 @transaction.atomic
-def update_feedback_review_status(
-    *,
-    feedback: Feedback,
-    review_status: str,
-) -> Feedback:
-    if review_status not in FeedbackReviewStatus.values:
-        raise DomainError(f"Invalid review_status. Choose from: {', '.join(FeedbackReviewStatus.values)}")
-    feedback.review_status = review_status
-    feedback.save(update_fields=["review_status", "updated_at"])
+def mark_feedback_reviewed(*, feedback: Feedback) -> Feedback:
+    if feedback.review_status == FeedbackReviewStatus.NEW:
+        feedback.review_status = FeedbackReviewStatus.REVIEWED
+        feedback.save(update_fields=["review_status", "updated_at"])
     return feedback
 
 

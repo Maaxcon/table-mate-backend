@@ -7,7 +7,6 @@ from common.models import BaseModel, RestaurantScopedModel
 class FeedbackReviewStatus(models.TextChoices):
     NEW = "new", "New"
     REVIEWED = "reviewed", "Reviewed"
-    RESOLVED = "resolved", "Resolved"
 
 
 class Feedback(RestaurantScopedModel):

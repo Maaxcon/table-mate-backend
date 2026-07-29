@@ -6,7 +6,7 @@ from apps.orders.models import Order
 from apps.restaurants.models import Restaurant
 from common.api import PublicIdRelatedField
 
-from .models import DishFeedback, Feedback, FeedbackReviewStatus
+from .models import DishFeedback, Feedback
 
 
 class DishFeedbackSerializer(serializers.ModelSerializer[DishFeedback]):
@@ -79,19 +79,6 @@ class FeedbackDetailSerializer(FeedbackListSerializer):
 
     class Meta(FeedbackListSerializer.Meta):
         fields = FeedbackListSerializer.Meta.fields + ["dish_feedback"]
-
-
-class FeedbackReviewStatusSerializer(serializers.ModelSerializer[Feedback]):
-    class Meta:
-        model = Feedback
-        fields = ["review_status"]
-        read_only_fields: list[str] = []
-
-    def validate_review_status(self, value: str) -> str:
-        valid = FeedbackReviewStatus.values
-        if value not in valid:
-            raise serializers.ValidationError(f"Invalid review_status. Choose from: {', '.join(valid)}")
-        return value
 
 
 class DishFeedbackInputSerializer(serializers.Serializer[dict[str, object]]):

@@ -9,6 +9,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.authentication.models import RoleCode
 from apps.feedback.models import Feedback
 from apps.orders.billing import checkout_cart_session
 from apps.orders.models import OrderItemStatus, OrderStatus
@@ -30,6 +31,7 @@ def _feedback_client(guest_id: str) -> APIClient:
 
 @pytest.mark.django_db
 def test_table_guest_can_submit_feedback_for_own_order(
+    api: Any,
     restaurant: Restaurant,
     table: Table,
     item: Any,
@@ -69,6 +71,16 @@ def test_table_guest_can_submit_feedback_for_own_order(
     feedback = Feedback.objects.get(order=order)
     assert feedback.guest_id is None
     assert feedback.guest_identity == guest_id
+
+    admin = api(role=RoleCode.ADMIN)
+    detail_response = admin.client.get(
+        reverse("admin-feedback-detail", kwargs={"public_id": feedback.public_id}),
+    )
+
+    assert detail_response.status_code == status.HTTP_200_OK
+    assert detail_response.data["review_status"] == "reviewed"
+    feedback.refresh_from_db()
+    assert feedback.review_status == "reviewed"
 
 
 @pytest.mark.django_db
