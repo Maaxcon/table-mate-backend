@@ -258,6 +258,7 @@ class Command(BaseCommand):
                     "timezone": data["timezone"],
                     "currency": data["currency"],
                     "locale": data["locale"],
+                    "supported_languages": ["uk", "en"],
                     "working_hours": DEFAULT_WORKING_HOURS,
                 },
             )

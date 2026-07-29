@@ -33,6 +33,16 @@ class LanguageMiddleware(MiddlewareMixin):
             except Restaurant.DoesNotExist:
                 restaurant = None
 
+        if restaurant is None:
+            restaurant_uuid = request.GET.get("restaurant")
+            if restaurant_uuid:
+                from django.apps import apps
+                Restaurant = apps.get_model("restaurants", "Restaurant")
+                try:
+                    restaurant = Restaurant.objects.get(public_id=restaurant_uuid)
+                except Restaurant.DoesNotExist:
+                    pass
+
         if user is not None and user.is_authenticated and getattr(user, "role", None) in STAFF_ROLES:
             rest = restaurant or getattr(user, "restaurant", None)
             if rest is not None:
