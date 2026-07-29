@@ -64,10 +64,17 @@ def _with_like_annotations(qs: QuerySet[MenuItem], *, guest_token: str | None) -
 
 
 def get_menu_items_by_restaurant(*, restaurant_id: int, guest_token: str | None = None) -> QuerySet[MenuItem]:
-    qs = MenuItem.objects.filter(
-        restaurant_id=restaurant_id,
-        menu__is_active=True,
-    ).select_related("category")
+    qs = (
+        MenuItem.objects.filter(
+            restaurant_id=restaurant_id,
+            menu__is_active=True,
+        )
+        .select_related("category")
+        .prefetch_related(
+            "item_ingredients__ingredient__translations",
+            "item_allergens__allergen__translations",
+        )
+    )
     # Explicit order: the likes_count aggregate adds a GROUP BY, which makes
     # Django drop Meta.ordering and warn under pagination.
     return _with_like_annotations(qs, guest_token=guest_token).order_by("menu_id", "sort_order", "id")
@@ -88,6 +95,10 @@ def search_menu_items(
             Q(name__icontains=query) | Q(description__icontains=query) | Q(category__name__icontains=query),
         )
         .select_related("category")
+        .prefetch_related(
+            "item_ingredients__ingredient__translations",
+            "item_allergens__allergen__translations",
+        )
     )
     return _with_like_annotations(qs, guest_token=guest_token).order_by("menu_id", "sort_order", "id")
 

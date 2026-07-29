@@ -4,7 +4,16 @@ from typing import Any, TypedDict
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.menu.models import Menu, MenuCategory, MenuItem
+from apps.menu.models import (
+    Allergen,
+    Ingredient,
+    IngredientTranslation,
+    Menu,
+    MenuCategory,
+    MenuItem,
+    MenuItemAllergen,
+    MenuItemIngredient,
+)
 from apps.restaurants.models import Restaurant
 
 _MenuItem = tuple[str, str, Decimal, bool, list[str], int | None]
@@ -30,6 +39,15 @@ _ALLERGEN_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("soy", ("соєв", "соус териякі", "тофу")),
     ("mustard", ("гірчиц",)),
 ]
+
+
+def _slugify(value: str) -> str:
+    import re
+
+    value = value.lower().strip()
+    value = re.sub(r"[^a-z0-9а-яіїєґ'\u0301]+", "-", value)
+    value = value.strip("-")
+    return value[:100] or "ingredient"
 
 
 def _infer_allergens(ingredients: list[str]) -> list[str]:
@@ -654,16 +672,14 @@ class Command(BaseCommand):
                         created_categories += 1
 
                     menu_items: list[_MenuItem] = category_data["items"]
-                    for item_name, description, price, is_available, ingredients, weight_grams in menu_items:
-                        _, was_created_item = MenuItem.objects.update_or_create(
+                    for item_name, description, price, is_available, ingredient_names, weight_grams in menu_items:
+                        item, was_created_item = MenuItem.objects.update_or_create(
                             menu=menu,
                             name=item_name,
                             defaults={
                                 "restaurant": restaurant,
                                 "category": category,
                                 "description": description,
-                                "ingredients": ingredients,
-                                "allergens": _infer_allergens(ingredients),
                                 "weight_grams": weight_grams,
                                 "price": price,
                                 "is_available": is_available,
@@ -672,6 +688,40 @@ class Command(BaseCommand):
                         )
                         if was_created_item:
                             created_items += 1
+
+                        # Sync ingredients via M2M
+                        item.item_ingredients.all().delete()
+                        for sort_order, name in enumerate(ingredient_names):
+                            key = _slugify(name)
+                            ing, _ = Ingredient.objects.get_or_create(
+                                restaurant=restaurant,
+                                key=key,
+                                defaults={"sort_order": sort_order},
+                            )
+                            IngredientTranslation.objects.get_or_create(
+                                ingredient=ing,
+                                language_code="uk",
+                                defaults={"name": name},
+                            )
+                            MenuItemIngredient.objects.create(
+                                menu_item=item,
+                                ingredient=ing,
+                                sort_order=sort_order,
+                            )
+
+                        # Sync allergens via M2M
+                        item.item_allergens.all().delete()
+                        allergen_keys = _infer_allergens(ingredient_names)
+                        for sort_order, key in enumerate(allergen_keys):
+                            try:
+                                allerg = Allergen.objects.get(key=key)
+                                MenuItemAllergen.objects.create(
+                                    menu_item=item,
+                                    allergen=allerg,
+                                    sort_order=sort_order,
+                                )
+                            except Allergen.DoesNotExist:
+                                pass
 
         self.stdout.write(
             self.style.SUCCESS(f"Done: {created_menus} menus, {created_categories} categories, {created_items} items")

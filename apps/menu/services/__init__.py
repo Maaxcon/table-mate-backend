@@ -9,7 +9,16 @@ from django.db.models import Max, QuerySet
 from django.utils import timezone
 from rest_framework import serializers
 
-from ..models import Menu, MenuCategory, MenuCategoryTranslation, MenuItem, MenuItemTranslation, MenuTranslation
+from ..models import (
+    Menu,
+    MenuCategory,
+    MenuCategoryTranslation,
+    MenuItem,
+    MenuItemAllergen,
+    MenuItemIngredient,
+    MenuItemTranslation,
+    MenuTranslation,
+)
 from ..selectors import get_default_upsell_items, get_upsell_suggestions
 
 
@@ -71,8 +80,6 @@ def duplicate_item(item: MenuItem) -> MenuItem:
         category=item.category,
         name=_unique_copy_name(item.menu, item.name),
         description=item.description,
-        ingredients=list(item.ingredients or []),
-        allergens=list(item.allergens or []),
         weight_grams=item.weight_grams,
         price=item.price,
         is_available=item.is_available,
@@ -90,13 +97,24 @@ def duplicate_item(item: MenuItem) -> MenuItem:
         finally:
             item.image.close()
     copy.save()
+    for thru in item.item_ingredients.all():
+        MenuItemIngredient.objects.create(
+            menu_item=copy,
+            ingredient=thru.ingredient,
+            sort_order=thru.sort_order,
+        )
+    for thru in item.item_allergens.all():
+        MenuItemAllergen.objects.create(
+            menu_item=copy,
+            allergen=thru.allergen,
+            sort_order=thru.sort_order,
+        )
     for t in MenuItemTranslation.objects.filter(menu_item=item):
         MenuItemTranslation.objects.create(
             menu_item=copy,
             language_code=t.language_code,
             name=t.name,
             description=t.description,
-            ingredients=list(t.ingredients or []),
         )
     return copy
 
@@ -149,28 +167,25 @@ def get_category_translations(*, category_id: int) -> list[MenuCategoryTranslati
 
 def create_item_translation(
     *, menu_item_id: int, language_code: str, name: str,
-    description: str | None = None, ingredients: list[str] | None = None,
+    description: str | None = None,
 ) -> MenuItemTranslation:
     return MenuItemTranslation.objects.create(
         menu_item_id=menu_item_id,
         language_code=language_code,
         name=name,
         description=description or "",
-        ingredients=ingredients or [],
     )
 
 
 def update_item_translation(
     *, menu_item_id: int, language_code: str, name: str,
-    description: str | None = None, ingredients: list[str] | None = None,
+    description: str | None = None,
 ) -> MenuItemTranslation:
     translation = MenuItemTranslation.objects.get(menu_item_id=menu_item_id, language_code=language_code)
     translation.name = name
     if description is not None:
         translation.description = description
-    if ingredients is not None:
-        translation.ingredients = ingredients
-    translation.save(update_fields=["name", "description", "ingredients", "updated_at"])
+    translation.save(update_fields=["name", "description", "updated_at"])
     return translation
 
 

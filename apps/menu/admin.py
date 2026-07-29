@@ -1,37 +1,22 @@
 from typing import Any
 
-from django import forms
 from django.contrib import admin
 from django.http import HttpRequest
 
-from .allergens import ALLERGENS
-from .models import Menu, MenuCategory, MenuCategoryTranslation, MenuItem, MenuItemTranslation, MenuTranslation
-
-
-class AllergenCheckboxWidget(forms.CheckboxSelectMultiple):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.setdefault("choices", [(a, a) for a in ALLERGENS])
-        super().__init__(*args, **kwargs)
-
-
-class AllergenField(forms.MultipleChoiceField):
-    widget = AllergenCheckboxWidget
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.setdefault("choices", [(a, a) for a in ALLERGENS])
-        kwargs.setdefault("required", False)
-        super().__init__(*args, **kwargs)
-
-
-class MenuItemForm(forms.ModelForm):  # type: ignore[type-arg]
-    allergens = AllergenField()
-
-    class Meta:
-        model = MenuItem
-        fields = "__all__"
-
-    def clean_allergens(self) -> list[str]:
-        return self.cleaned_data.get("allergens") or []
+from .models import (
+    Allergen,
+    AllergenTranslation,
+    Ingredient,
+    IngredientTranslation,
+    Menu,
+    MenuCategory,
+    MenuCategoryTranslation,
+    MenuItem,
+    MenuItemAllergen,
+    MenuItemIngredient,
+    MenuItemTranslation,
+    MenuTranslation,
+)
 
 
 class MenuCategoryInline(admin.TabularInline):  # type: ignore[type-arg]
@@ -54,6 +39,43 @@ class MenuItemTranslationInline(admin.TabularInline):  # type: ignore[type-arg]
     extra = 0
 
 
+class MenuItemAllergenInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = MenuItemAllergen
+    extra = 0
+    autocomplete_fields = ["allergen"]
+
+
+class MenuItemIngredientInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = MenuItemIngredient
+    extra = 0
+    autocomplete_fields = ["ingredient"]
+
+
+class AllergenTranslationInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = AllergenTranslation
+    extra = 0
+
+
+class IngredientTranslationInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = IngredientTranslation
+    extra = 0
+
+
+@admin.register(Allergen)
+class AllergenAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ["key", "sort_order"]
+    search_fields = ["key"]
+    inlines = [AllergenTranslationInline]
+
+
+@admin.register(Ingredient)
+class IngredientAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ["key", "restaurant", "sort_order"]
+    list_filter = ["restaurant"]
+    search_fields = ["key"]
+    inlines = [IngredientTranslationInline]
+
+
 @admin.register(Menu)
 class MenuAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
     list_display = ["name", "restaurant", "is_active"]
@@ -68,14 +90,16 @@ class MenuCategoryAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
-    form = MenuItemForm
     list_display = ["name", "restaurant", "category", "price", "is_available"]
     list_filter = ["restaurant", "category", "is_available"]
     search_fields = ["name"]
+    inlines = [
+        MenuItemTranslationInline,
+        MenuItemAllergenInline,
+        MenuItemIngredientInline,
+    ]
 
     def get_form(self, request: HttpRequest, obj: MenuItem | None = None, change: bool = False, **kwargs: Any) -> Any:
-        # Stored on the request, not self: admin instances are shared across
-        # threads/requests, so self-state can leak between concurrent edits.
         request._menuitem_menu_id = obj.menu_id if obj else None  # type: ignore[attr-defined]
         return super().get_form(request, obj, change=change, **kwargs)
 
