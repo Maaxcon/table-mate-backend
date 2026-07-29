@@ -6,7 +6,10 @@ from django.db import models
 
 from common.models import BaseModel, RestaurantScopedModel
 
-from .allergens import ALLERGENS
+from ..allergens import ALLERGEN_KEYS
+from .translations import MenuCategoryTranslation as MenuCategoryTranslation
+from .translations import MenuItemTranslation as MenuItemTranslation
+from .translations import MenuTranslation as MenuTranslation
 
 validate_hex_color = RegexValidator(r"^#[0-9a-fA-F]{6}$", message="Use hex color format #RRGGBB.")
 
@@ -19,9 +22,9 @@ def validate_str_list(value: object) -> None:
 def validate_allergens(value: object) -> None:
     if not isinstance(value, list):
         raise ValidationError("Must be a list.")
-    invalid = [v for v in value if v not in ALLERGENS]
+    invalid = [v for v in value if v not in ALLERGEN_KEYS]
     if invalid:
-        raise ValidationError(f"Invalid allergens: {invalid}. Choose from: {ALLERGENS}")
+        raise ValidationError(f"Invalid allergens: {invalid}. Choose from: {ALLERGEN_KEYS}")
 
 
 class Menu(RestaurantScopedModel):
