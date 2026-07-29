@@ -60,3 +60,26 @@ SUPPORTED_LANGUAGE_CODES = frozenset(
         "sl", "sv", "tr",
     }
 )
+
+
+def resolve_restaurant_language(
+    restaurant: object,
+    accept_language_header: str,
+    default: str = "en",
+) -> str:
+    """Resolve the best language for a restaurant given an Accept-Language header.
+
+    Returns the best matching supported language, or the restaurant's configured
+    locale, or *default* as a last resort.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+    try:
+        settings = restaurant.settings  # type: ignore[union-attr]
+    except (ObjectDoesNotExist, AttributeError):
+        return default
+    supported = settings.supported_languages or [settings.locale]
+    preferred = parse_accept_language_header(accept_language_header)
+    best = select_best_match(preferred, supported)
+    if best:
+        return best
+    return settings.locale

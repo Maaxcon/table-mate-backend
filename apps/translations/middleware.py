@@ -4,7 +4,7 @@ from django.utils.deprecation import MiddlewareMixin
 
 from apps.restaurants.models import RestaurantSettings
 
-from .language import parse_accept_language_header, select_best_match
+from .language import parse_accept_language_header, resolve_restaurant_language, select_best_match
 
 STAFF_ROLES = frozenset({"waiter", "cook", "admin"})
 
@@ -64,13 +64,10 @@ class LanguageMiddleware(MiddlewareMixin):
         except RestaurantSettings.DoesNotExist:
             return
 
-        supported = settings.supported_languages or [settings.locale]
-        header = request.META.get("HTTP_ACCEPT_LANGUAGE", "")
-        preferred = parse_accept_language_header(header)
-        best = select_best_match(preferred, supported)
-        if best:
-            request.active_language = best
-            request.active_language_is_fallback = (best != settings.locale)
-        else:
-            request.active_language = settings.locale
-            request.active_language_is_fallback = bool(preferred)
+        locale = settings.locale
+        request.active_language = resolve_restaurant_language(
+            rest,
+            request.META.get("HTTP_ACCEPT_LANGUAGE", ""),
+            default=locale,
+        )
+        request.active_language_is_fallback = (request.active_language != locale)

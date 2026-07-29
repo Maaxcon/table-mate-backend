@@ -22,6 +22,7 @@ from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsAdmin, IsStaff
 from apps.menu.models import Menu, MenuCategory, MenuItem
 from apps.reservations.services import activate_reservation_by_scan
+from apps.translations.language import resolve_restaurant_language
 from common.api import (
     PublicLookupMixin,
     PublicRestaurantQueryMixin,
@@ -138,6 +139,14 @@ class PublicRestaurantViewSet(
     queryset = Restaurant.objects.select_related("settings").all()
     serializer_class = PublicRestaurantSerializer
     permission_classes = [AllowAny]
+
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        instance = self.get_object()
+        request.active_language = resolve_restaurant_language(
+            instance,
+            request.META.get("HTTP_ACCEPT_LANGUAGE", ""),
+        )
+        return super().retrieve(request, *args, **kwargs)
 
 
 @extend_schema(tags=["Restaurants"])
