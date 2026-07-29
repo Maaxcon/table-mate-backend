@@ -4,6 +4,7 @@
 __pycache__
 *.pyc
 venv/
+.venv/
 ENV/
 .idea/
 .ai/
@@ -19,6 +20,7 @@ dump.rdb
 build/
 /.opencode/
 /.agents/
+/.claude/
 
 # Speckit auto-generated files
 .specify/init-options.json

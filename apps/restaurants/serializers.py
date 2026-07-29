@@ -4,6 +4,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.authentication.models import RoleCode, User
+from apps.menu.services.localization import get_localized_content
 from common.api import PublicIdRelatedField
 
 from .models import Restaurant, RestaurantSettings, Table, Zone, validate_working_hours
@@ -75,8 +76,12 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
         data = super().to_representation(instance)
         try:
             data["working_hours"] = instance.settings.working_hours
+            lang = getattr(self.context.get("request"), "active_language", None) or instance.settings.locale
         except RestaurantSettings.DoesNotExist:
-            data["working_hours"] = {}
+            lang = "en"
+        localized = get_localized_content(instance, lang)
+        if "address" in localized:
+            data["address"] = localized["address"]
         return data
 
 
@@ -157,6 +162,17 @@ class PublicRestaurantSerializer(serializers.ModelSerializer[Restaurant]):
             "facebook_url",
             "settings",
         ]
+
+    def to_representation(self, instance: Restaurant) -> dict[str, object]:
+        data = super().to_representation(instance)
+        try:
+            lang = getattr(self.context.get("request"), "active_language", None) or instance.settings.locale
+        except RestaurantSettings.DoesNotExist:
+            lang = "en"
+        localized = get_localized_content(instance, lang)
+        if "address" in localized:
+            data["address"] = localized["address"]
+        return data
 
 
 class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):

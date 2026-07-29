@@ -47,6 +47,30 @@ class Restaurant(BaseModel):
         return self.name
 
 
+class RestaurantTranslation(models.Model):
+    restaurant = models.ForeignKey(
+        "restaurants.Restaurant",
+        on_delete=models.CASCADE,
+        related_name="translations",
+    )
+    language_code = models.CharField(max_length=10)
+    address = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["restaurant_id", "language_code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["restaurant", "language_code"],
+                name="restaurant_translation_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"[{self.language_code}] {self.restaurant.name}"
+
+
 class RestaurantSettings(BaseModel):
     restaurant = models.OneToOneField(
         "restaurants.Restaurant",
