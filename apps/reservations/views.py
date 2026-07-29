@@ -14,14 +14,15 @@ from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_sche
 from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import MethodNotAllowed, NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.billing import close_visit_session
-from apps.orders.models import Order, OrderPaymentStatus, Session, SessionStatus
+from apps.orders.billing import cancel_preorder, close_visit_session
+from apps.orders.models import Order, OrderItemStatus, OrderPaymentStatus, Session, SessionStatus, Ticket
+from apps.orders.selectors import get_preorder_for_reservation
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
 from common.api import (
@@ -155,9 +156,14 @@ class ReservationViewSet(
 ):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    # "delete" is only for the preorder action below — destroy() is disabled
+    # so it doesn't also open up DELETE on the base reservation detail route.
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     filterset_class = ReservationFilter
     ordering_fields = ["created_at", "updated_at", "start_at", "end_at", "guest_count"]
+
+    def destroy(self, request: Request, *args: object, **kwargs: object) -> Response:
+        raise MethodNotAllowed("DELETE")
 
     def get_permissions(self) -> Sequence[BasePermission]:
         if self.action in ("available_slots", "availability"):
@@ -306,6 +312,50 @@ class ReservationViewSet(
         )
         serializer = self.get_serializer(result)
         return Response(serializer.data)
+
+    @extend_schema(
+        summary="View or cancel this reservation's pre-order",
+        description="GET returns the current paid pre-order (or 204 if none). "
+        "DELETE cancels it (simulated refund) — only while the kitchen hasn't "
+        "started it yet.",
+    )
+    @action(detail=True, methods=["get", "delete"], url_path="preorder")
+    def preorder(self, request: Request, *args: object, **kwargs: object) -> Response:
+        reservation = self.get_object()
+        order = get_preorder_for_reservation(reservation)
+
+        if request.method == "DELETE":
+            if order is None:
+                raise NotFound("No pre-order to cancel for this reservation.")
+            cancel_preorder(order=order, user=cast(User, request.user))
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        if order is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        can_cancel = not Ticket.objects.filter(order=order).exists()
+        items = [
+            {
+                "name": item.menu_item.name,
+                "quantity": item.quantity,
+                "unit_price": str(item.unit_price),
+                "total_price": str(item.total_price),
+            }
+            for item in order.items.all()
+            if item.status != OrderItemStatus.VOIDED
+        ]
+        return Response(
+            {
+                "order_id": str(order.public_id),
+                "currency": order.currency,
+                "subtotal": str(order.total_amount - order.tax_total - order.service_charge),
+                "tax": str(order.tax_total),
+                "service_charge": str(order.service_charge),
+                "total": str(order.total_amount),
+                "can_cancel": can_cancel,
+                "items": items,
+            }
+        )
 
     @extend_schema(
         summary="Available time slots for a table",
