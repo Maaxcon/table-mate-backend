@@ -4862,6 +4862,15 @@ components:
         active:
           type: boolean
           default: true
+        _lang:
+          type: string
+          nullable: true
+          readOnly: true
+          title: ' lang'
+        _is_fallback:
+          type: boolean
+          readOnly: true
+          title: ' is fallback'
         created_at:
           type: string
           format: date-time
@@ -4871,6 +4880,8 @@ components:
           format: date-time
           readOnly: true
       required:
+      - _is_fallback
+      - _lang
       - capacity
       - created_at
       - public_id
@@ -6267,6 +6278,15 @@ components:
         active:
           type: boolean
           default: true
+        _lang:
+          type: string
+          nullable: true
+          readOnly: true
+          title: ' lang'
+        _is_fallback:
+          type: boolean
+          readOnly: true
+          title: ' is fallback'
         created_at:
           type: string
           format: date-time
@@ -6777,6 +6797,15 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        _lang:
+          type: string
+          nullable: true
+          readOnly: true
+          title: ' lang'
+        _is_fallback:
+          type: boolean
+          readOnly: true
+          title: ' is fallback'
     PayOrderItems:
       type: object
       properties:
@@ -7552,6 +7581,15 @@ components:
           - $ref: '#/components/schemas/Zone'
           readOnly: true
           nullable: true
+        _lang:
+          type: string
+          nullable: true
+          readOnly: true
+          title: ' lang'
+        _is_fallback:
+          type: boolean
+          readOnly: true
+          title: ' is fallback'
         created_at:
           type: string
           format: date-time
@@ -7561,6 +7599,8 @@ components:
           format: date-time
           readOnly: true
       required:
+      - _is_fallback
+      - _lang
       - capacity
       - created_at
       - is_occupied
@@ -7952,7 +7992,18 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        _lang:
+          type: string
+          nullable: true
+          readOnly: true
+          title: ' lang'
+        _is_fallback:
+          type: boolean
+          readOnly: true
+          title: ' is fallback'
       required:
+      - _is_fallback
+      - _lang
       - name
       - public_id
     ZoneCreate:
