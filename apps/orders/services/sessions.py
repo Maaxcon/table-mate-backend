@@ -24,9 +24,19 @@ from common.exceptions import (
     WaiterCallCooldownError,
 )
 from common.hall_events import emit_hall_reservations_updated, emit_hall_session_auto_extended
-from common.notification_events import emit_cart_created, emit_waiter_called
+from common.notification_events import emit_cart_created, emit_kitchen_ticket_injected, emit_waiter_called
 
-from ..models import CartSession, CartSessionStatus, Session, SessionStatus
+from ..models import (
+    CartSession,
+    CartSessionStatus,
+    Order,
+    OrderItem,
+    OrderPaymentStatus,
+    Session,
+    SessionStatus,
+    Ticket,
+    TicketStatus,
+)
 from ..selectors import _resolve_allowed_reservation_participant_ids, get_reservation
 from .cart import _broadcast_cart_updated
 
@@ -183,6 +193,7 @@ def call_waiter(*, session: CartSession, guest_name: str | None = None) -> None:
 
 _STALE_CART_BATCH_SIZE = 500
 _OVERDUE_VISIT_BATCH_SIZE = 200
+_PREORDER_INJECT_BATCH_SIZE = 200
 
 
 def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: int = _STALE_CART_BATCH_SIZE) -> int:
@@ -471,3 +482,78 @@ def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE)
                 total_closed += 1
 
     return total_closed
+
+
+def inject_scheduled_preorders(*, batch_size: int = _PREORDER_INJECT_BATCH_SIZE) -> int:
+    """Create the kitchen Ticket for paid pre-orders nearing their reservation's start_at.
+
+    confirm_and_pay_preorder builds and pays an Order/OrderItems up front but
+    leaves them ticket-less, so the kitchen doesn't see them yet. This finds
+    paid, ticket-less orders whose reservation is still PENDING and due within
+    PREORDER_LEAD_MINUTES, then does the same last step checkout_cart_session
+    does immediately for a live order: create the Ticket, attach it to the
+    order's items, notify the kitchen.
+    """
+    now = timezone.now()
+    lead_minutes = max(int(getattr(settings, "PREORDER_LEAD_MINUTES", 20)), 0)
+    cutoff = now + timedelta(minutes=lead_minutes)
+
+    base = Order.objects.filter(
+        payment_status=OrderPaymentStatus.PAID,
+        tickets__isnull=True,
+        session__reservation__status=ReservationStatus.PENDING,
+        session__reservation__start_at__lte=cutoff,
+    )
+
+    total_injected = 0
+    last_pk = 0
+    while True:
+        batch_ids = list(base.filter(pk__gt=last_pk).order_by("pk").values_list("pk", flat=True)[:batch_size])
+        if not batch_ids:
+            break
+        last_pk = batch_ids[-1]
+
+        for order_id in batch_ids:
+            with transaction.atomic():
+                order = (
+                    Order.objects.select_for_update(skip_locked=True)
+                    .select_related("session__table", "session__reservation", "restaurant")
+                    .filter(pk=order_id)
+                    .first()
+                )
+                if order is None:
+                    continue
+                # Re-validate under the lock — a concurrent call may have
+                # already injected this order, or its reservation may have
+                # been cancelled, between the initial SELECT and this lock.
+                if order.payment_status != OrderPaymentStatus.PAID:
+                    continue
+                if Ticket.objects.filter(order=order).exists():
+                    continue
+                session = order.session
+                reservation = session.reservation
+                if reservation is None or reservation.status != ReservationStatus.PENDING:
+                    continue
+                if reservation.start_at > cutoff:
+                    continue
+
+                ticket = Ticket.objects.create(
+                    restaurant=order.restaurant,
+                    session=session,
+                    order=order,
+                    status=TicketStatus.INCOMING,
+                    injected_at=now,
+                )
+                items_count = OrderItem.objects.filter(order=order).update(ticket=ticket)
+
+            transaction.on_commit(
+                lambda tk=ticket, sess=session, cnt=items_count: emit_kitchen_ticket_injected(
+                    sess.restaurant_id,
+                    ticket_id=str(tk.public_id),
+                    table_number=sess.table.public_number,
+                    items_count=cnt,
+                )
+            )
+            total_injected += 1
+
+    return total_injected
