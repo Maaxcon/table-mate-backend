@@ -73,7 +73,8 @@ def has_translations_for_locale(restaurant_id: int, language_code: str) -> bool:
         return True
     if AllergenTranslation.objects.filter(language_code=language_code).exists():
         return True
-    if IngredientTranslation.objects.filter(ingredient__restaurant_id=restaurant_id, language_code=language_code).exists():
+    if IngredientTranslation.objects.filter(ingredient__restaurant_id=restaurant_id,
+                                            language_code=language_code).exists():
         return True
     return False
 

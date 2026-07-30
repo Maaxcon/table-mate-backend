@@ -21,7 +21,6 @@ from common.api import (
     get_restaurant_id_from_auth,
     require_restaurant_id_from_auth,
 )
-from .services.localization import get_restaurant_locale
 from common.filters import StableOrderingFilter
 
 from . import services
@@ -52,7 +51,7 @@ from .serializers import (
     ToggleMenuItemLikeRequestSerializer,
     ToggleMenuItemLikeResponseSerializer,
 )
-from .services.localization import get_localized_content
+from .services.localization import get_localized_content, get_restaurant_locale
 
 
 def _reorder_view(viewset: Any, request: Request) -> Response:
@@ -184,11 +183,11 @@ class AdminMenuViewSet(
     def perform_create(self, serializer: BaseSerializer[Menu]) -> None:
         serializer.save(restaurant_id=require_restaurant_id_from_auth(self.request))
 
+    @action(detail=True, methods=["post"], url_path="translations")
     @extend_schema(
         request=MenuTranslationSerializer,
         responses={201: MenuTranslationSerializer},
     )
-    @action(detail=True, methods=["post"], url_path="translations")
     def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = MenuTranslationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -206,11 +205,11 @@ class AdminMenuViewSet(
         )
         return Response(MenuTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     @extend_schema(
         request=MenuTranslationSerializer,
         responses={200: MenuTranslationSerializer},
     )
-    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
         locale = get_restaurant_locale(require_restaurant_id_from_auth(request))
@@ -219,16 +218,12 @@ class AdminMenuViewSet(
                 {"detail": f"Cannot update a translation for the primary language ({locale})."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = MenuTranslationSerializer(data=request.data)
+        serializer = MenuTranslationSerializer(data={"language_code": lang, **request.data})
         serializer.is_valid(raise_exception=True)
-        translation = services.update_menu_translation(
-            menu_id=self.get_object().id,
-            language_code=lang,
-            name=serializer.validated_data["name"],
-        )
+        translation = services.update_menu_translation(menu_id=self.get_object().id, **serializer.validated_data)
         return Response(MenuTranslationSerializer(translation).data)
 
-    @action(detail=True, methods=["delete"], url_path="translations/(?P<lang>[^/.]+)")
+    @update_translation.mapping.delete
     def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
         locale = get_restaurant_locale(require_restaurant_id_from_auth(request))
@@ -240,7 +235,7 @@ class AdminMenuViewSet(
         services.delete_menu_translation(menu_id=self.get_object().id, language_code=lang)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["get"], url_path="translations")
+    @create_translation.mapping.get
     def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         translations = services.get_menu_translations(menu_id=self.get_object().id)
         return Response(MenuTranslationSerializer(translations, many=True).data)
@@ -279,11 +274,11 @@ class AdminMenuCategoryViewSet(
     def reorder(self, request: Request) -> Response:
         return _reorder_view(self, request)
 
+    @action(detail=True, methods=["post"], url_path="translations")
     @extend_schema(
         request=MenuCategoryTranslationSerializer,
         responses={201: MenuCategoryTranslationSerializer},
     )
-    @action(detail=True, methods=["post"], url_path="translations")
     def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = MenuCategoryTranslationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -299,11 +294,11 @@ class AdminMenuCategoryViewSet(
         )
         return Response(MenuCategoryTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     @extend_schema(
         request=MenuCategoryTranslationSerializer,
         responses={200: MenuCategoryTranslationSerializer},
     )
-    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
         locale = get_restaurant_locale(require_restaurant_id_from_auth(request))
@@ -312,16 +307,12 @@ class AdminMenuCategoryViewSet(
                 {"detail": f"Cannot update a translation for the primary language ({locale})."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = MenuCategoryTranslationSerializer(data=request.data)
+        serializer = MenuCategoryTranslationSerializer(data={"language_code": lang, **request.data})
         serializer.is_valid(raise_exception=True)
-        translation = services.update_category_translation(
-            category_id=self.get_object().id,
-            language_code=lang,
-            name=serializer.validated_data["name"],
-        )
+        translation = services.update_category_translation(category_id=self.get_object().id, **serializer.validated_data)
         return Response(MenuCategoryTranslationSerializer(translation).data)
 
-    @action(detail=True, methods=["delete"], url_path="translations/(?P<lang>[^/.]+)")
+    @update_translation.mapping.delete
     def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
         locale = get_restaurant_locale(require_restaurant_id_from_auth(request))
@@ -333,7 +324,7 @@ class AdminMenuCategoryViewSet(
         services.delete_category_translation(category_id=self.get_object().id, language_code=lang)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["get"], url_path="translations")
+    @create_translation.mapping.get
     def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         translations = services.get_category_translations(category_id=self.get_object().id)
         return Response(MenuCategoryTranslationSerializer(translations, many=True).data)
@@ -415,11 +406,11 @@ class AdminMenuItemViewSet(
         copy = services.duplicate_item(self.get_object())
         return Response(self.get_serializer(copy).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["post"], url_path="translations")
     @extend_schema(
         request=MenuItemTranslationSerializer,
         responses={201: MenuItemTranslationSerializer},
     )
-    @action(detail=True, methods=["post"], url_path="translations")
     def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = MenuItemTranslationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -435,11 +426,11 @@ class AdminMenuItemViewSet(
         )
         return Response(MenuItemTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     @extend_schema(
         request=MenuItemTranslationSerializer,
         responses={200: MenuItemTranslationSerializer},
     )
-    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
         locale = get_restaurant_locale(require_restaurant_id_from_auth(request))
@@ -448,16 +439,12 @@ class AdminMenuItemViewSet(
                 {"detail": f"Cannot update a translation for the primary language ({locale})."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = MenuItemTranslationSerializer(data=request.data)
+        serializer = MenuItemTranslationSerializer(data={"language_code": lang, **request.data})
         serializer.is_valid(raise_exception=True)
-        translation = services.update_item_translation(
-            menu_item_id=self.get_object().id,
-            language_code=lang,
-            **serializer.validated_data,
-        )
+        translation = services.update_item_translation(menu_item_id=self.get_object().id, **serializer.validated_data)
         return Response(MenuItemTranslationSerializer(translation).data)
 
-    @action(detail=True, methods=["delete"], url_path="translations/(?P<lang>[^/.]+)")
+    @update_translation.mapping.delete
     def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
         locale = get_restaurant_locale(require_restaurant_id_from_auth(request))
@@ -469,7 +456,7 @@ class AdminMenuItemViewSet(
         services.delete_item_translation(menu_item_id=self.get_object().id, language_code=lang)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["get"], url_path="translations")
+    @create_translation.mapping.get
     def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         translations = services.get_item_translations(menu_item_id=self.get_object().id)
         return Response(MenuItemTranslationSerializer(translations, many=True).data)
@@ -486,11 +473,11 @@ class AdminAllergenViewSet(viewsets.ModelViewSet[Allergen]):
     def get_queryset(self) -> QuerySet[Allergen]:
         return Allergen.objects.all().prefetch_related("translations")
 
+    @action(detail=True, methods=["post"], url_path="translations")
     @extend_schema(
         request=AllergenTranslationSerializer,
         responses={201: AllergenTranslationSerializer},
     )
-    @action(detail=True, methods=["post"], url_path="translations")
     def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = AllergenTranslationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -500,29 +487,25 @@ class AdminAllergenViewSet(viewsets.ModelViewSet[Allergen]):
         )
         return Response(AllergenTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     @extend_schema(
         request=AllergenTranslationSerializer,
         responses={200: AllergenTranslationSerializer},
     )
-    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
-        serializer = AllergenTranslationSerializer(data=request.data)
+        serializer = AllergenTranslationSerializer(data={"language_code": lang, **request.data})
         serializer.is_valid(raise_exception=True)
-        translation = services.update_allergen_translation(
-            allergen_key=kwargs.get("key", ""),
-            language_code=lang,
-            name=serializer.validated_data["name"],
-        )
+        translation = services.update_allergen_translation(allergen_key=kwargs.get("key", ""), **serializer.validated_data)
         return Response(AllergenTranslationSerializer(translation).data)
 
-    @action(detail=True, methods=["delete"], url_path="translations/(?P<lang>[^/.]+)")
+    @update_translation.mapping.delete
     def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
         services.delete_allergen_translation(allergen_key=kwargs.get("key", ""), language_code=lang)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["get"], url_path="translations")
+    @create_translation.mapping.get
     def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         translations = services.get_allergen_translations(allergen_key=kwargs.get("key", ""))
         return Response(AllergenTranslationSerializer(translations, many=True).data)
@@ -541,11 +524,11 @@ class AdminIngredientViewSet(
     def safely_get_queryset(self, qs: QuerySet[Ingredient]) -> QuerySet[Ingredient]:
         return qs.prefetch_related("translations")
 
+    @action(detail=True, methods=["post"], url_path="translations")
     @extend_schema(
         request=IngredientTranslationSerializer,
         responses={201: IngredientTranslationSerializer},
     )
-    @action(detail=True, methods=["post"], url_path="translations")
     def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = IngredientTranslationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -555,29 +538,25 @@ class AdminIngredientViewSet(
         )
         return Response(IngredientTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     @extend_schema(
         request=IngredientTranslationSerializer,
         responses={200: IngredientTranslationSerializer},
     )
-    @action(detail=True, methods=["put"], url_path="translations/(?P<lang>[^/.]+)")
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
-        serializer = IngredientTranslationSerializer(data=request.data)
+        serializer = IngredientTranslationSerializer(data={"language_code": lang, **request.data})
         serializer.is_valid(raise_exception=True)
-        translation = services.update_ingredient_translation(
-            ingredient_id=self.get_object().id,
-            language_code=lang,
-            name=serializer.validated_data["name"],
-        )
+        translation = services.update_ingredient_translation(ingredient_id=self.get_object().id, **serializer.validated_data)
         return Response(IngredientTranslationSerializer(translation).data)
 
-    @action(detail=True, methods=["delete"], url_path="translations/(?P<lang>[^/.]+)")
+    @update_translation.mapping.delete
     def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
         services.delete_ingredient_translation(ingredient_id=self.get_object().id, language_code=lang)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=["get"], url_path="translations")
+    @create_translation.mapping.get
     def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         translations = services.get_ingredient_translations(ingredient_id=self.get_object().id)
         return Response(IngredientTranslationSerializer(translations, many=True).data)
