@@ -277,6 +277,7 @@ def _build_order_from_cart(
     currency: str,
     tax_rate: Decimal,
     service_charge_rate: Decimal,
+    source: str = OrderSource.CUSTOMER_PREPAID,
 ) -> tuple[Order, list[OrderItem]]:
     """Turn a cart's items into an Order + OrderItems, closing the cart.
 
@@ -293,7 +294,7 @@ def _build_order_from_cart(
         session=session,
         created_by=user,
         created_by_source=CreatedBySource.CUSTOMER if user is not None else CreatedBySource.SYSTEM,
-        source=OrderSource.CUSTOMER_PREPAID,
+        source=source,
         status=OrderStatus.SUBMITTED,
         payment_status=OrderPaymentStatus.UNPAID,
         currency=currency,
@@ -459,6 +460,7 @@ def confirm_and_pay_preorder(
             currency=currency,
             tax_rate=tax_rate,
             service_charge_rate=service_charge_rate,
+            source=OrderSource.CUSTOMER_PREORDER,
         )
 
         OrderItem.objects.filter(pk__in=[item.pk for item in order_items]).update(is_paid=True)

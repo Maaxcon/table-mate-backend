@@ -9,7 +9,7 @@ from apps.reservations.models import Reservation
 from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
-from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, VoidReason
+from .models import Order, OrderItem, OrderItemStatus, OrderSource, Session, SessionStatus, Ticket, VoidReason
 
 
 def _scope_to_request_restaurant(field: Any, context: Mapping[str, object]) -> None:
@@ -130,6 +130,12 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
         read_only=True,
     )
     items_count = serializers.SerializerMethodField()
+    # True for a ticket injected from a paid pre-order (inject_scheduled_preorders)
+    # rather than a live order — the kitchen flags these differently.
+    is_preorder = serializers.SerializerMethodField()
+
+    def get_is_preorder(self, obj: Ticket) -> bool:
+        return obj.order.source == OrderSource.CUSTOMER_PREORDER
 
     def get_server_name(self, obj: Ticket) -> str:
         annotated_name = getattr(obj, "server_name", None)
@@ -176,6 +182,7 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
             "server_name",
             "guest_count",
             "items_count",
+            "is_preorder",
             "created_at",
             "updated_at",
         ]
@@ -188,6 +195,7 @@ class TicketSerializer(serializers.ModelSerializer[Ticket]):
             "server_name",
             "guest_count",
             "items_count",
+            "is_preorder",
             "created_at",
             "updated_at",
         ]

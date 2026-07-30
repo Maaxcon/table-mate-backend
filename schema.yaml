@@ -1969,11 +1969,13 @@ paths:
         schema:
           type: string
           enum:
+          - customer_preorder
           - customer_prepaid
           - waiter_manual
         description: |-
           * `waiter_manual` - Waiter manual
           * `customer_prepaid` - Customer prepaid
+          * `customer_preorder` - Customer pre-order
       - in: query
         name: status
         schema:
@@ -2225,7 +2227,9 @@ paths:
     post:
       operationId: orders_sessions_close_create
       description: 'End the visit: close the session, complete the reservation, and
-        close any active cart so the table is freed. No payment step yet. Idempotent.'
+        close any active cart so the table is freed. No payment step yet. Idempotent.
+        Returns 409 (code unserved_items, with a `count`) if items are still unserved/unvoided
+        — pass `force: true` to close anyway.'
       summary: Close the check
       parameters:
       - in: path
@@ -2236,6 +2240,17 @@ paths:
         required: true
       tags:
       - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCloseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SessionCloseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SessionCloseRequest'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -2840,8 +2855,9 @@ paths:
   /api/reservations/reservations/{public_id}/preorder/:
     get:
       operationId: reservations_reservations_preorder_retrieve
-      description: GET returns the current paid pre-order (or 204 if none). DELETE
-        cancels it (simulated refund) — only while the kitchen hasn't started it yet.
+      description: GET returns all paid pre-order rounds combined into one check (or
+        204 if none). DELETE cancels every round — only while the kitchen hasn't started
+        any of them yet.
       summary: View or cancel this reservation's pre-order
       parameters:
       - in: path
@@ -2864,8 +2880,9 @@ paths:
           description: ''
     delete:
       operationId: reservations_reservations_preorder_destroy
-      description: GET returns the current paid pre-order (or 204 if none). DELETE
-        cancels it (simulated refund) — only while the kitchen hasn't started it yet.
+      description: GET returns all paid pre-order rounds combined into one check (or
+        204 if none). DELETE cancels every round — only while the kitchen hasn't started
+        any of them yet.
       summary: View or cancel this reservation's pre-order
       parameters:
       - in: path
@@ -5896,6 +5913,9 @@ components:
         has_preorder:
           type: boolean
           readOnly: true
+        preorder_cooking:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6062,6 +6082,9 @@ components:
           readOnly: true
         items_count:
           type: integer
+          readOnly: true
+        is_preorder:
+          type: boolean
           readOnly: true
         created_at:
           type: string
@@ -6533,6 +6556,9 @@ components:
         has_preorder:
           type: boolean
           readOnly: true
+        preorder_cooking:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6556,6 +6582,7 @@ components:
       - guest_count
       - has_preorder
       - opened_at
+      - preorder_cooking
       - public_id
       - restaurant
       - restaurant_info
@@ -6728,6 +6755,12 @@ components:
       - tax
       - total
       - updated_at
+    SessionCloseRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          default: false
     SessionPayRequest:
       type: object
       properties:
@@ -6770,10 +6803,12 @@ components:
       enum:
       - waiter_manual
       - customer_prepaid
+      - customer_preorder
       type: string
       description: |-
         * `waiter_manual` - Waiter manual
         * `customer_prepaid` - Customer prepaid
+        * `customer_preorder` - Customer pre-order
     Table:
       type: object
       properties:
@@ -6979,6 +7014,9 @@ components:
         items_count:
           type: integer
           readOnly: true
+        is_preorder:
+          type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -6992,6 +7030,7 @@ components:
       - daily_number
       - guest_count
       - injected_at
+      - is_preorder
       - items_count
       - label
       - order

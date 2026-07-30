@@ -22,6 +22,7 @@ class SessionStatus(models.TextChoices):
 class OrderSource(models.TextChoices):
     WAITER_MANUAL = "waiter_manual", "Waiter manual"
     CUSTOMER_PREPAID = "customer_prepaid", "Customer prepaid"
+    CUSTOMER_PREORDER = "customer_preorder", "Customer pre-order"
 
 
 class OrderStatus(models.TextChoices):
