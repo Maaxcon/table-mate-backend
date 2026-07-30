@@ -430,7 +430,8 @@ class AdminAllergenSerializer(serializers.ModelSerializer[Allergen]):
 
     class Meta:
         model = Allergen
-        fields = ["key", "sort_order", "translations"]
+        fields = ["public_id", "key", "sort_order", "translations", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "created_at", "updated_at"]
 
     def get_translations(self, obj: Allergen) -> list[dict[str, str]]:
         return AllergenTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]

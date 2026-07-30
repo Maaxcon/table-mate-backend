@@ -465,12 +465,10 @@ class AdminMenuItemViewSet(
 
 
 @extend_schema(tags=["Menu Admin"])
-class AdminAllergenViewSet(viewsets.ModelViewSet[Allergen]):
+class AdminAllergenViewSet(PublicLookupMixin, viewsets.ModelViewSet[Allergen]):
     permission_classes = [IsAdmin]
     queryset = Allergen.objects.all()
     serializer_class = AdminAllergenSerializer
-    lookup_field = "key"
-    lookup_url_kwarg = "key"
 
     def get_queryset(self) -> QuerySet[Allergen]:
         return Allergen.objects.all().prefetch_related("translations")
@@ -484,7 +482,7 @@ class AdminAllergenViewSet(viewsets.ModelViewSet[Allergen]):
         serializer = AllergenTranslationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         translation = services.create_allergen_translation(
-            allergen_key=kwargs.get("key", ""),
+            allergen_public_id=kwargs.get("public_id", ""),
             **serializer.validated_data,
         )
         return Response(AllergenTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
@@ -498,18 +496,21 @@ class AdminAllergenViewSet(viewsets.ModelViewSet[Allergen]):
         lang = kwargs.pop("lang")
         serializer = AllergenTranslationSerializer(data={"language_code": lang, **request.data})
         serializer.is_valid(raise_exception=True)
-        translation = services.update_allergen_translation(allergen_key=kwargs.get("key", ""), **serializer.validated_data)
+        translation = services.update_allergen_translation(
+            allergen_public_id=kwargs.get("public_id", ""),
+            **serializer.validated_data,
+        )
         return Response(AllergenTranslationSerializer(translation).data)
 
     @update_translation.mapping.delete
     def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
-        services.delete_allergen_translation(allergen_key=kwargs.get("key", ""), language_code=lang)
+        services.delete_allergen_translation(allergen_public_id=kwargs.get("public_id", ""), language_code=lang)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @create_translation.mapping.get
     def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        translations = services.get_allergen_translations(allergen_key=kwargs.get("key", ""))
+        translations = services.get_allergen_translations(allergen_public_id=kwargs.get("public_id", ""))
         return Response(AllergenTranslationSerializer(translations, many=True).data)
 
 

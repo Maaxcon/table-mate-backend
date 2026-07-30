@@ -246,8 +246,8 @@ def get_upsells_for_item(
     return suggestions + list(fallback)
 
 
-def create_allergen_translation(*, allergen_key: str, language_code: str, name: str) -> AllergenTranslation:
-    allergen = Allergen.objects.get(key=allergen_key)
+def create_allergen_translation(*, allergen_public_id: str, language_code: str, name: str) -> AllergenTranslation:
+    allergen = Allergen.objects.get(public_id=allergen_public_id)
     return AllergenTranslation.objects.create(
         allergen=allergen,
         language_code=language_code,
@@ -255,19 +255,19 @@ def create_allergen_translation(*, allergen_key: str, language_code: str, name: 
     )
 
 
-def update_allergen_translation(*, allergen_key: str, language_code: str, name: str) -> AllergenTranslation:
-    translation = AllergenTranslation.objects.get(allergen__key=allergen_key, language_code=language_code)
+def update_allergen_translation(*, allergen_public_id: str, language_code: str, name: str) -> AllergenTranslation:
+    translation = AllergenTranslation.objects.get(allergen__public_id=allergen_public_id, language_code=language_code)
     translation.name = name
     translation.save(update_fields=["name", "updated_at"])
     return translation
 
 
-def delete_allergen_translation(*, allergen_key: str, language_code: str) -> None:
-    AllergenTranslation.objects.filter(allergen__key=allergen_key, language_code=language_code).delete()
+def delete_allergen_translation(*, allergen_public_id: str, language_code: str) -> None:
+    AllergenTranslation.objects.filter(allergen__public_id=allergen_public_id, language_code=language_code).delete()
 
 
-def get_allergen_translations(*, allergen_key: str) -> list[AllergenTranslation]:
-    return list(AllergenTranslation.objects.filter(allergen__key=allergen_key))
+def get_allergen_translations(*, allergen_public_id: str) -> list[AllergenTranslation]:
+    return list(AllergenTranslation.objects.filter(allergen__public_id=allergen_public_id))
 
 
 def _check_duplicate_ingredient_name(*, ingredient_id: int, language_code: str, name: str) -> None:
