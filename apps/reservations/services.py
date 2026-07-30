@@ -334,21 +334,26 @@ _NO_SHOW_BATCH_SIZE = 200
 
 
 def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
-    """Auto-cancel PENDING reservations nobody seated well past their start time.
+    """Auto-cancel PENDING reservations nobody seated within grace of start_at.
 
-    Without this, a forgotten pending booking (guest never showed, staff never
-    marked it cancelled) sits PENDING forever — and activate_pending_reservation's
-    "earlier pending reservation" guard then permanently blocks every later
-    booking on that table, since the guard has no staleness cutoff of its own.
+    Example: booked for 12:00, grace is 2 hours — if nobody has seated the
+    table (staff clicking "seat", or the guest self-seating) by 14:00, the
+    booking closes. Without this, a forgotten pending booking sits PENDING
+    forever — and activate_pending_reservation's "earlier pending reservation"
+    guard then permanently blocks every later booking on that table, since the
+    guard has no staleness cutoff of its own.
 
-    Skips a reservation that already has a paid pre-order: that guest has real
-    money on file, so silently cancelling needs a human decision (refund vs.
-    hold the table longer), not an automatic no-show.
+    A paid pre-order is cancelled too (refunded — payment here is simulated)
+    unless the kitchen already has a Ticket for it: that's real food already
+    in progress, so that one reservation is left for a human instead of being
+    swept up automatically.
     """
+    from apps.orders.billing import cancel_preorder
     from apps.orders.models import Order, OrderPaymentStatus
+    from common.exceptions import PreorderNotAllowedError
 
     now = timezone.now()
-    grace_minutes = max(int(getattr(settings, "RESERVATION_NO_SHOW_GRACE_MINUTES", 30)), 0)
+    grace_minutes = max(int(getattr(settings, "RESERVATION_NO_SHOW_GRACE_MINUTES", 120)), 0)
     cutoff = now - timedelta(minutes=grace_minutes)
 
     base = Reservation.objects.filter(status=ReservationStatus.PENDING, start_at__lte=cutoff)
@@ -368,11 +373,19 @@ def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
                 continue
             if reservation.start_at > cutoff:
                 continue
-            has_paid_preorder = Order.objects.filter(
+
+            paid_orders = Order.objects.filter(
                 session__reservation=reservation, payment_status=OrderPaymentStatus.PAID
-            ).exists()
-            if has_paid_preorder:
+            )
+            kitchen_already_started = False
+            for order in paid_orders:
+                try:
+                    cancel_preorder(order=order, user=None)
+                except PreorderNotAllowedError:
+                    kitchen_already_started = True
+            if kitchen_already_started:
                 continue
+
             try:
                 cancel_reservation(reservation, actor=None)
             except ReservationCancelError:
