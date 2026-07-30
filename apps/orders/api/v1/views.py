@@ -341,7 +341,8 @@ class PreorderCheckoutView(GuestFallbackAuthMixin, APIView):
             201: CheckoutResponseSerializer,
             400: OpenApiResponse(description="Cart is empty."),
             409: OpenApiResponse(
-                description="Cart changed (code CART_CHANGED), or reservation already started (code preorder_not_allowed)."
+                description="Cart changed (code CART_CHANGED), or reservation "
+                "already started (code preorder_not_allowed)."
             ),
         },
     )

@@ -608,14 +608,17 @@ def inject_scheduled_preorders(*, batch_size: int = _PREORDER_INJECT_BATCH_SIZE)
                 )
                 items_count = OrderItem.objects.filter(order=order).update(ticket=ticket)
 
-            transaction.on_commit(
-                lambda tk=ticket, sess=session, cnt=items_count: emit_kitchen_ticket_injected(
+            def _emit_ticket_injected(
+                tk: Ticket = ticket, sess: Session = session, cnt: int = items_count
+            ) -> None:
+                emit_kitchen_ticket_injected(
                     sess.restaurant_id,
                     ticket_id=str(tk.public_id),
                     table_number=sess.table.public_number,
                     items_count=cnt,
                 )
-            )
+
+            transaction.on_commit(_emit_ticket_injected)
             total_injected += 1
 
     return total_injected
