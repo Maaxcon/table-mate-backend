@@ -23,15 +23,16 @@ from common.api import (
 )
 from common.permissions import HasAnyRole
 
-from .models import Layout, LayoutVersion
+from .models import Layout, LayoutDraft, LayoutVersion
 from .selectors import get_available_tables
 from .serializers import (
+    DraftLayoutSerializer,
     EditorTableSerializer,
     LayoutSerializer,
     LayoutVersionSerializer,
     PublishLayoutSerializer,
 )
-from .services import TableInUseError, publish_layout
+from .services import TableInUseError, delete_draft, publish_layout, save_draft
 
 
 @extend_schema(tags=["Editor"])
@@ -89,12 +90,98 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
         if restaurant_id is None:
             return Response({"layout_json": None})
 
-        latest = (
-            LayoutVersion.objects.filter(restaurant_id=restaurant_id)
-            .order_by("-published_at", "-id")
-            .first()
-        )
+        latest = LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
         return Response({"layout_json": latest.layout_json if latest else None})
+
+    # ------------------------------------------------------------------
+    # Draft mode — save/load/discard layout draft without publishing
+    # ------------------------------------------------------------------
+
+    @extend_schema(
+        summary="Floor plan draft",
+        description=(
+            "GET: load the current draft (or latest published if no draft). "
+            "PUT: save a draft (validates same schema as publish, no Table/Zone side effects). "
+            "DELETE: discard the current draft."
+        ),
+        request=PublishLayoutSerializer,
+        responses={200: DraftLayoutSerializer, 204: None},
+    )
+    @action(
+        detail=False,
+        methods=["get", "put", "delete"],
+        url_path="draft",
+        permission_classes=[],  # checked manually per-method below
+    )
+    def draft(self, request: Request) -> Response:
+        # Authenticated check for all methods
+        if not request.user or not request.user.is_authenticated:
+            self.permission_denied(request)
+
+        if request.method == "GET":
+            # IsFloor (admin or waiter) can read drafts
+            if not IsFloor().has_permission(request, self):
+                self.permission_denied(request)
+            return self._get_draft(request)
+        elif request.method == "PUT":
+            # Only admin can save drafts
+            if not IsAdmin().has_permission(request, self):
+                self.permission_denied(request)
+            return self._put_draft(request)
+        elif request.method == "DELETE":
+            # Only admin can delete drafts
+            if not IsAdmin().has_permission(request, self):
+                self.permission_denied(request)
+            return self._delete_draft(request)
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def _get_draft(self, request: Request) -> Response:
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is None:
+            return Response({"draft_json": None, "updated_at": None, "updated_by": None})
+
+        draft = LayoutDraft.objects.filter(restaurant_id=restaurant_id).first()
+        if draft is not None:
+            return Response(
+                {
+                    "draft_json": draft.draft_json,
+                    "updated_at": draft.updated_at.isoformat() if draft.updated_at else None,
+                    "updated_by": str(draft.updated_by_id) if draft.updated_by_id else None,
+                }
+            )
+
+        latest = LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
+        return Response(
+            {
+                "draft_json": latest.layout_json if latest else None,
+                "updated_at": None,
+                "updated_by": None,
+            }
+        )
+
+    def _put_draft(self, request: Request) -> Response:
+        restaurant_id = require_restaurant_id_from_auth(request)
+        serializer = PublishLayoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        draft = save_draft(
+            restaurant_id=restaurant_id,
+            draft_data=serializer.validated_data,
+            updated_by=request.user,  # type: ignore[arg-type]
+        )
+        return Response(
+            {
+                "draft_json": draft.draft_json,
+                "updated_at": draft.updated_at.isoformat() if draft.updated_at else None,
+                "updated_by": str(draft.updated_by_id) if draft.updated_by_id else None,
+            }
+        )
+
+    def _delete_draft(self, request: Request) -> Response:
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is not None:
+            delete_draft(restaurant_id=restaurant_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=["Editor"])

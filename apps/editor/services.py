@@ -14,6 +14,7 @@ from common.hall_events import emit_hall_layout_published
 if TYPE_CHECKING:
     from apps.authentication.models import User
 
+    from .models import LayoutDraft
 
 
 class TableInUseError(Exception):
@@ -41,9 +42,7 @@ def _generate_public_number(restaurant_id: int) -> str:
     # table silently reappear as a previously deleted one (the "ghost" T1 in two
     # zones), so we never recycle numbers.
     highest = 0
-    for (pn,) in (
-        Table.objects.filter(restaurant_id=restaurant_id).values_list("public_number")
-    ):
+    for (pn,) in Table.objects.filter(restaurant_id=restaurant_id).values_list("public_number"):
         m = re.fullmatch(r"T(\d+)", str(pn))
         if m:
             highest = max(highest, int(m.group(1)))
@@ -117,9 +116,7 @@ def publish_layout(
     # 3. Zone updates (name, canvas cols/rows, edge styles).
     # ------------------------------------------------------------------
     for update_data in zones_data.get("updated", []):
-        zone = Zone.objects.filter(
-            public_id=update_data["public_id"], restaurant_id=restaurant_id
-        ).first()
+        zone = Zone.objects.filter(public_id=update_data["public_id"], restaurant_id=restaurant_id).first()
         if zone is None:
             continue
         changed = False
@@ -130,10 +127,7 @@ def publish_layout(
         if changed:
             zone.save()
 
-    existing_tables = {
-        str(t.public_id): t
-        for t in Table.objects.filter(restaurant_id=restaurant_id, active=True)
-    }
+    existing_tables = {str(t.public_id): t for t in Table.objects.filter(restaurant_id=restaurant_id, active=True)}
     incoming_table_uuids: set[str] = set()
     table_id_map: dict[str, str] = {}
     public_number_map: dict[str, str] = {}
@@ -144,11 +138,7 @@ def publish_layout(
         public_number = table_data.get("public_number") or ""
         capacity = table_data["capacity"]
         zone_id = table_data.get("zone_id")
-        zone = (
-            Zone.objects.filter(public_id=zone_id, restaurant_id=restaurant_id).first()
-            if zone_id
-            else None
-        )
+        zone = Zone.objects.filter(public_id=zone_id, restaurant_id=restaurant_id).first() if zone_id else None
         # Table.zone is non-nullable; a missing/stale zone_id is bad input, not a 500.
         if zone is None:
             raise ValidationError(f"Table references unknown zone_id {zone_id!r}.")
@@ -162,9 +152,7 @@ def publish_layout(
             client_id = str(table_uuid)
         # 2. Fallback: match by public_number (handles missing/stale UUID)
         elif public_number:
-            match = Table.objects.filter(
-                restaurant_id=restaurant_id, public_number=public_number, active=True
-            ).first()
+            match = Table.objects.filter(restaurant_id=restaurant_id, public_number=public_number, active=True).first()
             if match:
                 existing = match
                 client_id = str(table_uuid) if table_uuid else str(match.public_id)
@@ -263,11 +251,7 @@ def publish_layout(
     # layout is written to the JSONField.
     layout_json = _to_jsonable(layout_data)
 
-    parent_version = (
-        LayoutVersion.objects.filter(restaurant_id=restaurant_id)
-        .order_by("-published_at", "-id")
-        .first()
-    )
+    parent_version = LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
 
     version = LayoutVersion.objects.create(
         restaurant_id=restaurant_id,
@@ -286,9 +270,41 @@ def publish_layout(
         )
     )
 
+    # Clean up any residual draft after a successful publish so the editor
+    # does not keep stale draft state around.
+    from .models import LayoutDraft
+
+    LayoutDraft.objects.filter(restaurant_id=restaurant_id).delete()
+
     return {
         "version": version,
         "table_id_map": table_id_map,
         "public_number_map": public_number_map,
         "zone_id_map": zone_id_map,
     }
+
+
+def save_draft(
+    *,
+    restaurant_id: int,
+    draft_data: dict[str, Any],
+    updated_by: User | None = None,
+) -> LayoutDraft:
+    from .models import LayoutDraft
+
+    layout_json = _to_jsonable(draft_data)
+    draft, _ = LayoutDraft.objects.update_or_create(
+        restaurant_id=restaurant_id,
+        defaults={
+            "draft_json": layout_json,
+            "updated_by": updated_by,
+        },
+    )
+    return draft
+
+
+def delete_draft(*, restaurant_id: int) -> bool:
+    from .models import LayoutDraft
+
+    deleted, _ = LayoutDraft.objects.filter(restaurant_id=restaurant_id).delete()
+    return deleted > 0
