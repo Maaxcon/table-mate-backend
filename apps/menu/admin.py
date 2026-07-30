@@ -63,7 +63,7 @@ class IngredientTranslationInline(admin.TabularInline):  # type: ignore[type-arg
 
 @admin.register(Allergen)
 class AllergenAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
-    list_display = ["key", "sort_order"]
+    list_display = ["public_id", "key", "sort_order"]
     search_fields = ["key"]
     inlines = [AllergenTranslationInline]
 
