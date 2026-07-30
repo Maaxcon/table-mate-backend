@@ -5,7 +5,7 @@ from django.db import transaction
 
 from apps.authentication.models import User
 
-from .models import Restaurant, RestaurantSettings, Table, TableTranslation, ZoneTranslation
+from .models import Restaurant, RestaurantSettings, RestaurantTranslation, Table, TableTranslation, ZoneTranslation
 
 RESTAURANT_UPDATABLE = frozenset({"name", "address", "phone", "telegram_url", "facebook_url"})
 SETTINGS_UPDATABLE = frozenset(
@@ -86,6 +86,29 @@ def build_table_menu_url(table: Table) -> str:
     return f"{django_settings.FRONTEND_BASE_URL}/menu/{table.restaurant.public_id}?table={table.public_id}"
 
 
+def create_restaurant_translation(*, restaurant_id: int, language_code: str, address: str) -> RestaurantTranslation:
+    return RestaurantTranslation.objects.create(
+        restaurant_id=restaurant_id,
+        language_code=language_code,
+        address=address,
+    )
+
+
+def update_restaurant_translation(*, restaurant_id: int, language_code: str, address: str) -> RestaurantTranslation:
+    translation = RestaurantTranslation.objects.get(restaurant_id=restaurant_id, language_code=language_code)
+    translation.address = address
+    translation.save(update_fields=["address", "updated_at"])
+    return translation
+
+
+def delete_restaurant_translation(*, restaurant_id: int, language_code: str) -> None:
+    RestaurantTranslation.objects.filter(restaurant_id=restaurant_id, language_code=language_code).delete()
+
+
+def get_restaurant_translations(*, restaurant_id: int) -> list[RestaurantTranslation]:
+    return list(RestaurantTranslation.objects.filter(restaurant_id=restaurant_id))
+
+
 def create_zone_translation(*, zone_id: int, language_code: str, name: str) -> ZoneTranslation:
     return ZoneTranslation.objects.create(
         zone_id=zone_id,
@@ -138,6 +161,10 @@ __all__ = [
     "manage_employee",
     "create_employee",
     "build_table_menu_url",
+    "create_restaurant_translation",
+    "update_restaurant_translation",
+    "delete_restaurant_translation",
+    "get_restaurant_translations",
     "create_zone_translation",
     "update_zone_translation",
     "delete_zone_translation",
