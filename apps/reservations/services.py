@@ -523,43 +523,6 @@ def reschedule_reservation(
 ACTIVATION_EARLY_WINDOW = timedelta(minutes=15)  # how early a guest may self-activate
 
 
-def activate_reservation(
-    *,
-    reservation: Reservation,
-    opened_by: Any = None,
-    enforce_window: bool = False,
-) -> Reservation:
-    """Flip a pending reservation to active (staff or the owning customer).
-
-    No QR is needed; the waiter or the owning customer opens the table on
-    arrival. Staff have no time limit. When enforce_window is set (customer
-    self-activation) the booking can only be activated near its start — not more
-    than ACTIVATION_EARLY_WINDOW early — so a guest cannot open a far-future
-    booking. Arriving late is always allowed.
-    Idempotent if already active; rejects completed/cancelled reservations.
-    Opens the visit Session (bill) so the floor plan shows the table occupied.
-    """
-    opened_by_user = opened_by if (opened_by is not None and opened_by.is_authenticated) else None
-    with transaction.atomic():
-        locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
-        if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
-            raise ReservationConflictError("Only pending reservations can be activated.")
-        if locked.status == ReservationStatus.PENDING:
-            if enforce_window and locked.start_at - timezone.now() > ACTIVATION_EARLY_WINDOW:
-                raise ReservationConflictError("This reservation cannot be activated yet.")
-            locked.status = ReservationStatus.ACTIVE
-            locked.save(update_fields=["status"])
-        ensure_visit_session(locked, opened_by=opened_by_user)
-
-    restaurant_id = locked.restaurant_id
-    table_id = str(locked.table.public_id) if locked.table else ""
-    if table_id:
-        transaction.on_commit(
-            lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
-        )
-    return locked
-
-
 @transaction.atomic
 def activate_reservation_by_scan(
     *,
