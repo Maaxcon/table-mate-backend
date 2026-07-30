@@ -29,7 +29,7 @@ def validate_allergens(value: object) -> None:
         raise ValidationError(f"Invalid allergens: {invalid}. Choose from: {ALLERGEN_KEYS}")
 
 
-class Allergen(models.Model):
+class Allergen(BaseModel):
     key = models.CharField(max_length=50, unique=True)
     sort_order = models.PositiveIntegerField(default=0)
 
