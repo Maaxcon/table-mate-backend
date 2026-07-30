@@ -379,7 +379,12 @@ class OrderItemViewSet(
         if restaurant_id is None:
             return qs.none()
         qs = get_kitchen_order_items(restaurant_id)
-        if self.action == "list":
+        # The kitchen board (queries by order__public_id/ticket) only wants
+        # active work, so served/voided items drop out once handled. The
+        # waiter's table overlay (queries by order__session__public_id) needs
+        # the full bill — served items must stay visible, just no longer
+        # actionable — so skip the exclusion for that view.
+        if self.action == "list" and "order__session__public_id" not in self.request.query_params:
             qs = qs.exclude(status__in=[OrderItemStatus.SERVED, OrderItemStatus.VOIDED])
         return qs
 

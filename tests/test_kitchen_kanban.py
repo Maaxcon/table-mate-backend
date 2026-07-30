@@ -582,6 +582,78 @@ class TestTicketKanbanAPI:
         foreign_results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
         assert foreign_results == []
 
+    def test_waiter_session_view_still_shows_served_and_voided_items(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        # The waiter's table overlay bills the whole visit, so a served item
+        # must not vanish from it — only the kitchen board (order__public_id)
+        # should drop served/voided rows.
+        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = auth.client
+        actor = auth.user
+
+        session = _build_session(table, restaurant.id, actor)
+        order = create_order_with_items(
+            session=session,
+            items=[
+                {"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None},
+                {"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None},
+            ],
+            actor=actor,
+        )
+        served_item, voided_item = order.items.all()[:2]
+        served_item.status = OrderItemStatus.SERVED
+        served_item.save(update_fields=["status"])
+        voided_item.status = OrderItemStatus.VOIDED
+        voided_item.save(update_fields=["status"])
+
+        resp = client.get(
+            ORDER_ITEM_LIST_URL,
+            {"order__session__public_id": str(session.public_id)},
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.json()
+        results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        result_ids = {row["public_id"] for row in results}
+        assert str(served_item.public_id) in result_ids
+        assert str(voided_item.public_id) in result_ids
+
+    def test_kitchen_order_view_still_hides_served_and_voided_items(
+        self,
+        api: Callable[..., AuthContext],
+        restaurant: Any,
+        table: Table,
+        item: MenuItem,
+    ) -> None:
+        auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+        client = auth.client
+        actor = auth.user
+
+        session = _build_session(table, restaurant.id, actor)
+        order = create_order_with_items(
+            session=session,
+            items=[
+                {"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None},
+                {"menu_item": item, "guest_slot": 1, "quantity": 1, "comment": None},
+            ],
+            actor=actor,
+        )
+        served_item, active_item = order.items.all()[:2]
+        served_item.status = OrderItemStatus.SERVED
+        served_item.save(update_fields=["status"])
+
+        resp = client.get(ORDER_ITEM_LIST_URL, {"order__public_id": str(order.public_id)})
+        assert resp.status_code == status.HTTP_200_OK
+        payload = resp.json()
+        results = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        result_ids = {row["public_id"] for row in results}
+        assert str(served_item.public_id) not in result_ids
+        assert str(active_item.public_id) in result_ids
+
     def test_ticket_list_fifo_counts_and_server_name_sanitized(
         self,
         api: Callable[..., AuthContext],
