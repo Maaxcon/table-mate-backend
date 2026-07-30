@@ -4,10 +4,13 @@ __all__ = [
     "close_reservation_carts",
     "close_visit_session",
     "confirm_and_pay_preorder",
+    "ensure_preorder_session",
     "ensure_visit_session",
 ]
 
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 from decimal import Decimal
 
@@ -25,6 +28,7 @@ from common.exceptions import (
     DomainError,
     EmptyCartError,
     PreorderNotAllowedError,
+    ReservationNotYetActiveError,
     RestaurantClosedError,
     TableOccupiedError,
     UnservedItemsError,
@@ -84,46 +88,111 @@ def _restaurant_billing(restaurant_id: int) -> tuple[str, Decimal, Decimal]:
     return settings.currency or "USD", settings.default_tax_rate, settings.default_service_charge
 
 
-def ensure_visit_session(
+@contextmanager
+def _table_occupied_on_conflict() -> Iterator[None]:
+    """Translate orders_one_open_session_per_table into TableOccupiedError.
+
+    That constraint firing means another reservation's visit is still open on
+    this table (e.g. running over its slot). Surface a clear, specific error
+    instead of a generic "conflicts" 409.
+    """
+    try:
+        yield
+    except IntegrityError as exc:
+        if "orders_one_open_session_per_table" not in str(exc):
+            raise
+        raise TableOccupiedError(
+            "This table's previous visit hasn't ended yet — try again shortly."
+        ) from exc
+
+
+def ensure_preorder_session(
     reservation: Reservation,
     *,
     opened_by: User | None = None,
     currency: str | None = None,
 ) -> Session:
-    """Return (or create) the visit Session (bill) for a reservation.
+    """Return (or create) the SCHEDULED Session holding a paid pre-order's bill.
 
-    One Session per reservation (OneToOne). Created eagerly when a table is
-    opened — walk-in or pre-booked activation — so the floor plan shows the
-    table as occupied consistently, and reused at checkout.
+    A pre-order is paid before the party arrives, but Order.session is required
+    — so the bill has to exist now. It is created SCHEDULED rather than OPEN
+    precisely so it does not occupy the table: every occupancy check (conflict
+    detection, availability, orders_one_open_session_per_table, the cleanup
+    jobs) filters on OPEN, so a booking weeks out no longer takes its table out
+    of service for everyone else. ensure_visit_session promotes it when the
+    party is actually seated.
+
+    Repeat pre-order rounds reuse the same Session, as they did when this ran
+    through ensure_visit_session.
     """
     table_id = reservation.table_id
     if table_id is None:
         raise DomainError("Reservation has no table; cannot open a bill.")
     if currency is None:
         currency, _, _ = _restaurant_billing(reservation.restaurant_id)
-    try:
-        session, _ = Session.objects.get_or_create(
+
+    existing = Session.objects.select_for_update().filter(reservation=reservation).first()
+    if existing is not None:
+        return existing
+
+    return Session.objects.create(
+        restaurant_id=reservation.restaurant_id,
+        table_id=table_id,
+        reservation=reservation,
+        opened_by=opened_by,
+        guest_count=reservation.guest_count,
+        currency=currency,
+        status=SessionStatus.SCHEDULED,
+        opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
+    )
+
+
+def ensure_visit_session(
+    reservation: Reservation,
+    *,
+    opened_by: User | None = None,
+    currency: str | None = None,
+) -> Session:
+    """Return (or create) the OPEN visit Session (bill) for a reservation.
+
+    One Session per reservation (OneToOne). Called when the table is actually
+    opened — walk-in or pre-booked activation — so the floor plan shows the
+    table as occupied consistently, and reused at checkout.
+
+    A SCHEDULED session left behind by a paid pre-order is promoted to OPEN
+    here, with opened_at moved to now: this call is the moment the party sits
+    down and the table genuinely becomes occupied. Callers are all inside a
+    transaction, so the select_for_update below serialises concurrent seatings
+    of the same reservation.
+    """
+    table_id = reservation.table_id
+    if table_id is None:
+        raise DomainError("Reservation has no table; cannot open a bill.")
+    if currency is None:
+        currency, _, _ = _restaurant_billing(reservation.restaurant_id)
+
+    existing = Session.objects.select_for_update().filter(reservation=reservation).first()
+    if existing is not None:
+        if existing.status == SessionStatus.SCHEDULED:
+            existing.status = SessionStatus.OPEN
+            existing.opened_at = timezone.now()
+            existing.opened_by = opened_by
+            with _table_occupied_on_conflict():
+                existing.save(update_fields=["status", "opened_at", "opened_by", "updated_at"])
+        return existing
+
+    with _table_occupied_on_conflict():
+        session = Session.objects.create(
+            restaurant_id=reservation.restaurant_id,
+            table_id=table_id,
             reservation=reservation,
-            defaults={
-                "restaurant_id": reservation.restaurant_id,
-                "table_id": table_id,
-                "opened_by": opened_by,
-                "guest_count": reservation.guest_count,
-                "currency": currency,
-                "opened_at": timezone.now(),
-                "ends_at": reservation.end_at,
-            },
+            opened_by=opened_by,
+            guest_count=reservation.guest_count,
+            currency=currency,
+            opened_at=timezone.now(),
+            ends_at=reservation.end_at,
         )
-    except IntegrityError as exc:
-        # orders_one_open_session_per_table: another reservation's visit is
-        # still open on this table (e.g. running over its slot). Surface a
-        # clear, specific error instead of a generic "conflicts" 409 — this
-        # is a real, if rare, race for a pre-order opening its bill early.
-        if "orders_one_open_session_per_table" not in str(exc):
-            raise
-        raise TableOccupiedError(
-            "This table's previous visit hasn't ended yet — try again shortly."
-        ) from exc
     return session
 
 
@@ -378,6 +447,19 @@ def checkout_cart_session(
             raise RestaurantClosedError()
 
         reservation = cart_session.reservation
+        # Mirror of confirm_and_pay_preorder's PENDING guard, keeping the two
+        # checkout endpoints disjoint. Without it a guest holding a pre-order
+        # cart (create_cart_session does not gate on reservation status) could
+        # POST to plain /checkout/ instead of /preorder-checkout/ and promote
+        # their SCHEDULED session to OPEN weeks early — occupying the table and
+        # firing the kitchen ticket immediately. Every legitimate in-visit cart
+        # comes from ensure_active_cart_for_table, which already requires ACTIVE.
+        if reservation.status != ReservationStatus.ACTIVE:
+            raise ReservationNotYetActiveError(
+                "This booking hasn't started yet — pre-order instead of checking out.",
+                start_at=reservation.start_at.isoformat(),
+            )
+
         currency, tax_rate, service_charge_rate = _restaurant_billing(reservation.restaurant_id)
         session = ensure_visit_session(reservation, opened_by=user, currency=currency)
 
@@ -451,7 +533,7 @@ def confirm_and_pay_preorder(
             raise PreorderNotAllowedError()
 
         currency, tax_rate, service_charge_rate = _restaurant_billing(reservation.restaurant_id)
-        session = ensure_visit_session(reservation, opened_by=user, currency=currency)
+        session = ensure_preorder_session(reservation, opened_by=user, currency=currency)
 
         order, order_items = _build_order_from_cart(
             cart_session=cart_session,

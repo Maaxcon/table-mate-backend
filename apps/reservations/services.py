@@ -295,7 +295,14 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
     locked.status = ReservationStatus.CANCELLED
     locked.save(update_fields=["status", "updated_at"])
 
-    session = Session.objects.filter(reservation=locked, status=SessionStatus.OPEN).first()
+    session = Session.objects.filter(
+        reservation=locked,
+        status__in=[SessionStatus.OPEN, SessionStatus.SCHEDULED],
+    ).first()
+    # A SCHEDULED session (paid pre-order, party never seated) has to be closed
+    # too, or cancelling leaves it dangling forever. It never occupied the
+    # table, though, so only a previously-OPEN one may report occupied->free.
+    was_open = session is not None and session.status == SessionStatus.OPEN
     if session:
         session.status = SessionStatus.CLOSED
         session.save(update_fields=["status", "updated_at"])
@@ -304,7 +311,7 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
 
     table = locked.table
     if actor is not None and table is not None:
-        if session is not None:
+        if session is not None and was_open:
             transaction.on_commit(
                 lambda: emit_hall_table_status_changed(
                     locked.restaurant_id,

@@ -188,25 +188,27 @@ class TestActivatePendingReservation:
         assert result.status == ReservationStatus.ACTIVE
         assert stale_session.status == SessionStatus.CLOSED
 
-    def test_reuses_existing_session_from_paid_preorder(
+    def test_promotes_scheduled_session_from_paid_preorder(
         self, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
     ) -> None:
-        # confirm_and_pay_preorder can already open this reservation's Session
-        # while it's still PENDING. Seating it must reuse that Session, not
-        # blow up on a raw create() (reservation OneToOne / one-open-session
-        # per table constraint) — see bug where "Посадити" raised a bare
-        # IntegrityError instead of activating.
+        # confirm_and_pay_preorder leaves this reservation a SCHEDULED Session
+        # while it's still PENDING (the bill exists, the table isn't occupied).
+        # Seating it must promote that same Session to OPEN and stamp the real
+        # seating time — not raw-create a second one (reservation OneToOne /
+        # one-open-session-per-table constraint), which is the bug where
+        # "Посадити" raised a bare IntegrityError instead of activating.
         actor = user_factory(role=RoleCode.WAITER)
         actor.save()
-        res = _reservation(restaurant=restaurant, table=table)
+        res = _reservation(restaurant=restaurant, table=table, start_offset_hours=3)
+        scheduled_at = res.start_at
         preorder_session = Session.objects.create(
             restaurant=restaurant,
             table=table,
             reservation=res,
             guest_count=2,
             currency="UAH",
-            status=SessionStatus.OPEN,
-            opened_at=timezone.now(),
+            status=SessionStatus.SCHEDULED,
+            opened_at=scheduled_at,
             ends_at=res.end_at,
         )
 
@@ -218,6 +220,9 @@ class TestActivatePendingReservation:
         session = Session.objects.get(reservation=result)
         assert session.pk == preorder_session.pk
         assert session.status == SessionStatus.OPEN
+        assert session.opened_at != scheduled_at
+        assert timezone.now() - session.opened_at < timedelta(minutes=1)
+        assert session.opened_by == actor
 
     def test_rejects_if_earlier_pending_exists(
         self, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
