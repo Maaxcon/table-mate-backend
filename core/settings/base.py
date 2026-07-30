@@ -193,6 +193,9 @@ CELERY_TASK_IGNORE_RESULT = True
 CELERY_TIMEZONE = TIME_ZONE
 # Grace window after reservation end before an OPEN visit is auto-closed.
 SESSION_OVERDUE_AUTO_CLOSE_MINUTES = env.int("SESSION_OVERDUE_AUTO_CLOSE_MINUTES", default=20)
+# Grace window after the restaurant's shift (working hours) ends before a
+# still-OPEN visit is force-closed, even if it has unserved items.
+SHIFT_END_FORCE_CLOSE_GRACE_MINUTES = env.int("SHIFT_END_FORCE_CLOSE_GRACE_MINUTES", default=60)
 # How long before a reservation's start_at a paid pre-order becomes a kitchen ticket.
 PREORDER_LEAD_MINUTES = env.int("PREORDER_LEAD_MINUTES", default=20)
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
@@ -208,6 +211,10 @@ CELERY_BEAT_SCHEDULE = {
     "close-overdue-sessions": {
         "task": "orders.close_overdue_sessions",
         "schedule": float(env.int("CLOSE_OVERDUE_SESSIONS_INTERVAL_SECONDS", default=60)),
+    },
+    "force-close-shift-end-sessions": {
+        "task": "orders.force_close_shift_end_sessions",
+        "schedule": float(env.int("FORCE_CLOSE_SHIFT_END_SESSIONS_INTERVAL_SECONDS", default=300)),
     },
     "inject-scheduled-preorders": {
         "task": "orders.inject_scheduled_preorders",

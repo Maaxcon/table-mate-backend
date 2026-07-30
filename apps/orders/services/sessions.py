@@ -484,6 +484,65 @@ def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE)
     return total_closed
 
 
+def force_close_sessions_past_shift_end(
+    *, now: datetime | None = None, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE
+) -> int:
+    """Force-close OPEN sessions left over an hour past their restaurant's shift end.
+
+    close_overdue_visit_sessions refuses to close a session that still has
+    unserved items, so a session can stay wedged open forever if staff never
+    mark those items served/voided — blocking the table for every reservation
+    after it. Once a restaurant is this far past closing, freeing the table
+    matters more than that guard, so this force-closes regardless.
+    """
+    from apps.orders.billing import close_visit_session
+
+    now = now or timezone.now()
+    grace_minutes = max(int(getattr(settings, "SHIFT_END_FORCE_CLOSE_GRACE_MINUTES", 60)), 0)
+    grace = timedelta(minutes=grace_minutes)
+
+    restaurant_ids = list(
+        Session.objects.filter(status=SessionStatus.OPEN, reservation__status=ReservationStatus.ACTIVE)
+        .values_list("restaurant_id", flat=True)
+        .distinct()
+    )
+
+    total_closed = 0
+    for restaurant_id in restaurant_ids:
+        # No configured working hours → no shift boundary to force-close against.
+        close_at = get_working_hours_close_at(restaurant_id, now)
+        if close_at is None or now < close_at + grace:
+            continue
+
+        base = Session.objects.filter(
+            status=SessionStatus.OPEN,
+            reservation__status=ReservationStatus.ACTIVE,
+            restaurant_id=restaurant_id,
+        )
+
+        last_pk = 0
+        while True:
+            batch_ids = list(
+                base.filter(pk__gt=last_pk).order_by("pk").values_list("pk", flat=True)[:batch_size]
+            )
+            if not batch_ids:
+                break
+
+            last_pk = batch_ids[-1]
+
+            with transaction.atomic():
+                sessions = list(
+                    Session.objects.select_for_update(skip_locked=True)
+                    .filter(pk__in=batch_ids, status=SessionStatus.OPEN, reservation__status=ReservationStatus.ACTIVE)
+                    .order_by("pk")
+                )
+                for session in sessions:
+                    close_visit_session(session=session, actor=None, force=True)
+                    total_closed += 1
+
+    return total_closed
+
+
 def inject_scheduled_preorders(*, batch_size: int = _PREORDER_INJECT_BATCH_SIZE) -> int:
     """Create the kitchen Ticket for paid pre-orders nearing their reservation's start_at.
 

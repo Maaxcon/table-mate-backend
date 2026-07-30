@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from datetime import date as date_type
 from datetime import datetime, timedelta
 from datetime import time as time_type
+from decimal import Decimal
 from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -22,7 +23,7 @@ from rest_framework.response import Response
 from apps.authentication.models import RoleCode, User
 from apps.orders.billing import cancel_preorder, close_visit_session
 from apps.orders.models import OrderItemStatus, Session, SessionStatus, Ticket
-from apps.orders.selectors import get_preorder_for_reservation
+from apps.orders.selectors import get_preorder_orders_for_reservation
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
 from common.api import (
@@ -312,25 +313,29 @@ class ReservationViewSet(
 
     @extend_schema(
         summary="View or cancel this reservation's pre-order",
-        description="GET returns the current paid pre-order (or 204 if none). "
-        "DELETE cancels it (simulated refund) — only while the kitchen hasn't "
-        "started it yet.",
+        description="GET returns all paid pre-order rounds combined into one check "
+        "(or 204 if none). DELETE cancels every round — only while the kitchen "
+        "hasn't started any of them yet.",
     )
     @action(detail=True, methods=["get", "delete"], url_path="preorder")
     def preorder(self, request: Request, *args: object, **kwargs: object) -> Response:
         reservation = self.get_object()
-        order = get_preorder_for_reservation(reservation)
+        orders = get_preorder_orders_for_reservation(reservation)
 
         if request.method == "DELETE":
-            if order is None:
+            if not orders:
                 raise NotFound("No pre-order to cancel for this reservation.")
-            cancel_preorder(order=order, user=cast(User, request.user))
+            for order in orders:
+                cancel_preorder(order=order, user=cast(User, request.user))
             return Response(status=status.HTTP_204_NO_CONTENT)
 
-        if order is None:
+        if not orders:
             return Response(status=status.HTTP_204_NO_CONTENT)
 
-        can_cancel = not Ticket.objects.filter(order=order).exists()
+        # A guest can pay for several rounds before arrival (each MenuPage
+        # checkout reopens a fresh cart) — show them as one combined check
+        # rather than only the most recent round.
+        can_cancel = not Ticket.objects.filter(order__in=orders).exists()
         items = [
             {
                 "name": item.menu_item.name,
@@ -338,17 +343,22 @@ class ReservationViewSet(
                 "unit_price": str(item.unit_price),
                 "total_price": str(item.total_price),
             }
+            for order in orders
             for item in order.items.all()
             if item.status != OrderItemStatus.VOIDED
         ]
+        subtotal = sum((order.total_amount - order.tax_total - order.service_charge for order in orders), Decimal(0))
+        tax = sum((order.tax_total for order in orders), Decimal(0))
+        service_charge = sum((order.service_charge for order in orders), Decimal(0))
+        total = sum((order.total_amount for order in orders), Decimal(0))
         return Response(
             {
-                "order_id": str(order.public_id),
-                "currency": order.currency,
-                "subtotal": str(order.total_amount - order.tax_total - order.service_charge),
-                "tax": str(order.tax_total),
-                "service_charge": str(order.service_charge),
-                "total": str(order.total_amount),
+                "order_id": str(orders[-1].public_id),
+                "currency": orders[-1].currency,
+                "subtotal": str(subtotal),
+                "tax": str(tax),
+                "service_charge": str(service_charge),
+                "total": str(total),
                 "can_cancel": can_cancel,
                 "items": items,
             }

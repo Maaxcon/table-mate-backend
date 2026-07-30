@@ -174,12 +174,14 @@ def _finalize_session_orders_for_history(session: Session) -> None:
 
     for order in orders:
         create_receipt_from_order(order)
-def close_visit_session(*, session: Session, actor: User | None = None) -> Session:
+def close_visit_session(*, session: Session, actor: User | None = None, force: bool = False) -> Session:
     """End a visit and free the table.
 
     Closes the Session (bill), marks the Reservation completed, closes any
     still-active CartSession, and sets the reservation end_at to now.
-    Checks that all order items are served/voided before allowing close.
+    Checks that all order items are served/voided before allowing close,
+    unless `force` is set (used by the end-of-shift cleanup, which closes
+    the table regardless so it doesn't stay wedged past closing).
     Idempotent — safe to call on an already-closed session.
     """
     with transaction.atomic():
@@ -190,7 +192,7 @@ def close_visit_session(*, session: Session, actor: User | None = None) -> Sessi
                 order__session=session,
                 status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
             ).exists()
-            if pending_items:
+            if pending_items and not force:
                 raise ReservationConflictError("Cannot close check: all items must be served or voided first.")
 
             session.status = SessionStatus.CLOSED

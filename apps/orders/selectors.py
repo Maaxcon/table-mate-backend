@@ -199,24 +199,23 @@ def get_cart_session_by_public_id(session_pk: str) -> CartSession | None:
     return CartSession.objects.select_related("restaurant", "reservation").filter(public_id=session_pk).first()
 
 
-def get_preorder_for_reservation(reservation: Reservation) -> Order | None:
-    """The reservation's current paid pre-order, if any (confirm_and_pay_preorder).
+def get_preorder_orders_for_reservation(reservation: Reservation) -> list[Order]:
+    """All of the reservation's paid pre-order rounds (confirm_and_pay_preorder).
 
     A reservation can accumulate more than one pre-order round (see
     MenuPage's handleCheckout, which reopens a fresh cart after each
-    payment) — this returns the most recent one that's still paid and not
-    cancelled. Cancelled rounds are excluded so a cancelled-then-reordered
-    booking surfaces the new one, not the old refunded one.
+    payment) — every paid round is still owed and eaten, so callers must
+    show them all, not just the latest. Cancelled rounds are excluded since
+    they were refunded and no longer owed.
     """
-    return (
+    return list(
         Order.objects.filter(
             session__reservation=reservation,
             payment_status=OrderPaymentStatus.PAID,
         )
         .select_related("session")
         .prefetch_related("items__menu_item")
-        .order_by("-created_at")
-        .first()
+        .order_by("created_at")
     )
 
 
