@@ -7,7 +7,16 @@ from apps.authentication.models import RoleCode, User
 from apps.menu.services.localization import get_localized_content
 from common.api import PublicIdRelatedField
 
-from .models import Restaurant, RestaurantSettings, Table, Zone, validate_working_hours
+from .models import (
+    Restaurant,
+    RestaurantSettings,
+    RestaurantTranslation,
+    Table,
+    TableTranslation,
+    Zone,
+    ZoneTranslation,
+    validate_working_hours,
+)
 
 
 class WorkingHoursDaySerializer(serializers.Serializer[Any]):
@@ -53,6 +62,7 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
     # Working hours live on RestaurantSettings; expose them here so the admin can
     # edit them with the restaurant profile. The view writes them to settings.
     working_hours = working_hours_field(required=False, write_only=True)
+    translations = serializers.SerializerMethodField()
 
     class Meta:
         model = Restaurant
@@ -65,12 +75,16 @@ class RestaurantSerializer(serializers.ModelSerializer[Restaurant]):
             "facebook_url",
             "working_hours",
             "cover_image",
+            "translations",
             "created_at",
             "updated_at",
         ]
         # cover_image is uploaded via the dedicated `cover` action, so it is
         # read-only here (the profile PATCH ignores it).
         read_only_fields = ["public_id", "cover_image", "created_at", "updated_at"]
+
+    def get_translations(self, obj: Restaurant) -> list[dict[str, str]]:
+        return RestaurantTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
 
     def to_representation(self, instance: Restaurant) -> dict[str, object]:
         data = super().to_representation(instance)
@@ -234,17 +248,30 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
         return attrs
 
 
-class ZoneTranslationSerializer(serializers.Serializer[Any]):
+class RestaurantTranslationSerializer(serializers.ModelSerializer[RestaurantTranslation]):
+    class Meta:
+        model = RestaurantTranslation
+        fields = ["language_code", "address"]
+
+
+class ZoneTranslationSerializer(serializers.ModelSerializer[ZoneTranslation]):
+    class Meta:
+        model = ZoneTranslation
+        fields = ["language_code", "name"]
+
+
+class TableTranslationSerializer(serializers.ModelSerializer[TableTranslation]):
     language_code = serializers.CharField(max_length=10)
-    name = serializers.CharField(max_length=128)
 
     class Meta:
-        fields = ["language_code", "name"]
+        model = TableTranslation
+        fields = ["language_code", "public_number"]
 
 
 class ZoneSerializer(serializers.ModelSerializer[Zone]):
     _lang = serializers.SerializerMethodField(read_only=True)
     _is_fallback = serializers.SerializerMethodField(read_only=True)
+    translations = serializers.SerializerMethodField()
 
     class Meta:
         model = Zone
@@ -257,8 +284,12 @@ class ZoneSerializer(serializers.ModelSerializer[Zone]):
             "canvas_rows",
             "_lang",
             "_is_fallback",
+            "translations",
         ]
         read_only_fields = ["public_id"]
+
+    def get_translations(self, obj: Zone) -> list[dict[str, str]]:
+        return ZoneTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
 
     def get__lang(self, obj: Zone) -> str | None:
         request = self.context.get("request")
@@ -279,20 +310,13 @@ class ZoneSerializer(serializers.ModelSerializer[Zone]):
         return data
 
 
-class TableTranslationSerializer(serializers.Serializer[Any]):
-    language_code = serializers.CharField(max_length=10)
-    public_number = serializers.CharField(max_length=64)
-
-    class Meta:
-        fields = ["language_code", "public_number"]
-
-
 class TableSerializer(serializers.ModelSerializer[Table]):
     restaurant: PublicIdRelatedField[Restaurant] = PublicIdRelatedField(read_only=True)
     zone = ZoneSerializer(read_only=True, allow_null=True)
     is_occupied = serializers.BooleanField(read_only=True)
     _lang = serializers.SerializerMethodField(read_only=True)
     _is_fallback = serializers.SerializerMethodField(read_only=True)
+    translations = serializers.SerializerMethodField()
 
     class Meta:
         model = Table
@@ -306,10 +330,14 @@ class TableSerializer(serializers.ModelSerializer[Table]):
             "zone",
             "_lang",
             "_is_fallback",
+            "translations",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["public_id", "is_occupied", "created_at", "updated_at"]
+
+    def get_translations(self, obj: Table) -> list[dict[str, str]]:
+        return TableTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
 
     def get__lang(self, obj: Table) -> str | None:
         request = self.context.get("request")
