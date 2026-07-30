@@ -132,6 +132,37 @@ class TestActivatePendingReservation:
         assert session.status == SessionStatus.OPEN
         assert session.ends_at == original_ends_at
 
+    def test_reuses_existing_session_from_paid_preorder(
+        self, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
+    ) -> None:
+        # confirm_and_pay_preorder can already open this reservation's Session
+        # while it's still PENDING. Seating it must reuse that Session, not
+        # blow up on a raw create() (reservation OneToOne / one-open-session
+        # per table constraint) — see bug where "Посадити" raised a bare
+        # IntegrityError instead of activating.
+        actor = user_factory(role=RoleCode.WAITER)
+        actor.save()
+        res = _reservation(restaurant=restaurant, table=table)
+        preorder_session = Session.objects.create(
+            restaurant=restaurant,
+            table=table,
+            reservation=res,
+            guest_count=2,
+            currency="UAH",
+            status=SessionStatus.OPEN,
+            opened_at=timezone.now(),
+            ends_at=res.end_at,
+        )
+
+        result = activate_pending_reservation(res, actor=actor)
+
+        result.refresh_from_db()
+        assert result.status == ReservationStatus.ACTIVE
+        assert Session.objects.filter(reservation=result).count() == 1
+        session = Session.objects.get(reservation=result)
+        assert session.pk == preorder_session.pk
+        assert session.status == SessionStatus.OPEN
+
     def test_rejects_if_earlier_pending_exists(
         self, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
     ) -> None:

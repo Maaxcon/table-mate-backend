@@ -654,21 +654,14 @@ def activate_pending_reservation(
     locked.status = ReservationStatus.ACTIVE
     locked.save(update_fields=["status", "updated_at"])
 
-    restaurant = table.restaurant
-    try:
-        currency = restaurant.settings.currency
-    except RestaurantSettings.DoesNotExist:
-        currency = "UAH"
-    session = Session.objects.create(
-        restaurant_id=reservation.restaurant_id,
-        table=table,
-        reservation=locked,
-        opened_by=actor,
-        guest_count=reservation.guest_count,
-        currency=currency,
-        opened_at=now,
-        ends_at=locked.end_at,
-    )
+    # Reuse ensure_visit_session rather than a raw Session.objects.create():
+    # a paid pre-order (confirm_and_pay_preorder) can already have opened this
+    # same reservation's Session while it was still PENDING — a bare .create()
+    # would then hit either the reservation OneToOne constraint or
+    # orders_one_open_session_per_table as a raw, unhandled IntegrityError.
+    # ensure_visit_session is get-or-create and converts that constraint into
+    # a friendly TableOccupiedError as a backstop.
+    session = ensure_visit_session(locked, opened_by=actor)
 
     transaction.on_commit(
         lambda: emit_hall_table_status_changed(
