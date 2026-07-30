@@ -219,6 +219,18 @@ class RestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantSetting
                 raise serializers.ValidationError(
                     {"locale": "Default locale must be in supported_languages"}
                 )
+        if locale is not None and self.instance and locale != self.instance.locale:
+            from apps.menu.services.localization import has_translations_for_locale
+
+            if has_translations_for_locale(self.instance.restaurant_id, locale):
+                raise serializers.ValidationError(
+                    {
+                        "locale": (
+                            f"Cannot change locale to '{locale}' — one or more translations "
+                            f"already exist for this language. Delete those translations first."
+                        )
+                    }
+                )
         return attrs
 
 

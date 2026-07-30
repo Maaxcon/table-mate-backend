@@ -1,10 +1,10 @@
 from typing import Any
 
-from django.db.models import QuerySet
+from django.db.models import Manager, QuerySet
 from rest_framework import serializers
 
 from apps.restaurants.models import Restaurant
-from common.api import PublicIdRelatedField
+from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
 from .models import (
     Allergen,
@@ -189,13 +189,43 @@ class MenuSerializer(serializers.ModelSerializer[Menu]):
         return data
 
 
+class MenuTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    name = serializers.CharField(max_length=255)
+
+    class Meta:
+        fields = ["language_code", "name"]
+
+
+class MenuCategoryTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    name = serializers.CharField(max_length=255)
+
+    class Meta:
+        fields = ["language_code", "name"]
+
+
+class MenuItemTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    name = serializers.CharField(max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+    class Meta:
+        fields = ["language_code", "name", "description"]
+
+
 class AdminMenuSerializer(serializers.ModelSerializer[Menu]):
     """Writable menu serializer for the admin panel."""
 
+    translations = serializers.SerializerMethodField()
+
     class Meta:
         model = Menu
-        fields = ["public_id", "name", "is_active", "created_at", "updated_at"]
+        fields = ["public_id", "name", "is_active", "translations", "created_at", "updated_at"]
         read_only_fields = ["public_id", "created_at", "updated_at"]
+
+    def get_translations(self, obj: Menu) -> list[dict[str, str]]:
+        return MenuTranslationSerializer(obj.translations.all(), many=True).data
 
 
 class AdminMenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
@@ -205,11 +235,30 @@ class AdminMenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
     menu: PublicIdRelatedField[Menu] = PublicIdRelatedField(
         queryset=Menu.objects.all(),
     )
+    translations = serializers.SerializerMethodField()
 
     class Meta:
         model = MenuCategory
-        fields = ["public_id", "menu", "name", "sort_order", "color", "created_at", "updated_at"]
+        fields = ["public_id", "menu", "name", "sort_order", "color", "translations", "created_at", "updated_at"]
         read_only_fields = ["public_id", "created_at", "updated_at"]
+
+    def get_translations(self, obj: MenuCategory) -> list[dict[str, str]]:
+        return MenuCategoryTranslationSerializer(obj.translations.all(), many=True).data
+
+
+class M2MThroughKeysField(serializers.ListField):
+    """ListField that reads M2M keys from a through model on read,
+    and writes string keys on write (standard ListField behavior)."""
+
+    def __init__(self, through_getter, **kwargs):
+        self.through_getter = through_getter
+        super().__init__(**kwargs)
+
+    def get_attribute(self, instance):
+        try:
+            return self.through_getter(instance)
+        except (AttributeError, TypeError):
+            return []
 
 
 class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
@@ -222,10 +271,19 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         required=False,
         allow_null=True,
     )
-    ingredients = serializers.ListField(child=serializers.CharField(), required=False)
-    allergens = serializers.ListField(child=serializers.CharField(), required=False)
+    ingredients = M2MThroughKeysField(
+        through_getter=lambda o: [ii.ingredient.key for ii in o.item_ingredients.all()],
+        child=serializers.CharField(),
+        required=False,
+    )
+    allergens = M2MThroughKeysField(
+        through_getter=lambda o: [ia.allergen.key for ia in o.item_allergens.all()],
+        child=serializers.CharField(),
+        required=False,
+    )
     # Annotated in AdminMenuItemViewSet.get_queryset; read-only for the dashboard.
     likes_count = serializers.SerializerMethodField()
+    translations = serializers.SerializerMethodField()
 
     class Meta:
         model = MenuItem
@@ -243,6 +301,7 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
             "is_available",
             "sort_order",
             "likes_count",
+            "translations",
             "created_at",
             "updated_at",
         ]
@@ -251,6 +310,9 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
     def get_likes_count(self, obj: MenuItem) -> int:
         value = getattr(obj, "likes_count", None)
         return value if value is not None else 0
+
+    def get_translations(self, obj: MenuItem) -> list[dict[str, str | None]]:
+        return MenuItemTranslationSerializer(obj.translations.all(), many=True).data
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         menu = attrs.get("menu") or getattr(self.instance, "menu", None)
@@ -320,31 +382,6 @@ class ReorderEntrySerializer(serializers.Serializer[Any]):
     sort_order = serializers.IntegerField(min_value=0)
 
 
-class MenuTranslationSerializer(serializers.Serializer[Any]):
-    language_code = serializers.CharField(max_length=10)
-    name = serializers.CharField(max_length=255)
-
-    class Meta:
-        fields = ["language_code", "name"]
-
-
-class MenuCategoryTranslationSerializer(serializers.Serializer[Any]):
-    language_code = serializers.CharField(max_length=10)
-    name = serializers.CharField(max_length=255)
-
-    class Meta:
-        fields = ["language_code", "name"]
-
-
-class MenuItemTranslationSerializer(serializers.Serializer[Any]):
-    language_code = serializers.CharField(max_length=10)
-    name = serializers.CharField(max_length=255)
-    description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-
-    class Meta:
-        fields = ["language_code", "name", "description"]
-
-
 class BulkItemActionSerializer(serializers.Serializer[Any]):
     """A bulk operation over several menu items, selected by public id.
 
@@ -364,3 +401,59 @@ class BulkItemActionSerializer(serializers.Serializer[Any]):
         if attrs["action"] == "set_category" and "category" not in attrs:
             raise serializers.ValidationError({"category": "Required for this action."})
         return attrs
+
+
+class AllergenTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    name = serializers.CharField(max_length=255)
+
+    class Meta:
+        fields = ["language_code", "name"]
+
+
+class AdminAllergenSerializer(serializers.ModelSerializer[Allergen]):
+    translations = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Allergen
+        fields = ["key", "sort_order", "translations"]
+
+    def get_translations(self, obj: Allergen) -> list[dict[str, str]]:
+        return AllergenTranslationSerializer(obj.translations.all(), many=True).data
+
+
+class IngredientTranslationSerializer(serializers.Serializer[Any]):
+    language_code = serializers.CharField(max_length=10)
+    name = serializers.CharField(max_length=255)
+
+    class Meta:
+        fields = ["language_code", "name"]
+
+
+class AdminIngredientSerializer(serializers.ModelSerializer[Ingredient]):
+    translations = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Ingredient
+        fields = ["public_id", "key", "sort_order", "translations", "created_at", "updated_at"]
+        read_only_fields = ["public_id", "created_at", "updated_at"]
+
+    def get_translations(self, obj: Ingredient) -> list[dict[str, str]]:
+        return IngredientTranslationSerializer(obj.translations.all(), many=True).data
+
+    def validate_key(self, value: str) -> str:
+        ingredient_id = self.instance.pk if self.instance else None
+        request = self.context.get("request")
+        if request is None:
+            return value
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is None:
+            return value
+        qs = Ingredient.objects.filter(restaurant_id=restaurant_id, key=value)
+        if ingredient_id:
+            qs = qs.exclude(pk=ingredient_id)
+        if qs.exists():
+            raise serializers.ValidationError(
+                f'An ingredient with key "{value}" already exists in this restaurant.'
+            )
+        return value

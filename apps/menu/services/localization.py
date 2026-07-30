@@ -8,6 +8,10 @@ from ..models import (
     MenuItemTranslation,
     MenuTranslation,
 )
+from ..models.translations import (
+    AllergenTranslation,
+    IngredientTranslation,
+)
 
 _TRANSLATION_MODEL_MAP: dict[type[Model], type[Model]] = {}
 
@@ -25,14 +29,53 @@ from apps.restaurants.models import (  # noqa: E402
     ZoneTranslation,
 )
 
-from ..models import Menu, MenuCategory, MenuItem  # noqa: E402
+from ..models import Allergen, Ingredient, Menu, MenuCategory, MenuItem  # noqa: E402
 
+_register(Allergen, AllergenTranslation)
+_register(Ingredient, IngredientTranslation)
 _register(Menu, MenuTranslation)
 _register(MenuCategory, MenuCategoryTranslation)
 _register(MenuItem, MenuItemTranslation)
 _register(Restaurant, RestaurantTranslation)
 _register(Zone, ZoneTranslation)
 _register(Table, TableTranslation)
+
+
+def get_restaurant_locale(restaurant_id: int) -> str:
+    from apps.restaurants.models import RestaurantSettings
+
+    try:
+        return RestaurantSettings.objects.get(restaurant_id=restaurant_id).locale
+    except RestaurantSettings.DoesNotExist:
+        return "en"
+
+
+def has_translations_for_locale(restaurant_id: int, language_code: str) -> bool:
+    from apps.restaurants.models import (
+        RestaurantTranslation,
+        TableTranslation,
+        ZoneTranslation,
+    )
+
+    if MenuTranslation.objects.filter(menu__restaurant_id=restaurant_id, language_code=language_code).exists():
+        return True
+    if MenuCategoryTranslation.objects.filter(
+        category__menu__restaurant_id=restaurant_id, language_code=language_code
+    ).exists():
+        return True
+    if MenuItemTranslation.objects.filter(menu_item__restaurant_id=restaurant_id, language_code=language_code).exists():
+        return True
+    if RestaurantTranslation.objects.filter(restaurant_id=restaurant_id, language_code=language_code).exists():
+        return True
+    if ZoneTranslation.objects.filter(zone__restaurant_id=restaurant_id, language_code=language_code).exists():
+        return True
+    if TableTranslation.objects.filter(table__restaurant_id=restaurant_id, language_code=language_code).exists():
+        return True
+    if AllergenTranslation.objects.filter(language_code=language_code).exists():
+        return True
+    if IngredientTranslation.objects.filter(ingredient__restaurant_id=restaurant_id, language_code=language_code).exists():
+        return True
+    return False
 
 
 def get_translation_model(entity_class: type[Model]) -> type[Model] | None:

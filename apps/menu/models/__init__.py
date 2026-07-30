@@ -45,7 +45,7 @@ class Ingredient(RestaurantScopedModel):
     sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
-        ordering = ["sort_order"]
+        ordering = ["sort_order", "id"]
         constraints = [
             models.UniqueConstraint(
                 fields=["restaurant", "key"],
