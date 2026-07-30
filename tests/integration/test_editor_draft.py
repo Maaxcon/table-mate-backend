@@ -12,13 +12,40 @@ from apps.restaurants.models import Table
 from tests.conftest import UserFactory
 
 
+class _EditorAPIClient(APIClient):
+    def __init__(self, restaurant_id: int) -> None:
+        super().__init__()
+        self.restaurant_id = restaurant_id
+
+    def post(self, path: str, data: Any = None, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        if path == "/api/editor/layouts/publish/" and isinstance(data, dict) and "base_layout_version_id" not in data:
+            latest = (
+                LayoutVersion.objects.filter(restaurant_id=self.restaurant_id).order_by("-published_at", "-id").first()
+            )
+            data = {**data, "base_layout_version_id": str(latest.public_id) if latest else None}
+        return super().post(path, data, *args, **kwargs)
+
+    def put(self, path: str, data: Any = None, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        if path == "/api/editor/layouts/draft/" and isinstance(data, dict) and "base_layout_version_id" not in data:
+            latest = (
+                LayoutVersion.objects.filter(restaurant_id=self.restaurant_id).order_by("-published_at", "-id").first()
+            )
+            data = {**data, "base_layout_version_id": str(latest.public_id) if latest else None}
+        return super().put(path, data, *args, **kwargs)
+
+
 def _admin_api(restaurant_id: int) -> APIClient:
+    client, _ = _admin_api_with_user(restaurant_id)
+    return client
+
+
+def _admin_api_with_user(restaurant_id: int) -> tuple[APIClient, Any]:
     user = UserFactory.build(role=RoleCode.ADMIN)
     user.save()
-    client = APIClient()
+    client = _EditorAPIClient(restaurant_id)
     access, _ = issue_tokens_with_restaurant(user, restaurant_id)
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-    return client
+    return client, user
 
 
 def _non_admin_api(role: str, restaurant_id: int) -> APIClient:
@@ -80,6 +107,7 @@ class TestDraftEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["draft_json"] is not None
+        assert data["is_draft"] is True
         assert data["updated_at"] is not None
         assert "tables" in data["draft_json"]
 
@@ -101,8 +129,9 @@ class TestDraftEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["draft_json"] is not None
+        assert data["is_draft"] is False
         assert data["updated_at"] is None
-        assert data["updated_by"] is None
+        assert data["owner_id"] is None
 
     def test_get_draft_returns_none_when_nothing_exists(self, restaurant: Any, zone: Any) -> None:
         client = _admin_api(restaurant.id)
@@ -111,6 +140,7 @@ class TestDraftEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["draft_json"] is None
+        assert data["is_draft"] is False
         assert data["updated_at"] is None
 
     def test_get_draft_requires_auth(self, restaurant: Any) -> None:
@@ -118,11 +148,29 @@ class TestDraftEndpoint:
         response = client.get("/api/editor/layouts/draft/")
         assert response.status_code == 401
 
-    def test_waiter_can_read_draft(self, restaurant: Any) -> None:
-        """IsFloor role should be able to read draft (editor loads it)."""
+    def test_waiter_cannot_read_draft(self, restaurant: Any) -> None:
         client = _non_admin_api(RoleCode.WAITER, restaurant.id)
         response = client.get("/api/editor/layouts/draft/")
-        assert response.status_code == 200
+        assert response.status_code == 403
+
+    def test_admin_only_loads_their_own_draft(self, restaurant: Any, zone: Any) -> None:
+        first_admin, _ = _admin_api_with_user(restaurant.id)
+        second_admin, _ = _admin_api_with_user(restaurant.id)
+        zone_id = str(zone.public_id)
+
+        first_admin.put("/api/editor/layouts/draft/", _layout_a(zone_id), format="json")
+        second_admin.put(
+            "/api/editor/layouts/draft/",
+            {"tables": [_table(x=99, y=99, zone_id=zone_id)]},
+            format="json",
+        )
+
+        first_draft = first_admin.get("/api/editor/layouts/draft/").json()
+        second_draft = second_admin.get("/api/editor/layouts/draft/").json()
+
+        assert LayoutDraft.objects.filter(restaurant=restaurant).count() == 2
+        assert first_draft["draft_json"]["tables"][0]["x"] == 10
+        assert second_draft["draft_json"]["tables"][0]["x"] == 99
 
     def test_cook_cannot_read_draft(self, restaurant: Any) -> None:
         client = _non_admin_api(RoleCode.COOK, restaurant.id)
@@ -205,6 +253,31 @@ class TestSaveDraftEndpoint:
         tables = response.json()["layout_json"]["tables"]
         assert tables[0]["x"] == 10  # original published value, not draft
 
+    def test_stale_draft_save_is_rejected_and_preserves_existing_draft(self, restaurant: Any, zone: Any) -> None:
+        from unittest.mock import patch
+
+        publisher, _ = _admin_api_with_user(restaurant.id)
+        editor, _ = _admin_api_with_user(restaurant.id)
+        zone_id = str(zone.public_id)
+
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            first_publish = publisher.post("/api/editor/layouts/publish/", _layout_a(zone_id), format="json")
+            base_version_id = first_publish.json()["public_id"]
+            editor.put(
+                "/api/editor/layouts/draft/",
+                {"tables": [_table(x=50, y=50, zone_id=zone_id)], "base_layout_version_id": base_version_id},
+                format="json",
+            )
+            publisher.post("/api/editor/layouts/publish/", _layout_a(zone_id), format="json")
+            stale_save = editor.put(
+                "/api/editor/layouts/draft/",
+                {"tables": [_table(x=99, y=99, zone_id=zone_id)], "base_layout_version_id": base_version_id},
+                format="json",
+            )
+
+        assert stale_save.status_code == 409
+        assert editor.get("/api/editor/layouts/draft/").json()["draft_json"]["tables"][0]["x"] == 50
+
 
 @pytest.mark.django_db(transaction=True)
 class TestDeleteDraftEndpoint:
@@ -261,6 +334,20 @@ class TestDeleteDraftEndpoint:
         # Table should still exist
         assert Table.objects.filter(restaurant_id=restaurant.id, active=True).count() == 1
 
+    def test_discard_only_deletes_current_admin_draft(self, restaurant: Any, zone: Any) -> None:
+        first_admin, _ = _admin_api_with_user(restaurant.id)
+        second_admin, _ = _admin_api_with_user(restaurant.id)
+        payload = _layout_a(str(zone.public_id))
+
+        first_admin.put("/api/editor/layouts/draft/", payload, format="json")
+        second_admin.put("/api/editor/layouts/draft/", payload, format="json")
+
+        response = first_admin.delete("/api/editor/layouts/draft/")
+
+        assert response.status_code == 204
+        assert LayoutDraft.objects.filter(restaurant=restaurant).count() == 1
+        assert second_admin.get("/api/editor/layouts/draft/").json()["is_draft"] is True
+
 
 @pytest.mark.django_db(transaction=True)
 class TestDraftClearedOnPublish:
@@ -281,6 +368,23 @@ class TestDraftClearedOnPublish:
             client.post("/api/editor/layouts/publish/", _layout_a(zid), format="json")
 
         assert LayoutDraft.objects.count() == 0
+
+    def test_publish_only_deletes_current_admin_draft(self, restaurant: Any, zone: Any) -> None:
+        from unittest.mock import patch
+
+        first_admin, _ = _admin_api_with_user(restaurant.id)
+        second_admin, _ = _admin_api_with_user(restaurant.id)
+        payload = _layout_a(str(zone.public_id))
+
+        first_admin.put("/api/editor/layouts/draft/", payload, format="json")
+        second_admin.put("/api/editor/layouts/draft/", payload, format="json")
+
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            response = first_admin.post("/api/editor/layouts/publish/", payload, format="json")
+
+        assert response.status_code == 201
+        assert LayoutDraft.objects.filter(restaurant=restaurant).count() == 1
+        assert second_admin.get("/api/editor/layouts/draft/").json()["is_draft"] is True
 
     def test_draft_preserved_on_publish_failure(self, restaurant: Any, zone: Any) -> None:
         client = _admin_api(restaurant.id)

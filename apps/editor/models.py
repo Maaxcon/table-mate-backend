@@ -64,13 +64,23 @@ class LayoutVersion(models.Model):
 
 
 class LayoutDraft(models.Model):
-    restaurant = models.OneToOneField("restaurants.Restaurant", on_delete=models.CASCADE, related_name="layout_draft")
+    restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.CASCADE, related_name="layout_drafts")
+    base_version = models.ForeignKey(
+        LayoutVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts_based_on",
+    )
     draft_json = models.JSONField(default=dict)
-    updated_by = models.ForeignKey("authentication.User", on_delete=models.SET_NULL, null=True, blank=True)
+    owner = models.ForeignKey("authentication.User", on_delete=models.CASCADE)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["restaurant", "owner"], name="editor_layoutdraft_restaurant_owner_unique")
+        ]
 
     def __str__(self) -> str:
-        return f"LayoutDraft for restaurant {self.restaurant_id}"
+        return f"LayoutDraft for restaurant {self.restaurant_id}, owner {self.owner_id}"

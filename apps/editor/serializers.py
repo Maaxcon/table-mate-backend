@@ -167,6 +167,9 @@ class PendingZoneSerializer(serializers.Serializer[Any]):
 
 
 class PublishLayoutSerializer(serializers.Serializer[Any]):
+    # The editor sends the published layout version it started from. A null
+    # value is valid only when the restaurant has no published layout yet.
+    base_layout_version_id = serializers.UUIDField(allow_null=True)
     canvas_cols = serializers.IntegerField(min_value=8, max_value=50, required=False, default=DEFAULT_CANVAS_COLS)
     canvas_rows = serializers.IntegerField(min_value=8, max_value=50, required=False, default=DEFAULT_CANVAS_ROWS)
     tables = TableEntitySerializer(many=True, required=False, default=list)
@@ -228,8 +231,9 @@ class PublishLayoutSerializer(serializers.Serializer[Any]):
 
 class DraftLayoutSerializer(serializers.Serializer[Any]):
     draft_json = PublishLayoutSerializer(required=False, allow_null=True)
+    is_draft = serializers.BooleanField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
-    updated_by = serializers.CharField(read_only=True, allow_null=True, default=None)
+    owner_id = serializers.CharField(read_only=True, allow_null=True, default=None)
 
 
 class LayoutVersionSerializer(serializers.ModelSerializer[LayoutVersion]):

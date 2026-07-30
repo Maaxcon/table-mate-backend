@@ -8,7 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.restaurants.models import Table, Zone
+from apps.restaurants.models import Restaurant, Table, Zone
 from common.hall_events import emit_hall_layout_published
 
 if TYPE_CHECKING:
@@ -19,6 +19,17 @@ if TYPE_CHECKING:
 
 class TableInUseError(Exception):
     """Raised when attempting to soft-delete a table with active reservations/sessions."""
+
+
+class LayoutVersionConflictError(Exception):
+    """Raised when a publish is based on an outdated layout version."""
+
+    def __init__(self, current_version_id: str | None) -> None:
+        self.current_version_id = current_version_id
+        super().__init__(
+            "The floor plan was published by another admin. Reload the latest plan and reconcile your changes "
+            "before publishing."
+        )
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -57,11 +68,23 @@ def publish_layout(
     restaurant_public_id: str,
     layout_data: dict[str, Any],
     published_by: User,
+    base_layout_version_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     from apps.orders.models import Session, SessionStatus
     from apps.reservations.models import Reservation, ReservationStatus
 
     from .models import LayoutVersion
+
+    # Serialize concurrent publishes for the same restaurant: lock the restaurant
+    # row so the second request waits for the first to complete, guaranteeing it
+    # sees the fresh state (parent version, tables, zones, etc.).
+    Restaurant.objects.select_for_update().get(pk=restaurant_id)
+
+    parent_version = LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
+    if (parent_version is None and base_layout_version_id is not None) or (
+        parent_version is not None and parent_version.public_id != base_layout_version_id
+    ):
+        raise LayoutVersionConflictError(str(parent_version.public_id) if parent_version else None)
 
     # ``deleted_table_ids`` and ``zones`` are publish-time instructions, not part of
     # the persisted layout geometry — pull them out so they never land in the stored payload.
@@ -251,8 +274,6 @@ def publish_layout(
     # layout is written to the JSONField.
     layout_json = _to_jsonable(layout_data)
 
-    parent_version = LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
-
     version = LayoutVersion.objects.create(
         restaurant_id=restaurant_id,
         parent_version=parent_version,
@@ -274,7 +295,7 @@ def publish_layout(
     # does not keep stale draft state around.
     from .models import LayoutDraft
 
-    LayoutDraft.objects.filter(restaurant_id=restaurant_id).delete()
+    LayoutDraft.objects.filter(restaurant_id=restaurant_id, owner_id=published_by.pk).delete()
 
     return {
         "version": version,
@@ -284,27 +305,43 @@ def publish_layout(
     }
 
 
+@transaction.atomic
 def save_draft(
     *,
     restaurant_id: int,
     draft_data: dict[str, Any],
-    updated_by: User | None = None,
+    owner: User,
+    base_version_id: uuid.UUID | None = None,
 ) -> LayoutDraft:
-    from .models import LayoutDraft
+    from .models import LayoutDraft, LayoutVersion
+
+    Restaurant.objects.select_for_update().get(pk=restaurant_id)
+    current_version = LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
+    if (current_version is None and base_version_id is not None) or (
+        current_version is not None and current_version.public_id != base_version_id
+    ):
+        raise LayoutVersionConflictError(str(current_version.public_id) if current_version else None)
 
     layout_json = _to_jsonable(draft_data)
-    draft, _ = LayoutDraft.objects.update_or_create(
-        restaurant_id=restaurant_id,
-        defaults={
-            "draft_json": layout_json,
-            "updated_by": updated_by,
-        },
-    )
+    draft = LayoutDraft.objects.select_for_update().filter(restaurant_id=restaurant_id, owner=owner).first()
+    if draft is None:
+        draft = LayoutDraft.objects.create(
+            restaurant_id=restaurant_id,
+            owner=owner,
+            base_version=current_version,
+            draft_json=layout_json,
+        )
+    else:
+        draft_version_id = draft.base_version.public_id if draft.base_version else None
+        if draft_version_id != base_version_id:
+            raise LayoutVersionConflictError(str(current_version.public_id) if current_version else None)
+        draft.draft_json = layout_json
+        draft.save(update_fields=["draft_json", "updated_at"])
     return draft
 
 
-def delete_draft(*, restaurant_id: int) -> bool:
+def delete_draft(*, restaurant_id: int, owner_id: int) -> bool:
     from .models import LayoutDraft
 
-    deleted, _ = LayoutDraft.objects.filter(restaurant_id=restaurant_id).delete()
+    deleted, _ = LayoutDraft.objects.filter(restaurant_id=restaurant_id, owner_id=owner_id).delete()
     return deleted > 0
