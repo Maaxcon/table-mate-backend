@@ -5,16 +5,17 @@ from django.db.models import Exists, OuterRef, QuerySet
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from apps.orders.models import Order, OrderPaymentStatus, Session, SessionStatus, Ticket
+from apps.orders.models import Order, OrderItem, OrderItemStatus, OrderPaymentStatus, Session, SessionStatus, Ticket
 from apps.restaurants.models import Table
 
 from .models import Reservation, ReservationParticipant, ReservationStatus
 
 
 def _annotate_has_preorder(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
-    """Whether a paid pre-order exists for each reservation, and whether the
+    """Whether a paid pre-order exists for each reservation, whether the
     kitchen has already picked it up (inject_scheduled_preorders created a
-    Ticket for it) — lets the UI show "paid" vs "being prepared" without a
+    Ticket for it), and whether the kitchen has since finished every item on
+    it — lets the UI show "paid" vs "being prepared" vs "ready" without a
     second request.
     """
     preorder_paid = Order.objects.filter(
@@ -25,9 +26,17 @@ def _annotate_has_preorder(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
         order__session__reservation=OuterRef("pk"),
         order__payment_status=OrderPaymentStatus.PAID,
     )
+    # Still-unfinished items on that same pre-order — once none remain (and
+    # the ticket exists), the kitchen is done and it's ready to be served.
+    preorder_unfinished_items = OrderItem.objects.filter(
+        order__session__reservation=OuterRef("pk"),
+        order__payment_status=OrderPaymentStatus.PAID,
+        status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS],
+    )
     return qs.annotate(
         has_preorder=Exists(preorder_paid),
         preorder_cooking=Exists(preorder_cooking),
+        preorder_ready=Exists(preorder_cooking) & ~Exists(preorder_unfinished_items),
     )
 
 

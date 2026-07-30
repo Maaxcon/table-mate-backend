@@ -5916,6 +5916,9 @@ components:
         preorder_cooking:
           type: boolean
           readOnly: true
+        preorder_ready:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6559,6 +6562,9 @@ components:
         preorder_cooking:
           type: boolean
           readOnly: true
+        preorder_ready:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6583,6 +6589,7 @@ components:
       - has_preorder
       - opened_at
       - preorder_cooking
+      - preorder_ready
       - public_id
       - restaurant
       - restaurant_info
