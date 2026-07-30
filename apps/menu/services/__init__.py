@@ -8,8 +8,13 @@ from django.db import transaction
 from django.db.models import Max, QuerySet
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 
 from ..models import (
+    Allergen,
+    AllergenTranslation,
+    Ingredient,
+    IngredientTranslation,
     Menu,
     MenuCategory,
     MenuCategoryTranslation,
@@ -239,3 +244,72 @@ def get_upsells_for_item(
         exclude_ids=picked_ids,
     )
     return suggestions + list(fallback)
+
+
+def create_allergen_translation(*, allergen_key: str, language_code: str, name: str) -> AllergenTranslation:
+    allergen = Allergen.objects.get(key=allergen_key)
+    return AllergenTranslation.objects.create(
+        allergen=allergen,
+        language_code=language_code,
+        name=name,
+    )
+
+
+def update_allergen_translation(*, allergen_key: str, language_code: str, name: str) -> AllergenTranslation:
+    translation = AllergenTranslation.objects.get(allergen__key=allergen_key, language_code=language_code)
+    translation.name = name
+    translation.save(update_fields=["name", "updated_at"])
+    return translation
+
+
+def delete_allergen_translation(*, allergen_key: str, language_code: str) -> None:
+    AllergenTranslation.objects.filter(allergen__key=allergen_key, language_code=language_code).delete()
+
+
+def get_allergen_translations(*, allergen_key: str) -> list[AllergenTranslation]:
+    return list(AllergenTranslation.objects.filter(allergen__key=allergen_key))
+
+
+def _check_duplicate_ingredient_name(*, ingredient_id: int, language_code: str, name: str) -> None:
+    """Raise ValidationError if another ingredient in the same restaurant
+    already has an English translation with this name."""
+    if language_code != "en":
+        return
+    ingredient = Ingredient.objects.only("restaurant_id").get(pk=ingredient_id)
+    if IngredientTranslation.objects.filter(
+        language_code="en",
+        name=name,
+        ingredient__restaurant_id=ingredient.restaurant_id,
+    ).exclude(ingredient_id=ingredient_id).exists():
+        raise ValidationError(
+            f'Another ingredient in this restaurant already has the English name "{name}".'
+        )
+
+
+def create_ingredient_translation(
+    *, ingredient_id: int, language_code: str, name: str,
+) -> IngredientTranslation:
+    _check_duplicate_ingredient_name(ingredient_id=ingredient_id, language_code=language_code, name=name)
+    return IngredientTranslation.objects.create(
+        ingredient_id=ingredient_id,
+        language_code=language_code,
+        name=name,
+    )
+
+
+def update_ingredient_translation(
+    *, ingredient_id: int, language_code: str, name: str,
+) -> IngredientTranslation:
+    _check_duplicate_ingredient_name(ingredient_id=ingredient_id, language_code=language_code, name=name)
+    translation = IngredientTranslation.objects.get(ingredient_id=ingredient_id, language_code=language_code)
+    translation.name = name
+    translation.save(update_fields=["name", "updated_at"])
+    return translation
+
+
+def delete_ingredient_translation(*, ingredient_id: int, language_code: str) -> None:
+    IngredientTranslation.objects.filter(ingredient_id=ingredient_id, language_code=language_code).delete()
+
+
+def get_ingredient_translations(*, ingredient_id: int) -> list[IngredientTranslation]:
+    return list(IngredientTranslation.objects.filter(ingredient_id=ingredient_id))
