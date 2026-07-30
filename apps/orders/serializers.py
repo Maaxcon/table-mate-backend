@@ -304,6 +304,12 @@ class OrderItemVoidRequestSerializer(serializers.Serializer[None]):
     note = serializers.CharField(required=False, allow_null=True, default=None)
 
 
+class SessionCloseRequestSerializer(serializers.Serializer[None]):
+    # Set once the waiter confirms past a 409 "items not served" response —
+    # closes the check regardless of unserved/unvoided items.
+    force = serializers.BooleanField(required=False, default=False)
+
+
 class SessionPayRequestSerializer(serializers.Serializer[None]):
     # Omit (or send empty) to pay every outstanding item on the visit instead
     # of a specific selection.

@@ -25,9 +25,9 @@ from common.exceptions import (
     DomainError,
     EmptyCartError,
     PreorderNotAllowedError,
-    ReservationConflictError,
     RestaurantClosedError,
     TableOccupiedError,
+    UnservedItemsError,
 )
 from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
 from common.money import quantize_money
@@ -188,12 +188,14 @@ def close_visit_session(*, session: Session, actor: User | None = None, force: b
         session = Session.objects.select_for_update().select_related("reservation").get(pk=session.pk)
 
         if session.status != SessionStatus.CLOSED:
-            pending_items = OrderItem.objects.filter(
+            pending_count = OrderItem.objects.filter(
                 order__session=session,
                 status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
-            ).exists()
-            if pending_items and not force:
-                raise ReservationConflictError("Cannot close check: all items must be served or voided first.")
+            ).count()
+            if pending_count and not force:
+                raise UnservedItemsError(
+                    "Cannot close check: all items must be served or voided first.", count=pending_count
+                )
 
             session.status = SessionStatus.CLOSED
             session.save(update_fields=["status"])

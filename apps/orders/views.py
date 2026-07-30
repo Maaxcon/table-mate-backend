@@ -37,6 +37,7 @@ from .serializers import (
     OrderItemSerializer,
     OrderItemVoidRequestSerializer,
     OrderSerializer,
+    SessionCloseRequestSerializer,
     SessionPayRequestSerializer,
     SessionSerializer,
     TicketSerializer,
@@ -153,15 +154,22 @@ class SessionViewSet(
     @extend_schema(
         summary="Close the check",
         description="End the visit: close the session, complete the reservation, and close any "
-        "active cart so the table is freed. No payment step yet. Idempotent.",
-        request=None,
+        "active cart so the table is freed. No payment step yet. Idempotent. Returns 409 "
+        "(code unserved_items, with a `count`) if items are still unserved/unvoided — pass "
+        "`force: true` to close anyway.",
+        request=SessionCloseRequestSerializer,
         responses=SessionSerializer,
     )
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        session = close_visit_session(session=self.get_object(), actor=cast(User, request.user))
-        serializer = self.get_serializer(session)
-        return Response(serializer.data)
+        serializer = SessionCloseRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        session = close_visit_session(
+            session=self.get_object(),
+            actor=cast(User, request.user),
+            force=serializer.validated_data["force"],
+        )
+        return Response(self.get_serializer(session).data)
 
     @extend_schema(
         summary="Process payment",

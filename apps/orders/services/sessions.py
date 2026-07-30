@@ -21,6 +21,7 @@ from common.exceptions import (
     NoActiveReservationError,
     ReservationConflictError,
     ReservationNotFoundError,
+    UnservedItemsError,
     WaiterCallCooldownError,
 )
 from common.hall_events import emit_hall_reservations_updated, emit_hall_session_auto_extended
@@ -475,9 +476,11 @@ def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE)
                     continue
                 try:
                     close_visit_session(session=session, actor=None)
-                except ReservationConflictError:
+                except UnservedItemsError:
                     # One bad session must not wedge the cleanup run; the row
-                    # remains overdue and will be retried on a later pass.
+                    # remains overdue and will be retried on a later pass (and,
+                    # once far enough past shift end, force-closed regardless —
+                    # see force_close_sessions_past_shift_end).
                     continue
                 total_closed += 1
 
