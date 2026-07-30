@@ -749,7 +749,7 @@ class AllergenListView(APIView):
         for a in allergens:
             by_code = {t.language_code: t.name for t in a.translations.all()}
             name = by_code.get(lang, by_code.get("uk", a.key))
-            result.append({"key": a.key, "name": name})
+            result.append(name)
         return Response(result)
 
 
