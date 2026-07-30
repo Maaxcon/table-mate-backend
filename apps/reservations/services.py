@@ -330,6 +330,58 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
     return locked
 
 
+_NO_SHOW_BATCH_SIZE = 200
+
+
+def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
+    """Auto-cancel PENDING reservations nobody seated well past their start time.
+
+    Without this, a forgotten pending booking (guest never showed, staff never
+    marked it cancelled) sits PENDING forever — and activate_pending_reservation's
+    "earlier pending reservation" guard then permanently blocks every later
+    booking on that table, since the guard has no staleness cutoff of its own.
+
+    Skips a reservation that already has a paid pre-order: that guest has real
+    money on file, so silently cancelling needs a human decision (refund vs.
+    hold the table longer), not an automatic no-show.
+    """
+    from apps.orders.models import Order, OrderPaymentStatus
+
+    now = timezone.now()
+    grace_minutes = max(int(getattr(settings, "RESERVATION_NO_SHOW_GRACE_MINUTES", 30)), 0)
+    cutoff = now - timedelta(minutes=grace_minutes)
+
+    base = Reservation.objects.filter(status=ReservationStatus.PENDING, start_at__lte=cutoff)
+
+    total_expired = 0
+    last_pk = 0
+    while True:
+        batch_ids = list(base.filter(pk__gt=last_pk).order_by("pk").values_list("pk", flat=True)[:batch_size])
+        if not batch_ids:
+            break
+        last_pk = batch_ids[-1]
+
+        for pk in batch_ids:
+            reservation = Reservation.objects.filter(pk=pk).first()
+            # Re-check status/start_at — it may have moved on since the batch SELECT.
+            if reservation is None or reservation.status != ReservationStatus.PENDING:
+                continue
+            if reservation.start_at > cutoff:
+                continue
+            has_paid_preorder = Order.objects.filter(
+                session__reservation=reservation, payment_status=OrderPaymentStatus.PAID
+            ).exists()
+            if has_paid_preorder:
+                continue
+            try:
+                cancel_reservation(reservation, actor=None)
+            except ReservationCancelError:
+                continue
+            total_expired += 1
+
+    return total_expired
+
+
 def _prolong_active_reservation(
     reservation: Reservation,
     validated_data: dict[str, Any],

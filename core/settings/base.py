@@ -196,6 +196,9 @@ SESSION_OVERDUE_AUTO_CLOSE_MINUTES = env.int("SESSION_OVERDUE_AUTO_CLOSE_MINUTES
 # Grace window after the restaurant's shift (working hours) ends before a
 # still-OPEN visit is force-closed, even if it has unserved items.
 SHIFT_END_FORCE_CLOSE_GRACE_MINUTES = env.int("SHIFT_END_FORCE_CLOSE_GRACE_MINUTES", default=60)
+# Grace window after a PENDING reservation's start_at before it's auto-cancelled
+# as a no-show (unless it has a paid pre-order, which needs a human decision).
+RESERVATION_NO_SHOW_GRACE_MINUTES = env.int("RESERVATION_NO_SHOW_GRACE_MINUTES", default=30)
 # How long before a reservation's start_at a paid pre-order becomes a kitchen ticket.
 PREORDER_LEAD_MINUTES = env.int("PREORDER_LEAD_MINUTES", default=20)
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
@@ -219,6 +222,10 @@ CELERY_BEAT_SCHEDULE = {
     "inject-scheduled-preorders": {
         "task": "orders.inject_scheduled_preorders",
         "schedule": float(env.int("INJECT_SCHEDULED_PREORDERS_INTERVAL_SECONDS", default=60)),
+    },
+    "expire-noshow-reservations": {
+        "task": "reservations.expire_noshow_reservations",
+        "schedule": float(env.int("EXPIRE_NOSHOW_RESERVATIONS_INTERVAL_SECONDS", default=300)),
     },
 }
 
