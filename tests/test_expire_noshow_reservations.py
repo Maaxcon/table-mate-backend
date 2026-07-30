@@ -1,8 +1,11 @@
+import concurrent.futures
+import threading
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
 import pytest
+from django.db import connection, transaction
 from django.utils import timezone
 
 from apps.menu.models import MenuItem
@@ -209,3 +212,45 @@ def test_unblocks_later_reservation_on_same_table(
 
     result = activate_pending_reservation(later, actor=actor)
     assert result.status == ReservationStatus.ACTIVE
+
+
+@pytest.mark.django_db(transaction=True)
+def test_never_cancels_a_reservation_being_seated_concurrently(
+    restaurant: Restaurant, table: Table
+) -> None:
+    # Regression: expire_noshow_reservations used to read status=PENDING
+    # unlocked, then call cancel_reservation separately — which also accepts
+    # ACTIVE (it's shared with staff cancelling a seated party). A guest
+    # seated in that gap would get cancelled right back out. The fix locks
+    # the whole batch (skip_locked) before deciding, so a row being seated
+    # concurrently is skipped this run instead of wrongly cancelled.
+    reservation = _pending_reservation(restaurant, table, start_offset=timedelta(minutes=-150))
+
+    lock_acquired = threading.Event()
+    proceed_to_commit = threading.Event()
+
+    def _seat_concurrently() -> None:
+        with transaction.atomic():
+            locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
+            lock_acquired.set()
+            proceed_to_commit.wait(timeout=5)
+            locked.status = ReservationStatus.ACTIVE
+            locked.save(update_fields=["status"])
+        connection.close()
+
+    def _run_expiry() -> int:
+        assert lock_acquired.wait(timeout=5)
+        result = expire_noshow_reservations()
+        proceed_to_commit.set()
+        connection.close()
+        return result
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        seat_future = pool.submit(_seat_concurrently)
+        expire_future = pool.submit(_run_expiry)
+        expired_count = expire_future.result(timeout=10)
+        seat_future.result(timeout=10)
+
+    reservation.refresh_from_db()
+    assert expired_count == 0
+    assert reservation.status == ReservationStatus.ACTIVE

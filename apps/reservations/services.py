@@ -366,31 +366,37 @@ def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
             break
         last_pk = batch_ids[-1]
 
-        for pk in batch_ids:
-            reservation = Reservation.objects.filter(pk=pk).first()
-            # Re-check status/start_at — it may have moved on since the batch SELECT.
-            if reservation is None or reservation.status != ReservationStatus.PENDING:
-                continue
-            if reservation.start_at > cutoff:
-                continue
-
-            paid_orders = Order.objects.filter(
-                session__reservation=reservation, payment_status=OrderPaymentStatus.PAID
+        with transaction.atomic():
+            # Locking + re-filtering here (not a separate earlier read) closes a
+            # race with activate_pending_reservation: without holding this lock
+            # across the whole decision, a guest seated between our batch SELECT
+            # and the eventual cancel_reservation call would still get cancelled
+            # out from under them — cancel_reservation itself permits ACTIVE too
+            # (it's also used for staff cancelling a seated party), so it can't
+            # catch that case on its own.
+            reservations = list(
+                Reservation.objects.select_for_update(skip_locked=True)
+                .filter(pk__in=batch_ids, status=ReservationStatus.PENDING, start_at__lte=cutoff)
+                .order_by("pk")
             )
-            kitchen_already_started = False
-            for order in paid_orders:
-                try:
-                    cancel_preorder(order=order, user=None)
-                except PreorderNotAllowedError:
-                    kitchen_already_started = True
-            if kitchen_already_started:
-                continue
+            for reservation in reservations:
+                paid_orders = Order.objects.filter(
+                    session__reservation=reservation, payment_status=OrderPaymentStatus.PAID
+                )
+                kitchen_already_started = False
+                for order in paid_orders:
+                    try:
+                        cancel_preorder(order=order, user=None)
+                    except PreorderNotAllowedError:
+                        kitchen_already_started = True
+                if kitchen_already_started:
+                    continue
 
-            try:
-                cancel_reservation(reservation, actor=None)
-            except ReservationCancelError:
-                continue
-            total_expired += 1
+                try:
+                    cancel_reservation(reservation, actor=None)
+                except ReservationCancelError:
+                    continue
+                total_expired += 1
 
     return total_expired
 
@@ -700,7 +706,13 @@ def activate_pending_reservation(
         effective_end_at__lte=occupancy_cutoff,
     )
     for stale_session in stale:
-        close_visit_session(session=stale_session, actor=None)
+        # force=True: this is automatic cleanup of a previous, unrelated
+        # reservation's leftover session to make room for the one being
+        # seated now. Without it, unserved items from that old session (e.g.
+        # nobody clicked "served") raise UnservedItemsError here — blocking
+        # staff from seating a brand-new party with a confusing error about
+        # a booking they have nothing to do with.
+        close_visit_session(session=stale_session, actor=None, force=True)
 
     earlier_pending = (
         Reservation.objects.filter(

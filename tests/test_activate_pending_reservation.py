@@ -6,7 +6,8 @@ import pytest
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode
-from apps.orders.models import Session, SessionStatus
+from apps.menu.models import MenuItem
+from apps.orders.models import Order, OrderItem, OrderItemStatus, Session, SessionStatus
 from apps.reservations.models import Reservation, ReservationStatus
 from apps.reservations.services import activate_pending_reservation
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
@@ -131,6 +132,61 @@ class TestActivatePendingReservation:
         session.refresh_from_db()
         assert session.status == SessionStatus.OPEN
         assert session.ends_at == original_ends_at
+
+    def test_force_closes_stale_session_with_unserved_items(
+        self,
+        restaurant: Restaurant,
+        table: Table,
+        restaurant_settings: RestaurantSettings,
+        user_factory: Any,
+        item: MenuItem,
+    ) -> None:
+        # A previous, unrelated reservation's session can still have unserved
+        # items (nobody clicked "served") by the time it goes stale. Seating a
+        # brand-new party must not be blocked by that old, unrelated mess —
+        # see bug where activate_pending_reservation raised UnservedItemsError
+        # from a stale session instead of just clearing it out of the way.
+        actor = user_factory(role=RoleCode.WAITER)
+        actor.save()
+        now = timezone.now()
+        res = _reservation(restaurant=restaurant, table=table)
+
+        stale_res = Reservation.objects.create(
+            restaurant=restaurant,
+            table=table,
+            guest_count=2,
+            start_at=now - timedelta(hours=3),
+            end_at=now - timedelta(hours=1),
+            status=ReservationStatus.ACTIVE,
+        )
+        stale_session = Session.objects.create(
+            restaurant=restaurant,
+            table=table,
+            reservation=stale_res,
+            guest_count=2,
+            currency="UAH",
+            status=SessionStatus.OPEN,
+            opened_at=now - timedelta(hours=3),
+            ends_at=stale_res.end_at,
+        )
+        order = Order.objects.create(restaurant=restaurant, session=stale_session, currency="UAH")
+        OrderItem.objects.create(
+            restaurant=restaurant,
+            order=order,
+            menu_item=item,
+            guest_slot=1,
+            quantity=1,
+            status=OrderItemStatus.READY,
+            unit_price=item.price,
+            total_price=item.price,
+        )
+
+        result = activate_pending_reservation(res, actor=actor)
+
+        result.refresh_from_db()
+        stale_session.refresh_from_db()
+        assert result.status == ReservationStatus.ACTIVE
+        assert stale_session.status == SessionStatus.CLOSED
 
     def test_reuses_existing_session_from_paid_preorder(
         self, restaurant: Restaurant, table: Table, restaurant_settings: RestaurantSettings, user_factory: Any
