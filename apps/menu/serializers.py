@@ -1,6 +1,7 @@
+from collections.abc import Callable
 from typing import Any
 
-from django.db.models import Manager, QuerySet
+from django.db.models import Model, QuerySet
 from rest_framework import serializers
 
 from apps.restaurants.models import Restaurant
@@ -225,7 +226,7 @@ class AdminMenuSerializer(serializers.ModelSerializer[Menu]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
     def get_translations(self, obj: Menu) -> list[dict[str, str]]:
-        return MenuTranslationSerializer(obj.translations.all(), many=True).data
+        return MenuTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
 
 
 class AdminMenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
@@ -243,18 +244,20 @@ class AdminMenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
     def get_translations(self, obj: MenuCategory) -> list[dict[str, str]]:
-        return MenuCategoryTranslationSerializer(obj.translations.all(), many=True).data
+        return MenuCategoryTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
 
 
 class M2MThroughKeysField(serializers.ListField):
     """ListField that reads M2M keys from a through model on read,
     and writes string keys on write (standard ListField behavior)."""
 
-    def __init__(self, through_getter, **kwargs):
+    through_getter: Callable[[Any], list[str]]
+
+    def __init__(self, through_getter: Callable[[Any], list[str]], **kwargs: Any) -> None:
         self.through_getter = through_getter
         super().__init__(**kwargs)
 
-    def get_attribute(self, instance):
+    def get_attribute(self, instance: Model) -> list[str]:
         try:
             return self.through_getter(instance)
         except (AttributeError, TypeError):
@@ -312,7 +315,7 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         return value if value is not None else 0
 
     def get_translations(self, obj: MenuItem) -> list[dict[str, str | None]]:
-        return MenuItemTranslationSerializer(obj.translations.all(), many=True).data
+        return MenuItemTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         menu = attrs.get("menu") or getattr(self.instance, "menu", None)
@@ -430,7 +433,7 @@ class AdminAllergenSerializer(serializers.ModelSerializer[Allergen]):
         fields = ["key", "sort_order", "translations"]
 
     def get_translations(self, obj: Allergen) -> list[dict[str, str]]:
-        return AllergenTranslationSerializer(obj.translations.all(), many=True).data
+        return AllergenTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
 
 
 class IngredientTranslationSerializer(serializers.Serializer[Any]):
@@ -450,7 +453,7 @@ class AdminIngredientSerializer(serializers.ModelSerializer[Ingredient]):
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
     def get_translations(self, obj: Ingredient) -> list[dict[str, str]]:
-        return IngredientTranslationSerializer(obj.translations.all(), many=True).data
+        return IngredientTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
 
     def validate_key(self, value: str) -> str:
         ingredient_id = self.instance.pk if self.instance else None
