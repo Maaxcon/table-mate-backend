@@ -120,6 +120,12 @@ class Migration(migrations.Migration):
         ("authentication", "0007_alter_user_email"),
     ]
 
+    # seed_unitable is intentionally NOT run here: its live-model commands
+    # (seed_restaurants/seed_layouts/seed_menu) require a fully migrated schema
+    # (e.g. restaurantsettings.supported_languages, added in 0024/0025). The
+    # RunPython moved to 0030_seed_unitable_prod_data at the tail of the
+    # restaurants dependency chain. This migration is kept as a no-op so the
+    # already-applied record stays valid and fresh DBs skip the early seed.
     operations = [
-        migrations.RunPython(seed_unitable, noop_reverse),
+        migrations.RunPython(migrations.RunPython.noop, migrations.RunPython.noop),
     ]

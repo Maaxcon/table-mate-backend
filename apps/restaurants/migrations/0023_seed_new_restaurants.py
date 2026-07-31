@@ -93,6 +93,12 @@ class Migration(migrations.Migration):
         ("restaurants", "0022_seed_unitable_prod_data"),
     ]
 
+    # seed_new_restaurants is intentionally NOT run here: its live-model
+    # commands require a fully migrated schema (e.g. restaurantsettings
+    # .supported_languages, added in 0024/0025). The RunPython moved to
+    # 0031_seed_new_restaurants at the tail of the restaurants dependency
+    # chain. This migration is kept as a no-op so the already-applied record
+    # stays valid and fresh DBs skip the early seed.
     operations = [
-        migrations.RunPython(seed_new_restaurants, noop_reverse),
+        migrations.RunPython(migrations.RunPython.noop, migrations.RunPython.noop),
     ]

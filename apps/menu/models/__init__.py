@@ -29,19 +29,27 @@ def validate_allergens(value: object) -> None:
         raise ValidationError(f"Invalid allergens: {invalid}. Choose from: {ALLERGEN_KEYS}")
 
 
-class Allergen(BaseModel):
-    key = models.CharField(max_length=50, unique=True)
+class Allergen(RestaurantScopedModel):
+    key = models.SlugField(max_length=100)
+    name = models.CharField(max_length=255)
     sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
-        ordering = ["sort_order"]
+        ordering = ["sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["restaurant", "key"],
+                name="allergen_restaurant_key_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return self.key
+        return self.name or self.key
 
 
 class Ingredient(RestaurantScopedModel):
     key = models.SlugField(max_length=100)
+    name = models.CharField(max_length=255)
     sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -54,7 +62,7 @@ class Ingredient(RestaurantScopedModel):
         ]
 
     def __str__(self) -> str:
-        return self.key
+        return self.name or self.key
 
 
 class Menu(RestaurantScopedModel):
