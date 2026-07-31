@@ -1,10 +1,11 @@
 import uuid
+from typing import Any
 
 import django.utils.timezone
 from django.db import migrations, models
 
 
-def gen_uuid(apps, schema_editor):
+def gen_uuid(apps: Any, schema_editor: Any) -> None:
     Allergen = apps.get_model("menu", "Allergen")
     for allergen in Allergen.objects.all():
         allergen.public_id = uuid.uuid4()

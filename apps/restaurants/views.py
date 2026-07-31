@@ -3,7 +3,7 @@ from typing import Any, cast
 
 import qrcode
 from django.db import transaction
-from django.db.models import ProtectedError, QuerySet
+from django.db.models import Model, ProtectedError, QuerySet
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
@@ -17,27 +17,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
-
-
-def _check_translation_conflict(translation, current_data):
-    """Compare-and-swap guard.  Return a 409 Response if current_data doesn't match
-    the DB, or ``None`` when the request is safe to proceed."""
-    if not current_data:
-        return None
-    conflicts = {}
-    for field, expected in current_data.items():
-        actual = getattr(translation, field)
-        if actual != expected:
-            conflicts[field] = actual
-    if not conflicts:
-        return None
-    return Response(
-        {
-            "detail": "CONFLICT: Translation was modified. Please refresh and try again.",
-            "current": conflicts,
-        },
-        status=status.HTTP_409_CONFLICT,
-    )
 
 from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsAdmin, IsStaff
@@ -83,6 +62,28 @@ from .serializers import (
     ZoneSerializer,
     ZoneTranslationSerializer,
 )
+
+
+def _check_translation_conflict(translation: Model, current_data: dict[str, Any] | None) -> Response | None:
+    """Compare-and-swap guard.  Return a 409 Response if current_data doesn't match
+    the DB, or ``None`` when the request is safe to proceed."""
+    if not current_data:
+        return None
+    conflicts = {}
+    for field, expected in current_data.items():
+        actual = getattr(translation, field)
+        if actual != expected:
+            conflicts[field] = actual
+    if not conflicts:
+        return None
+    return Response(
+        {
+            "detail": "CONFLICT: Translation was modified. Please refresh and try again.",
+            "current": conflicts,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
 
 
 @extend_schema(tags=["Restaurants"], responses=AdminOverviewSerializer)
