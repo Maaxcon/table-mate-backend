@@ -14,6 +14,27 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
+
+def _check_translation_conflict(translation, current_data):
+    """Compare-and-swap guard.  Return a 409 Response if current_data doesn't match
+    the DB, or ``None`` when the request is safe to proceed."""
+    if not current_data:
+        return None
+    conflicts = {}
+    for field, expected in current_data.items():
+        actual = getattr(translation, field)
+        if actual != expected:
+            conflicts[field] = actual
+    if not conflicts:
+        return None
+    return Response(
+        {
+            "detail": "CONFLICT: Translation was modified. Please refresh and try again.",
+            "current": conflicts,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
 from apps.authentication.permissions import IsAdmin
 from common.api import (
     PublicLookupMixin,
@@ -26,7 +47,19 @@ from common.filters import StableOrderingFilter
 
 from . import services
 from .filters import MenuCategoryFilter, MenuItemFilter
-from .models import Allergen, Ingredient, Menu, MenuCategory, MenuItem, MenuItemLike
+from .models import (
+    Allergen,
+    AllergenTranslation,
+    Ingredient,
+    IngredientTranslation,
+    Menu,
+    MenuCategory,
+    MenuCategoryTranslation,
+    MenuItem,
+    MenuItemLike,
+    MenuItemTranslation,
+    MenuTranslation,
+)
 from .selectors import (
     get_active_menus,
     get_categories_by_restaurant,
@@ -220,7 +253,14 @@ class AdminMenuViewSet(
                 {"detail": f"Cannot update a translation for the primary language ({locale})."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = MenuTranslationSerializer(data={"language_code": lang, **request.data})
+        conflict = _check_translation_conflict(
+            MenuTranslation.objects.get(menu_id=self.get_object().id, language_code=lang),
+            request.data.get("current"),
+        )
+        if conflict:
+            return conflict
+        update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
+        serializer = MenuTranslationSerializer(data={"language_code": lang, **update_data})
         serializer.is_valid(raise_exception=True)
         translation = services.update_menu_translation(menu_id=self.get_object().id, **serializer.validated_data)
         return Response(MenuTranslationSerializer(translation).data)
@@ -309,7 +349,14 @@ class AdminMenuCategoryViewSet(
                 {"detail": f"Cannot update a translation for the primary language ({locale})."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = MenuCategoryTranslationSerializer(data={"language_code": lang, **request.data})
+        conflict = _check_translation_conflict(
+            MenuCategoryTranslation.objects.get(category_id=self.get_object().id, language_code=lang),
+            request.data.get("current"),
+        )
+        if conflict:
+            return conflict
+        update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
+        serializer = MenuCategoryTranslationSerializer(data={"language_code": lang, **update_data})
         serializer.is_valid(raise_exception=True)
         translation = services.update_category_translation(category_id=self.get_object().id, **serializer.validated_data)
         return Response(MenuCategoryTranslationSerializer(translation).data)
@@ -441,7 +488,14 @@ class AdminMenuItemViewSet(
                 {"detail": f"Cannot update a translation for the primary language ({locale})."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = MenuItemTranslationSerializer(data={"language_code": lang, **request.data})
+        conflict = _check_translation_conflict(
+            MenuItemTranslation.objects.get(menu_item_id=self.get_object().id, language_code=lang),
+            request.data.get("current"),
+        )
+        if conflict:
+            return conflict
+        update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
+        serializer = MenuItemTranslationSerializer(data={"language_code": lang, **update_data})
         serializer.is_valid(raise_exception=True)
         translation = services.update_item_translation(menu_item_id=self.get_object().id, **serializer.validated_data)
         return Response(MenuItemTranslationSerializer(translation).data)
@@ -494,7 +548,14 @@ class AdminAllergenViewSet(PublicLookupMixin, viewsets.ModelViewSet[Allergen]):
     )
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
-        serializer = AllergenTranslationSerializer(data={"language_code": lang, **request.data})
+        conflict = _check_translation_conflict(
+            AllergenTranslation.objects.get(allergen__public_id=kwargs.get("public_id", ""), language_code=lang),
+            request.data.get("current"),
+        )
+        if conflict:
+            return conflict
+        update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
+        serializer = AllergenTranslationSerializer(data={"language_code": lang, **update_data})
         serializer.is_valid(raise_exception=True)
         translation = services.update_allergen_translation(
             allergen_public_id=kwargs.get("public_id", ""),
@@ -548,7 +609,14 @@ class AdminIngredientViewSet(
     )
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
-        serializer = IngredientTranslationSerializer(data={"language_code": lang, **request.data})
+        conflict = _check_translation_conflict(
+            IngredientTranslation.objects.get(ingredient_id=self.get_object().id, language_code=lang),
+            request.data.get("current"),
+        )
+        if conflict:
+            return conflict
+        update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
+        serializer = IngredientTranslationSerializer(data={"language_code": lang, **update_data})
         serializer.is_valid(raise_exception=True)
         translation = services.update_ingredient_translation(ingredient_id=self.get_object().id, **serializer.validated_data)
         return Response(IngredientTranslationSerializer(translation).data)

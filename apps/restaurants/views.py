@@ -18,6 +18,27 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
+
+def _check_translation_conflict(translation, current_data):
+    """Compare-and-swap guard.  Return a 409 Response if current_data doesn't match
+    the DB, or ``None`` when the request is safe to proceed."""
+    if not current_data:
+        return None
+    conflicts = {}
+    for field, expected in current_data.items():
+        actual = getattr(translation, field)
+        if actual != expected:
+            conflicts[field] = actual
+    if not conflicts:
+        return None
+    return Response(
+        {
+            "detail": "CONFLICT: Translation was modified. Please refresh and try again.",
+            "current": conflicts,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
 from apps.authentication.models import RoleCode, User
 from apps.authentication.permissions import IsAdmin, IsStaff
 from apps.menu.models import Menu, MenuCategory, MenuItem
@@ -37,7 +58,15 @@ from common.hall_events import (
 )
 
 from . import selectors, services
-from .models import Restaurant, RestaurantSettings, Table, Zone
+from .models import (
+    Restaurant,
+    RestaurantSettings,
+    RestaurantTranslation,
+    Table,
+    TableTranslation,
+    Zone,
+    ZoneTranslation,
+)
 from .serializers import (
     AdminOverviewSerializer,
     BookingSettingsSerializer,
@@ -232,7 +261,14 @@ class RestaurantViewSet(
                 {"detail": "Cannot update a translation for the primary language."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = RestaurantTranslationSerializer(data={"language_code": lang, **request.data})
+        conflict = _check_translation_conflict(
+            RestaurantTranslation.objects.get(restaurant=restaurant, language_code=lang),
+            request.data.get("current"),
+        )
+        if conflict:
+            return conflict
+        update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
+        serializer = RestaurantTranslationSerializer(data={"language_code": lang, **update_data})
         serializer.is_valid(raise_exception=True)
         translation = services.update_restaurant_translation(
             restaurant_id=restaurant.id,
@@ -361,9 +397,16 @@ class ZoneViewSet(
     )
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
-        serializer = ZoneTranslationSerializer(data={"language_code": lang, **request.data})
-        serializer.is_valid(raise_exception=True)
         zone = self.get_object()
+        conflict = _check_translation_conflict(
+            ZoneTranslation.objects.get(zone=zone, language_code=lang),
+            request.data.get("current"),
+        )
+        if conflict:
+            return conflict
+        update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
+        serializer = ZoneTranslationSerializer(data={"language_code": lang, **update_data})
+        serializer.is_valid(raise_exception=True)
         translation = services.update_zone_translation(
             zone_id=zone.id,
             **serializer.validated_data,
@@ -590,9 +633,16 @@ class TableViewSet(
     )
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
-        serializer = TableTranslationSerializer(data={"language_code": lang, **request.data})
-        serializer.is_valid(raise_exception=True)
         table = self.get_object()
+        conflict = _check_translation_conflict(
+            TableTranslation.objects.get(table=table, language_code=lang),
+            request.data.get("current"),
+        )
+        if conflict:
+            return conflict
+        update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
+        serializer = TableTranslationSerializer(data={"language_code": lang, **update_data})
+        serializer.is_valid(raise_exception=True)
         translation = services.update_table_translation(
             table_id=table.id,
             **serializer.validated_data,
