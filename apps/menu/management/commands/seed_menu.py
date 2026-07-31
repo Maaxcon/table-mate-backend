@@ -696,7 +696,7 @@ class Command(BaseCommand):
                             ing, _ = Ingredient.objects.get_or_create(
                                 restaurant=restaurant,
                                 key=key,
-                                defaults={"sort_order": sort_order},
+                                defaults={"name": name, "sort_order": sort_order},
                             )
                             IngredientTranslation.objects.get_or_create(
                                 ingredient=ing,
@@ -714,7 +714,9 @@ class Command(BaseCommand):
                         allergen_keys = _infer_allergens(ingredient_names)
                         for sort_order, key in enumerate(allergen_keys):
                             try:
-                                allerg = Allergen.objects.get(key=key)
+                                allerg = Allergen.objects.get(
+                                    restaurant=restaurant, key=key
+                                )
                                 MenuItemAllergen.objects.create(
                                     menu_item=item,
                                     allergen=allerg,
