@@ -546,6 +546,280 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedEditorTableList'
           description: ''
+  /api/menu/admin/allergens/:
+    get:
+      operationId: menu_admin_allergens_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdminAllergenList'
+          description: ''
+    post:
+      operationId: menu_admin_allergens_create
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAllergen'
+          description: ''
+  /api/menu/admin/allergens/{public_id}/:
+    get:
+      operationId: menu_admin_allergens_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAllergen'
+          description: ''
+    put:
+      operationId: menu_admin_allergens_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAllergen'
+          description: ''
+    patch:
+      operationId: menu_admin_allergens_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminAllergen'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminAllergen'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminAllergen'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAllergen'
+          description: ''
+    delete:
+      operationId: menu_admin_allergens_destroy
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/menu/admin/allergens/{public_id}/translations/:
+    get:
+      operationId: menu_admin_allergens_translations_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAllergen'
+          description: ''
+    post:
+      operationId: menu_admin_allergens_translations_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAllergen'
+          description: ''
+  /api/menu/admin/allergens/{public_id}/translations/{lang}/:
+    put:
+      operationId: menu_admin_allergens_translations_update
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminAllergen'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAllergen'
+          description: ''
+    delete:
+      operationId: menu_admin_allergens_translations_destroy
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/menu/admin/categories/:
     get:
       operationId: menu_admin_categories_list
@@ -746,23 +1020,23 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MenuCategoryTranslation'
+              $ref: '#/components/schemas/AdminMenuCategory'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/MenuCategoryTranslation'
+              $ref: '#/components/schemas/AdminMenuCategory'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/MenuCategoryTranslation'
+              $ref: '#/components/schemas/AdminMenuCategory'
         required: true
       security:
       - jwtAuth: []
       - jwt_Auth: []
       responses:
-        '201':
+        '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MenuCategoryTranslation'
+                $ref: '#/components/schemas/AdminMenuCategory'
           description: ''
   /api/menu/admin/categories/{public_id}/translations/{lang}/:
     put:
@@ -785,13 +1059,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MenuCategoryTranslation'
+              $ref: '#/components/schemas/AdminMenuCategory'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/MenuCategoryTranslation'
+              $ref: '#/components/schemas/AdminMenuCategory'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/MenuCategoryTranslation'
+              $ref: '#/components/schemas/AdminMenuCategory'
         required: true
       security:
       - jwtAuth: []
@@ -801,7 +1075,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MenuCategoryTranslation'
+                $ref: '#/components/schemas/AdminMenuCategory'
           description: ''
     delete:
       operationId: menu_admin_categories_translations_destroy
@@ -848,6 +1122,280 @@ paths:
               items:
                 $ref: '#/components/schemas/ReorderEntry'
         required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/menu/admin/ingredients/:
+    get:
+      operationId: menu_admin_ingredients_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdminIngredientList'
+          description: ''
+    post:
+      operationId: menu_admin_ingredients_create
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminIngredient'
+          description: ''
+  /api/menu/admin/ingredients/{public_id}/:
+    get:
+      operationId: menu_admin_ingredients_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminIngredient'
+          description: ''
+    put:
+      operationId: menu_admin_ingredients_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminIngredient'
+          description: ''
+    patch:
+      operationId: menu_admin_ingredients_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminIngredient'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminIngredient'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminIngredient'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminIngredient'
+          description: ''
+    delete:
+      operationId: menu_admin_ingredients_destroy
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/menu/admin/ingredients/{public_id}/translations/:
+    get:
+      operationId: menu_admin_ingredients_translations_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminIngredient'
+          description: ''
+    post:
+      operationId: menu_admin_ingredients_translations_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminIngredient'
+          description: ''
+  /api/menu/admin/ingredients/{public_id}/translations/{lang}/:
+    put:
+      operationId: menu_admin_ingredients_translations_update
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminIngredient'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminIngredient'
+          description: ''
+    delete:
+      operationId: menu_admin_ingredients_translations_destroy
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Menu Admin
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -1086,23 +1634,23 @@ paths:
         content:
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/MenuItemTranslation'
+              $ref: '#/components/schemas/AdminMenuItem'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/MenuItemTranslation'
+              $ref: '#/components/schemas/AdminMenuItem'
           application/json:
             schema:
-              $ref: '#/components/schemas/MenuItemTranslation'
+              $ref: '#/components/schemas/AdminMenuItem'
         required: true
       security:
       - jwtAuth: []
       - jwt_Auth: []
       responses:
-        '201':
+        '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MenuItemTranslation'
+                $ref: '#/components/schemas/AdminMenuItem'
           description: ''
   /api/menu/admin/items/{public_id}/translations/{lang}/:
     put:
@@ -1125,13 +1673,13 @@ paths:
         content:
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/MenuItemTranslation'
+              $ref: '#/components/schemas/AdminMenuItem'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/MenuItemTranslation'
+              $ref: '#/components/schemas/AdminMenuItem'
           application/json:
             schema:
-              $ref: '#/components/schemas/MenuItemTranslation'
+              $ref: '#/components/schemas/AdminMenuItem'
         required: true
       security:
       - jwtAuth: []
@@ -1141,7 +1689,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MenuItemTranslation'
+                $ref: '#/components/schemas/AdminMenuItem'
           description: ''
     delete:
       operationId: menu_admin_items_translations_destroy
@@ -1420,23 +1968,23 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MenuTranslation'
+              $ref: '#/components/schemas/AdminMenu'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/MenuTranslation'
+              $ref: '#/components/schemas/AdminMenu'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/MenuTranslation'
+              $ref: '#/components/schemas/AdminMenu'
         required: true
       security:
       - jwtAuth: []
       - jwt_Auth: []
       responses:
-        '201':
+        '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MenuTranslation'
+                $ref: '#/components/schemas/AdminMenu'
           description: ''
   /api/menu/admin/menus/{public_id}/translations/{lang}/:
     put:
@@ -1459,13 +2007,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MenuTranslation'
+              $ref: '#/components/schemas/AdminMenu'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/MenuTranslation'
+              $ref: '#/components/schemas/AdminMenu'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/MenuTranslation'
+              $ref: '#/components/schemas/AdminMenu'
         required: true
       security:
       - jwtAuth: []
@@ -1475,7 +2023,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MenuTranslation'
+                $ref: '#/components/schemas/AdminMenu'
           description: ''
     delete:
       operationId: menu_admin_menus_translations_destroy
@@ -1502,8 +2050,14 @@ paths:
   /api/menu/allergens/:
     get:
       operationId: menu_allergens_list
-      description: The allowed allergen vocabulary — the single source of truth for
-        clients.
+      description: Allergen vocabulary for a restaurant, localized to the active language.
+      parameters:
+      - in: query
+        name: restaurant
+        schema:
+          type: string
+        description: Restaurant public UUID
+        required: true
       tags:
       - Menu
       security:
@@ -1517,7 +2071,8 @@ paths:
               schema:
                 type: array
                 items:
-                  type: string
+                  type: object
+                  additionalProperties: {}
           description: ''
   /api/menu/categories/:
     get:
@@ -3801,6 +4356,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/Restaurant'
           description: ''
+  /api/restaurants/restaurants/{public_id}/translations/:
+    get:
+      operationId: restaurants_restaurants_translations_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+          description: ''
   /api/restaurants/tables/:
     get:
       operationId: restaurants_tables_list
@@ -3887,6 +4464,122 @@ paths:
                 type: string
                 format: binary
           description: ''
+  /api/restaurants/tables/{public_id}/translations/:
+    get:
+      operationId: restaurants_tables_translations_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Table'
+          description: ''
+    post:
+      operationId: restaurants_tables_translations_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Table'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Table'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Table'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Table'
+          description: ''
+  /api/restaurants/tables/{public_id}/translations/{lang}/:
+    put:
+      operationId: restaurants_tables_translations_update
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Table'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Table'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Table'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Table'
+          description: ''
+    delete:
+      operationId: restaurants_tables_translations_destroy
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/restaurants/tables/layout/:
     get:
       operationId: restaurants_tables_layout_retrieve
@@ -4104,6 +4797,123 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/restaurants/zones/{public_id}/translations/:
+    get:
+      operationId: restaurants_zones_translations_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
+    post:
+      operationId: restaurants_zones_translations_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Zone'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Zone'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Zone'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
+  /api/restaurants/zones/{public_id}/translations/{lang}/:
+    put:
+      operationId: restaurants_zones_translations_update
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Zone'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Zone'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Zone'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+          description: ''
+    delete:
+      operationId: restaurants_zones_translations_destroy
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/shifts/:
     get:
       operationId: shifts_list
@@ -4302,6 +5112,86 @@ components:
       required:
       - menu_item
       - quantity
+    AdminAllergen:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 255
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - key
+      - name
+      - public_id
+      - translations
+      - updated_at
+    AdminIngredient:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 255
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - key
+      - name
+      - public_id
+      - translations
+      - updated_at
     AdminMenu:
       type: object
       description: Writable menu serializer for the admin panel.
@@ -4315,6 +5205,13 @@ components:
           maxLength: 255
         is_active:
           type: boolean
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -4327,6 +5224,7 @@ components:
       - created_at
       - name
       - public_id
+      - translations
       - updated_at
     AdminMenuCategory:
       type: object
@@ -4354,6 +5252,13 @@ components:
           description: Hex color used for category theming.
           pattern: ^#[0-9a-fA-F]{6}$
           maxLength: 7
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -4367,6 +5272,7 @@ components:
       - menu
       - name
       - public_id
+      - translations
       - updated_at
     AdminMenuItem:
       type: object
@@ -4421,6 +5327,14 @@ components:
         likes_count:
           type: integer
           readOnly: true
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+              nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -4436,6 +5350,7 @@ components:
       - name
       - price
       - public_id
+      - translations
       - updated_at
     AdminOverview:
       type: object
@@ -4554,8 +5469,11 @@ components:
           readOnly: true
         working_hours:
           readOnly: true
+        supported_languages:
+          readOnly: true
       required:
       - currency
+      - supported_languages
       - timezone
       - working_hours
     BulkItemAction:
@@ -5213,18 +6131,6 @@ components:
       - name
       - public_id
       - updated_at
-    MenuCategoryTranslation:
-      type: object
-      properties:
-        language_code:
-          type: string
-          maxLength: 10
-        name:
-          type: string
-          maxLength: 255
-      required:
-      - language_code
-      - name
     MenuItem:
       type: object
       properties:
@@ -5318,33 +6224,6 @@ components:
       - public_id
       - restaurant
       - updated_at
-    MenuItemTranslation:
-      type: object
-      properties:
-        language_code:
-          type: string
-          maxLength: 10
-        name:
-          type: string
-          maxLength: 255
-        description:
-          type: string
-          nullable: true
-      required:
-      - language_code
-      - name
-    MenuTranslation:
-      type: object
-      properties:
-        language_code:
-          type: string
-          maxLength: 10
-        name:
-          type: string
-          maxLength: 255
-      required:
-      - language_code
-      - name
     ObstacleEntity:
       type: object
       properties:
@@ -5597,6 +6476,52 @@ components:
         * `submitted` - Submitted
         * `completed` - Completed
         * `cancelled` - Cancelled
+    PaginatedAdminAllergenList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAllergen'
+    PaginatedAdminIngredientList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminIngredient'
     PaginatedAdminMenuCategoryList:
       type: object
       required:
@@ -6126,6 +7051,72 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Zone'
+    PatchedAdminAllergen:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 255
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedAdminIngredient:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 255
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     PatchedAdminMenu:
       type: object
       description: Writable menu serializer for the admin panel.
@@ -6139,6 +7130,13 @@ components:
           maxLength: 255
         is_active:
           type: boolean
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -6173,6 +7171,13 @@ components:
           description: Hex color used for category theming.
           pattern: ^#[0-9a-fA-F]{6}$
           maxLength: 7
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -6234,6 +7239,14 @@ components:
         likes_count:
           type: integer
           readOnly: true
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+              nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -6252,6 +7265,8 @@ components:
           type: string
           readOnly: true
         working_hours:
+          readOnly: true
+        supported_languages:
           readOnly: true
     PatchedEditorTable:
       type: object
@@ -6612,6 +7627,13 @@ components:
           format: uri
           readOnly: true
           nullable: true
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -6806,6 +7828,13 @@ components:
           type: boolean
           readOnly: true
           title: ' is fallback'
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
     PayOrderItems:
       type: object
       properties:
@@ -7311,6 +8340,13 @@ components:
           format: uri
           readOnly: true
           nullable: true
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -7325,6 +8361,7 @@ components:
       - created_at
       - name
       - public_id
+      - translations
       - updated_at
     RestaurantInfo:
       type: object
@@ -7590,6 +8627,13 @@ components:
           type: boolean
           readOnly: true
           title: ' is fallback'
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -7607,6 +8651,7 @@ components:
       - public_id
       - public_number
       - restaurant
+      - translations
       - updated_at
       - zone
     TableAvailabilityResponse:
@@ -8001,11 +9046,19 @@ components:
           type: boolean
           readOnly: true
           title: ' is fallback'
+        translations:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
       required:
       - _is_fallback
       - _lang
       - name
       - public_id
+      - translations
     ZoneCreate:
       type: object
       properties:
