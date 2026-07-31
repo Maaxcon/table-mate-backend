@@ -5,7 +5,7 @@ from typing import Any
 
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import Max, QuerySet
+from django.db.models import Max, Model, QuerySet
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
@@ -24,6 +24,42 @@ from ..models import (
     MenuItemTranslation,
     MenuTranslation,
 )
+from .localization import get_restaurant_locale
+
+
+def prune_orphans(*, entity_model: type[Any], through_model: type[Any], removed_ids: list[int]) -> int:
+    """Delete vocabulary entries whose through-model reference count dropped to
+    zero after the caller removed a dish's references (US-6/FR-019). Scoped by the
+    through FK to the entity; returns the number of rows deleted."""
+    removed_ids = [i for i in removed_ids if i is not None]
+    if not removed_ids:
+        return 0
+    fk_name = _through_fk_name(through_model, entity_model)
+    referenced = set(
+        through_model.objects.filter(**{fk_name + "__id__in": removed_ids}).values_list(fk_name, flat=True)
+    )
+    orphan_ids = [i for i in removed_ids if i not in referenced]
+    if not orphan_ids:
+        return 0
+    return int(entity_model.objects.filter(id__in=orphan_ids).delete()[0])
+
+
+def _through_fk_name(through_model: type[Model], entity_model: type[Model]) -> str:
+    from django.db.models import ForeignKey
+
+    for field in through_model._meta.get_fields():
+        if isinstance(field, ForeignKey) and field.related_model is entity_model:
+            return field.name
+    raise ValueError(f"No FK from {through_model.__name__} to {entity_model.__name__}.")
+
+
+def _reject_default_locale_translation(restaurant_id: int, language_code: str) -> None:
+    """Raise if a translation is being written for the restaurant's default locale;
+    default-locale content lives on the entity (FR-015/FR-022)."""
+    if language_code == get_restaurant_locale(restaurant_id):
+        raise ValidationError(
+            f"Cannot create/update a translation for the primary language ({language_code})."
+        )
 
 
 def reorder(queryset: QuerySet[Any], entries: list[dict[str, Any]]) -> None:
@@ -54,7 +90,16 @@ def bulk_update_items(*, restaurant_id: int, data: dict[str, Any]) -> dict[str, 
     if data["action"] == "delete":
         # Count up front: delete() returns cascaded rows too (e.g. likes).
         count = items.count()
-        items.delete()
+        allergen_ids = list(
+            MenuItemAllergen.objects.filter(menu_item__in=items).values_list("allergen_id", flat=True)
+        )
+        ingredient_ids = list(
+            MenuItemIngredient.objects.filter(menu_item__in=items).values_list("ingredient_id", flat=True)
+        )
+        with transaction.atomic():
+            items.delete()
+            prune_orphans(entity_model=Allergen, through_model=MenuItemAllergen, removed_ids=allergen_ids)
+            prune_orphans(entity_model=Ingredient, through_model=MenuItemIngredient, removed_ids=ingredient_ids)
         return {"deleted": count}
 
     # update() bypasses save(), so set updated_at explicitly to keep it fresh.
@@ -211,8 +256,11 @@ def _unique_copy_name(menu: Menu, base: str) -> str:
     return name
 
 
-def create_allergen_translation(*, allergen_public_id: str, language_code: str, name: str) -> AllergenTranslation:
-    allergen = Allergen.objects.get(public_id=allergen_public_id)
+def create_allergen_translation(
+    *, allergen_public_id: str, restaurant_id: int, language_code: str, name: str,
+) -> AllergenTranslation:
+    allergen = Allergen.objects.get(public_id=allergen_public_id, restaurant_id=restaurant_id)
+    _reject_default_locale_translation(allergen.restaurant_id, language_code)
     return AllergenTranslation.objects.create(
         allergen=allergen,
         language_code=language_code,
@@ -220,19 +268,35 @@ def create_allergen_translation(*, allergen_public_id: str, language_code: str, 
     )
 
 
-def update_allergen_translation(*, allergen_public_id: str, language_code: str, name: str) -> AllergenTranslation:
-    translation = AllergenTranslation.objects.get(allergen__public_id=allergen_public_id, language_code=language_code)
+def update_allergen_translation(
+    *, allergen_public_id: str, restaurant_id: int, language_code: str, name: str,
+) -> AllergenTranslation:
+    _reject_default_locale_translation(restaurant_id, language_code)
+    translation = AllergenTranslation.objects.get(
+        allergen__public_id=allergen_public_id,
+        allergen__restaurant_id=restaurant_id,
+        language_code=language_code,
+    )
     translation.name = name
     translation.save(update_fields=["name", "updated_at"])
     return translation
 
 
-def delete_allergen_translation(*, allergen_public_id: str, language_code: str) -> None:
-    AllergenTranslation.objects.filter(allergen__public_id=allergen_public_id, language_code=language_code).delete()
+def delete_allergen_translation(*, allergen_public_id: str, restaurant_id: int, language_code: str) -> None:
+    AllergenTranslation.objects.filter(
+        allergen__public_id=allergen_public_id,
+        allergen__restaurant_id=restaurant_id,
+        language_code=language_code,
+    ).delete()
 
 
-def get_allergen_translations(*, allergen_public_id: str) -> list[AllergenTranslation]:
-    return list(AllergenTranslation.objects.filter(allergen__public_id=allergen_public_id))
+def get_allergen_translations(*, allergen_public_id: str, restaurant_id: int) -> list[AllergenTranslation]:
+    return list(
+        AllergenTranslation.objects.filter(
+            allergen__public_id=allergen_public_id,
+            allergen__restaurant_id=restaurant_id,
+        )
+    )
 
 
 def _check_duplicate_ingredient_name(*, ingredient_id: int, language_code: str, name: str) -> None:
@@ -254,6 +318,10 @@ def _check_duplicate_ingredient_name(*, ingredient_id: int, language_code: str, 
 def create_ingredient_translation(
     *, ingredient_id: int, language_code: str, name: str,
 ) -> IngredientTranslation:
+    _reject_default_locale_translation(
+        Ingredient.objects.only("restaurant_id").get(pk=ingredient_id).restaurant_id,
+        language_code,
+    )
     _check_duplicate_ingredient_name(ingredient_id=ingredient_id, language_code=language_code, name=name)
     return IngredientTranslation.objects.create(
         ingredient_id=ingredient_id,
@@ -265,8 +333,10 @@ def create_ingredient_translation(
 def update_ingredient_translation(
     *, ingredient_id: int, language_code: str, name: str,
 ) -> IngredientTranslation:
-    _check_duplicate_ingredient_name(ingredient_id=ingredient_id, language_code=language_code, name=name)
+    ingredient = Ingredient.objects.only("restaurant_id").get(pk=ingredient_id)
+    _reject_default_locale_translation(ingredient.restaurant_id, language_code)
     translation = IngredientTranslation.objects.get(ingredient_id=ingredient_id, language_code=language_code)
+    _check_duplicate_ingredient_name(ingredient_id=ingredient_id, language_code=language_code, name=name)
     translation.name = name
     translation.save(update_fields=["name", "updated_at"])
     return translation

@@ -1,6 +1,6 @@
-from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
+from django.db import transaction
 from django.db.models import Model, QuerySet
 from rest_framework import serializers
 
@@ -16,6 +16,7 @@ from .models import (
     MenuItemAllergen,
     MenuItemIngredient,
 )
+from .services import prune_orphans
 from .services.localization import get_localized_content
 
 
@@ -101,7 +102,7 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         for through in through_qs:
             entity = getattr(through, fk_name)
             by_code = {t.language_code: t.name for t in entity.translations.all()}
-            name = by_code.get(lang, by_code.get("uk", entity.key))
+            name = by_code.get(lang, entity.name or entity.key)
             names.append(name)
         return names
 
@@ -247,21 +248,32 @@ class AdminMenuCategorySerializer(serializers.ModelSerializer[MenuCategory]):
         return MenuCategoryTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
 
 
-class M2MThroughKeysField(serializers.ListField):
-    """ListField that reads M2M keys from a through model on read,
-    and writes string keys on write (standard ListField behavior)."""
+class LocalizedM2MNamesField(serializers.ListField):
+    """ListField that reads localized vocabulary display names from a through model
+    on read, and writes name strings on write (standard ListField behavior)."""
 
-    through_getter: Callable[[Any], list[str]]
+    fk_name: str
 
-    def __init__(self, through_getter: Callable[[Any], list[str]], **kwargs: Any) -> None:
-        self.through_getter = through_getter
+    def __init__(self, fk_name: str, **kwargs: Any) -> None:
+        self.fk_name = fk_name
         super().__init__(**kwargs)
 
     def get_attribute(self, instance: Model) -> list[str]:
-        try:
-            return self.through_getter(instance)
-        except (AttributeError, TypeError):
-            return []
+        request = self.context.get("request")
+        lang = getattr(request, "active_language", None) if request else None
+        names: list[str] = []
+        menu_item = cast(MenuItem, instance)
+        through_qs = (
+            menu_item.item_ingredients.all()
+            if self.fk_name == "ingredient"
+            else menu_item.item_allergens.all()
+        )
+        for through in through_qs:
+            entity = getattr(through, self.fk_name)
+            by_code = {t.language_code: t.name for t in entity.translations.all()}
+            name = by_code.get(lang, entity.name or entity.key)
+            names.append(name)
+        return names
 
 
 class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
@@ -274,13 +286,13 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         required=False,
         allow_null=True,
     )
-    ingredients = M2MThroughKeysField(
-        through_getter=lambda o: [ii.ingredient.key for ii in o.item_ingredients.all()],
+    ingredients = LocalizedM2MNamesField(
+        fk_name="ingredient",
         child=serializers.CharField(),
         required=False,
     )
-    allergens = M2MThroughKeysField(
-        through_getter=lambda o: [ia.allergen.key for ia in o.item_allergens.all()],
+    allergens = LocalizedM2MNamesField(
+        fk_name="allergen",
         child=serializers.CharField(),
         required=False,
     )
@@ -333,39 +345,90 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         return instance
 
     def update(self, instance: MenuItem, validated_data: dict[str, Any]) -> MenuItem:
-        ingredient_keys = validated_data.pop("ingredients", None)
-        allergen_keys = validated_data.pop("allergens", None)
+        ingredient_names = validated_data.pop("ingredients", None)
+        allergen_names = validated_data.pop("allergens", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        instance.save()
-        if allergen_keys is not None:
-            instance.item_allergens.all().delete()
-            self._set_allergens(instance, allergen_keys)
-        if ingredient_keys is not None:
-            instance.item_ingredients.all().delete()
-            self._set_ingredients(instance, ingredient_keys)
+        with transaction.atomic():
+            instance.save()
+            if allergen_names is not None:
+                removed_allergen_ids = list(instance.item_allergens.values_list("allergen_id", flat=True))
+                instance.item_allergens.all().delete()
+                self._set_allergens(instance, allergen_names)
+                prune_orphans(
+                    entity_model=Allergen,
+                    through_model=MenuItemAllergen,
+                    removed_ids=removed_allergen_ids,
+                )
+            if ingredient_names is not None:
+                removed_ingredient_ids = list(instance.item_ingredients.values_list("ingredient_id", flat=True))
+                instance.item_ingredients.all().delete()
+                self._set_ingredients(instance, ingredient_names)
+                prune_orphans(
+                    entity_model=Ingredient,
+                    through_model=MenuItemIngredient,
+                    removed_ids=removed_ingredient_ids,
+                )
         return instance
 
-    def _set_allergens(self, instance: MenuItem, keys: list[str]) -> None:
-        for sort_order, key in enumerate(keys):
-            allergen = Allergen.objects.get(key=key)
+    def _set_allergens(self, instance: MenuItem, names: list[str]) -> None:
+        for sort_order, name in enumerate(names):
+            allergen = self._get_or_create_allergen(instance.restaurant_id, name)
             MenuItemAllergen.objects.create(
                 menu_item=instance,
                 allergen=allergen,
                 sort_order=sort_order,
             )
 
-    def _set_ingredients(self, instance: MenuItem, keys: list[str]) -> None:
-        for sort_order, key in enumerate(keys):
-            ingredient = Ingredient.objects.get(
-                restaurant_id=instance.restaurant_id,
-                key=key,
-            )
+    def _set_ingredients(self, instance: MenuItem, names: list[str]) -> None:
+        for sort_order, name in enumerate(names):
+            ingredient = self._get_or_create_ingredient(instance.restaurant_id, name)
             MenuItemIngredient.objects.create(
                 menu_item=instance,
                 ingredient=ingredient,
                 sort_order=sort_order,
             )
+
+    def _get_or_create_allergen(self, restaurant_id: int, name: str) -> Allergen:
+        normalized = name.strip()
+        existing = Allergen.objects.filter(
+            restaurant_id=restaurant_id,
+            name__iexact=normalized,
+        ).first()
+        if existing is not None:
+            return existing
+        key = self._unique_key(Allergen, restaurant_id, normalized)
+        return Allergen.objects.create(
+            restaurant_id=restaurant_id,
+            name=normalized,
+            key=key,
+        )
+
+    def _get_or_create_ingredient(self, restaurant_id: int, name: str) -> Ingredient:
+        normalized = name.strip()
+        existing = Ingredient.objects.filter(
+            restaurant_id=restaurant_id,
+            name__iexact=normalized,
+        ).first()
+        if existing is not None:
+            return existing
+        key = self._unique_key(Ingredient, restaurant_id, normalized)
+        return Ingredient.objects.create(
+            restaurant_id=restaurant_id,
+            name=normalized,
+            key=key,
+        )
+
+    def _unique_key(self, model: type[Allergen | Ingredient], restaurant_id: int, name: str) -> str:
+        from django.utils.text import slugify
+
+        base = slugify(name)[:100] or "item"
+        candidate = base
+        counter = 2
+        while model.objects.filter(restaurant_id=restaurant_id, key=candidate).exists():
+            candidate = f"{base}-{counter}"
+            counter += 1
+        return candidate
 
 
 class ToggleMenuItemLikeRequestSerializer(serializers.Serializer[Any]):
@@ -419,11 +482,31 @@ class AdminAllergenSerializer(serializers.ModelSerializer[Allergen]):
 
     class Meta:
         model = Allergen
-        fields = ["public_id", "key", "sort_order", "translations", "created_at", "updated_at"]
+        fields = ["public_id", "key", "name", "sort_order", "translations", "created_at", "updated_at"]
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
     def get_translations(self, obj: Allergen) -> list[dict[str, str]]:
         return AllergenTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
+
+    def validate_name(self, value: str) -> str:
+        allergen_id = self.instance.pk if self.instance else None
+        request = self.context.get("request")
+        if request is None:
+            return value
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is None:
+            return value
+        qs = Allergen.objects.filter(
+            restaurant_id=restaurant_id,
+            name__iexact=value.strip(),
+        )
+        if allergen_id:
+            qs = qs.exclude(pk=allergen_id)
+        if qs.exists():
+            raise serializers.ValidationError(
+                f'An allergen with name "{value}" already exists in this restaurant.'
+            )
+        return value
 
 
 class IngredientTranslationSerializer(serializers.Serializer[Any]):
@@ -439,11 +522,31 @@ class AdminIngredientSerializer(serializers.ModelSerializer[Ingredient]):
 
     class Meta:
         model = Ingredient
-        fields = ["public_id", "key", "sort_order", "translations", "created_at", "updated_at"]
+        fields = ["public_id", "key", "name", "sort_order", "translations", "created_at", "updated_at"]
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
     def get_translations(self, obj: Ingredient) -> list[dict[str, str]]:
         return IngredientTranslationSerializer(obj.translations.all(), many=True).data  # type: ignore[return-value]
+
+    def validate_name(self, value: str) -> str:
+        ingredient_id = self.instance.pk if self.instance else None
+        request = self.context.get("request")
+        if request is None:
+            return value
+        restaurant_id = get_restaurant_id_from_auth(request)
+        if restaurant_id is None:
+            return value
+        qs = Ingredient.objects.filter(
+            restaurant_id=restaurant_id,
+            name__iexact=value.strip(),
+        )
+        if ingredient_id:
+            qs = qs.exclude(pk=ingredient_id)
+        if qs.exists():
+            raise serializers.ValidationError(
+                f'An ingredient with name "{value}" already exists in this restaurant.'
+            )
+        return value
 
     def validate_key(self, value: str) -> str:
         ingredient_id = self.instance.pk if self.instance else None

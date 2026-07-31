@@ -1,7 +1,7 @@
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Count, QuerySet
+from django.db.models import Count, Model, QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers, status, viewsets
@@ -12,27 +12,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
-
-
-def _check_translation_conflict(translation, current_data):
-    """Compare-and-swap guard.  Return a 409 Response if current_data doesn't match
-    the DB, or ``None`` when the request is safe to proceed."""
-    if not current_data:
-        return None
-    conflicts = {}
-    for field, expected in current_data.items():
-        actual = getattr(translation, field)
-        if actual != expected:
-            conflicts[field] = actual
-    if not conflicts:
-        return None
-    return Response(
-        {
-            "detail": "CONFLICT: Translation was modified. Please refresh and try again.",
-            "current": conflicts,
-        },
-        status=status.HTTP_409_CONFLICT,
-    )
 
 from apps.authentication.permissions import IsAdmin
 from common.api import (
@@ -55,6 +34,8 @@ from .models import (
     MenuCategory,
     MenuCategoryTranslation,
     MenuItem,
+    MenuItemAllergen,
+    MenuItemIngredient,
     MenuItemLike,
     MenuItemTranslation,
     MenuTranslation,
@@ -85,6 +66,29 @@ from .serializers import (
     ToggleMenuItemLikeResponseSerializer,
 )
 from .services.localization import get_localized_content, get_restaurant_locale
+
+
+def _check_translation_conflict(translation: Model, current_data: dict[str, Any] | None) -> Response | None:
+    """Compare-and-swap guard.  Return a 409 Response if current_data doesn't match
+    the DB, or ``None`` when the request is safe to proceed."""
+    if not current_data:
+        return None
+    conflicts = {}
+    for field, expected in current_data.items():
+        actual = getattr(translation, field)
+        if actual != expected:
+            conflicts[field] = actual
+    if not conflicts:
+        return None
+    return Response(
+        {
+            "detail": "CONFLICT: Translation was modified. Please refresh and try again.",
+            "current": conflicts,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
 
 
 def _reorder_view(viewset: Any, request: Request) -> Response:
@@ -356,7 +360,8 @@ class AdminMenuCategoryViewSet(
         update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
         serializer = MenuCategoryTranslationSerializer(data={"language_code": lang, **update_data})
         serializer.is_valid(raise_exception=True)
-        translation = services.update_category_translation(category_id=self.get_object().id, **serializer.validated_data)
+        translation = services.update_category_translation(category_id=self.get_object().id,
+                                                           **serializer.validated_data)
         return Response(MenuCategoryTranslationSerializer(translation).data)
 
     @update_translation.mapping.delete
@@ -427,6 +432,22 @@ class AdminMenuItemViewSet(
         # Require the restaurant from auth so a token without one fails as a
         # permission error, not an IntegrityError from saving restaurant_id=None.
         serializer.save(restaurant_id=require_restaurant_id_from_auth(self.request))
+
+    def perform_destroy(self, instance: MenuItem) -> None:
+        allergen_ids = list(instance.item_allergens.values_list("allergen_id", flat=True))
+        ingredient_ids = list(instance.item_ingredients.values_list("ingredient_id", flat=True))
+        with transaction.atomic():
+            instance.delete()
+            services.prune_orphans(
+                entity_model=Allergen,
+                through_model=MenuItemAllergen,
+                removed_ids=allergen_ids,
+            )
+            services.prune_orphans(
+                entity_model=Ingredient,
+                through_model=MenuItemIngredient,
+                removed_ids=ingredient_ids,
+            )
 
     @extend_schema(request=ReorderEntrySerializer(many=True), responses={204: None})
     @action(detail=False, methods=["post"])
@@ -517,13 +538,20 @@ class AdminMenuItemViewSet(
 
 
 @extend_schema(tags=["Menu Admin"])
-class AdminAllergenViewSet(PublicLookupMixin, viewsets.ModelViewSet[Allergen]):
+class AdminAllergenViewSet(
+    RestaurantScopedViewSetMixin[Allergen],
+    viewsets.ModelViewSet[Allergen],
+):
     permission_classes = [IsAdmin]
     queryset = Allergen.objects.all()
     serializer_class = AdminAllergenSerializer
+    restaurant_lookup = "restaurant_id"
 
-    def get_queryset(self) -> QuerySet[Allergen]:
-        return Allergen.objects.all().prefetch_related("translations")
+    def safely_get_queryset(self, qs: QuerySet[Allergen]) -> QuerySet[Allergen]:
+        return qs.prefetch_related("translations")
+
+    def perform_create(self, serializer: BaseSerializer[Allergen]) -> None:
+        serializer.save(restaurant_id=require_restaurant_id_from_auth(self.request))
 
     @action(detail=True, methods=["post"], url_path="translations")
     @extend_schema(
@@ -533,8 +561,16 @@ class AdminAllergenViewSet(PublicLookupMixin, viewsets.ModelViewSet[Allergen]):
     def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = AllergenTranslationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        allergen = self.get_object()
+        locale = get_restaurant_locale(allergen.restaurant_id)
+        if serializer.validated_data["language_code"] == locale:
+            return Response(
+                {"detail": f"Cannot create a translation for the primary language ({locale})."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         translation = services.create_allergen_translation(
-            allergen_public_id=kwargs.get("public_id", ""),
+            allergen_public_id=str(allergen.public_id),
+            restaurant_id=allergen.restaurant_id,
             **serializer.validated_data,
         )
         return Response(AllergenTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
@@ -546,8 +582,19 @@ class AdminAllergenViewSet(PublicLookupMixin, viewsets.ModelViewSet[Allergen]):
     )
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
+        allergen = self.get_object()
+        locale = get_restaurant_locale(allergen.restaurant_id)
+        if lang == locale:
+            return Response(
+                {"detail": f"Cannot update a translation for the primary language ({locale})."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         conflict = _check_translation_conflict(
-            AllergenTranslation.objects.get(allergen__public_id=kwargs.get("public_id", ""), language_code=lang),
+            AllergenTranslation.objects.get(
+                allergen__public_id=allergen.public_id,
+                allergen__restaurant_id=allergen.restaurant_id,
+                language_code=lang,
+            ),
             request.data.get("current"),
         )
         if conflict:
@@ -556,7 +603,8 @@ class AdminAllergenViewSet(PublicLookupMixin, viewsets.ModelViewSet[Allergen]):
         serializer = AllergenTranslationSerializer(data={"language_code": lang, **update_data})
         serializer.is_valid(raise_exception=True)
         translation = services.update_allergen_translation(
-            allergen_public_id=kwargs.get("public_id", ""),
+            allergen_public_id=str(allergen.public_id),
+            restaurant_id=allergen.restaurant_id,
             **serializer.validated_data,
         )
         return Response(AllergenTranslationSerializer(translation).data)
@@ -564,12 +612,21 @@ class AdminAllergenViewSet(PublicLookupMixin, viewsets.ModelViewSet[Allergen]):
     @update_translation.mapping.delete
     def delete_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
-        services.delete_allergen_translation(allergen_public_id=kwargs.get("public_id", ""), language_code=lang)
+        allergen = self.get_object()
+        services.delete_allergen_translation(
+            allergen_public_id=str(allergen.public_id),
+            restaurant_id=allergen.restaurant_id,
+            language_code=lang,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @create_translation.mapping.get
     def list_translations(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        translations = services.get_allergen_translations(allergen_public_id=kwargs.get("public_id", ""))
+        allergen = self.get_object()
+        translations = services.get_allergen_translations(
+            allergen_public_id=str(allergen.public_id),
+            restaurant_id=allergen.restaurant_id,
+        )
         return Response(AllergenTranslationSerializer(translations, many=True).data)
 
 
@@ -594,8 +651,15 @@ class AdminIngredientViewSet(
     def create_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         serializer = IngredientTranslationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        ingredient = self.get_object()
+        locale = get_restaurant_locale(ingredient.restaurant_id)
+        if serializer.validated_data["language_code"] == locale:
+            return Response(
+                {"detail": f"Cannot create a translation for the primary language ({locale})."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         translation = services.create_ingredient_translation(
-            ingredient_id=self.get_object().id,
+            ingredient_id=ingredient.id,
             **serializer.validated_data,
         )
         return Response(IngredientTranslationSerializer(translation).data, status=status.HTTP_201_CREATED)
@@ -607,8 +671,15 @@ class AdminIngredientViewSet(
     )
     def update_translation(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         lang = kwargs.pop("lang")
+        ingredient = self.get_object()
+        locale = get_restaurant_locale(ingredient.restaurant_id)
+        if lang == locale:
+            return Response(
+                {"detail": f"Cannot update a translation for the primary language ({locale})."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         conflict = _check_translation_conflict(
-            IngredientTranslation.objects.get(ingredient_id=self.get_object().id, language_code=lang),
+            IngredientTranslation.objects.get(ingredient_id=ingredient.id, language_code=lang),
             request.data.get("current"),
         )
         if conflict:
@@ -616,7 +687,10 @@ class AdminIngredientViewSet(
         update_data = request.data.get("updated", {k: v for k, v in request.data.items() if k != "current"})
         serializer = IngredientTranslationSerializer(data={"language_code": lang, **update_data})
         serializer.is_valid(raise_exception=True)
-        translation = services.update_ingredient_translation(ingredient_id=self.get_object().id, **serializer.validated_data)
+        translation = services.update_ingredient_translation(
+            ingredient_id=ingredient.id,
+            **serializer.validated_data,
+        )
         return Response(IngredientTranslationSerializer(translation).data)
 
     @update_translation.mapping.delete
@@ -761,25 +835,45 @@ class MenuItemViewSet(
 
 @extend_schema(
     tags=["Menu"],
-    responses={200: serializers.ListSerializer(child=serializers.CharField())},
+    responses={200: serializers.ListSerializer(child=serializers.DictField())},
+    parameters=[
+        OpenApiParameter(
+            name="restaurant",
+            description="Restaurant public UUID",
+            required=True,
+            type=str,
+        ),
+    ],
 )
 class AllergenListView(APIView):
-    """The allowed allergen vocabulary — the single source of truth for clients."""
+    """Allergen vocabulary for a restaurant, localized to the active language."""
 
     permission_classes = [AllowAny]
+    serializer_class = None
 
     def get(self, request: Request) -> Response:
+        from django.http import Http404
+
+        from apps.restaurants.models import Restaurant
+
+        public_id = request.query_params.get("restaurant")
+        if not public_id:
+            raise Http404("restaurant query param is required")
+        try:
+            restaurant_id: int = Restaurant.objects.values_list("id", flat=True).get(public_id=public_id)
+        except Restaurant.DoesNotExist:
+            raise Http404("Restaurant not found.") from None
         lang = getattr(request, "active_language", "uk")
         allergens = (
-            Allergen.objects.all()
+            Allergen.objects.filter(restaurant_id=restaurant_id)
             .prefetch_related("translations")
             .order_by("sort_order")
         )
         result = []
         for a in allergens:
             by_code = {t.language_code: t.name for t in a.translations.all()}
-            name = by_code.get(lang, by_code.get("uk", a.key))
-            result.append(name)
+            name = by_code.get(lang, a.name or a.key)
+            result.append({"key": a.key, "name": name})
         return Response(result)
 
 
@@ -823,6 +917,6 @@ class IngredientListView(APIView):
         result = []
         for ing in ingredients:
             by_code = {t.language_code: t.name for t in ing.translations.all()}
-            name = by_code.get(lang, by_code.get("uk", ing.key))
+            name = by_code.get(lang, ing.name or ing.key)
             result.append({"key": ing.key, "name": name})
         return Response(result)
