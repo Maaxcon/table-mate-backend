@@ -156,7 +156,7 @@ class PublicRestaurantSettingsSerializer(serializers.ModelSerializer[RestaurantS
 class BookingSettingsSerializer(serializers.ModelSerializer[RestaurantSettings]):
     class Meta:
         model = RestaurantSettings
-        fields = ["currency", "timezone", "working_hours"]
+        fields = ["currency", "timezone", "working_hours", "supported_languages"]
         read_only_fields = fields
 
 
