@@ -200,3 +200,29 @@ class BatchUpdateErrorSerializer(serializers.Serializer[dict[str, object]]):
     detail = serializers.CharField()
     code = serializers.CharField(required=False)
     conflicting_reservation_id = serializers.CharField(required=False)
+
+
+class PreorderItemSerializer(serializers.Serializer[dict[str, object]]):
+    name = serializers.CharField()
+    quantity = serializers.IntegerField()
+    unit_price = serializers.CharField()
+    total_price = serializers.CharField()
+
+
+class PreorderDetailSerializer(serializers.Serializer[dict[str, object]]):
+    """A reservation's paid pre-order rounds, combined into one check.
+
+    Response-shape contract for the `preorder` action. Declared (and used to
+    render) so the published schema matches what the endpoint actually
+    returns — without it drf-spectacular falls back to the viewset's
+    ReservationSerializer, and the generated clients are wrong.
+    """
+
+    order_id = serializers.CharField()
+    currency = serializers.CharField()
+    subtotal = serializers.CharField()
+    tax = serializers.CharField()
+    service_charge = serializers.CharField()
+    total = serializers.CharField()
+    can_cancel = serializers.BooleanField()
+    items = PreorderItemSerializer(many=True)

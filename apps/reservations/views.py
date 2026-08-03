@@ -45,7 +45,12 @@ from .selectors import (
     get_session_grace_cutoffs,
     get_unavailable_table_ids,
 )
-from .serializers import BatchUpdateErrorSerializer, BatchUpdateSerializer, ReservationSerializer
+from .serializers import (
+    BatchUpdateErrorSerializer,
+    BatchUpdateSerializer,
+    PreorderDetailSerializer,
+    ReservationSerializer,
+)
 from .services import (
     activate_pending_reservation,
     batch_update_reservations,
@@ -312,10 +317,27 @@ class ReservationViewSet(
         return Response(serializer.data)
 
     @extend_schema(
-        summary="View or cancel this reservation's pre-order",
-        description="GET returns all paid pre-order rounds combined into one check "
-        "(or 204 if none). DELETE cancels every round — only while the kitchen "
-        "hasn't started any of them yet.",
+        methods=["GET"],
+        summary="View this reservation's pre-order",
+        description="Returns all paid pre-order rounds combined into one check, "
+        "or 204 if the booking has none.",
+        responses={
+            200: PreorderDetailSerializer,
+            204: OpenApiResponse(description="No paid pre-order for this reservation."),
+        },
+    )
+    @extend_schema(
+        methods=["DELETE"],
+        summary="Cancel this reservation's pre-order",
+        description="Cancels every paid round (simulated refund) — only while the "
+        "kitchen hasn't started any of them yet.",
+        responses={
+            204: OpenApiResponse(description="Every round was cancelled."),
+            404: OpenApiResponse(description="No pre-order to cancel."),
+            409: OpenApiResponse(
+                description="The kitchen has already started a round (code preorder_not_allowed)."
+            ),
+        },
     )
     @action(detail=True, methods=["get", "delete"], url_path="preorder")
     def preorder(self, request: Request, *args: object, **kwargs: object) -> Response:
@@ -350,7 +372,9 @@ class ReservationViewSet(
         tax = sum((order.tax_total for order in orders), Decimal(0))
         service_charge = sum((order.service_charge for order in orders), Decimal(0))
         total = sum((order.total_amount for order in orders), Decimal(0))
-        return Response(
+        # Rendered through the serializer, not returned as a raw dict, so the
+        # published schema and the actual payload can't drift apart.
+        payload = PreorderDetailSerializer(
             {
                 "order_id": str(orders[-1].public_id),
                 "currency": orders[-1].currency,
@@ -362,6 +386,7 @@ class ReservationViewSet(
                 "items": items,
             }
         )
+        return Response(payload.data)
 
     @extend_schema(
         summary="Available time slots for a table",
