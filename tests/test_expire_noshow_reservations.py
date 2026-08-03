@@ -14,6 +14,7 @@ from apps.orders.models import (
     OrderItem,
     OrderItemStatus,
     OrderPaymentStatus,
+    OrderSource,
     Session,
     SessionStatus,
     Ticket,
@@ -93,6 +94,7 @@ def test_cancels_unstarted_paid_preorder_along_with_the_reservation(
         restaurant=restaurant,
         session=session,
         currency="UAH",
+        source=OrderSource.CUSTOMER_PREORDER,
         payment_status=OrderPaymentStatus.PAID,
         total_amount=Decimal("100.00"),
     )
@@ -137,6 +139,7 @@ def test_skips_reservation_whose_preorder_kitchen_already_started(
         restaurant=restaurant,
         session=session,
         currency="UAH",
+        source=OrderSource.CUSTOMER_PREORDER,
         payment_status=OrderPaymentStatus.PAID,
         total_amount=Decimal("100.00"),
     )
