@@ -1,13 +1,14 @@
 """Cart-session lifecycle: open, ensure-for-table, stale cleanup, and auto-extend."""
 
 import logging
+from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from typing import cast
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
@@ -33,6 +34,7 @@ from ..models import (
     Order,
     OrderItem,
     OrderPaymentStatus,
+    OrderSource,
     Session,
     SessionStatus,
     Ticket,
@@ -546,26 +548,120 @@ def force_close_sessions_past_shift_end(
     return total_closed
 
 
+def _preorder_orders_awaiting_kitchen() -> QuerySet[Order]:
+    """Paid pre-order rounds the kitchen hasn't been handed yet."""
+    return Order.objects.filter(
+        payment_status=OrderPaymentStatus.PAID,
+        source=OrderSource.CUSTOMER_PREORDER,
+        tickets__isnull=True,
+    )
+
+
+def _inject_preorder_orders(
+    order_ids: Iterable[int],
+    *,
+    now: datetime,
+    revalidate: Callable[[Order], bool] | None = None,
+) -> int:
+    """Ticket each of these pre-order Orders and tell the kitchen.
+
+    This is the last step checkout_cart_session does immediately for a live
+    order: create the Ticket, attach it to the order's items, notify the
+    kitchen. Every condition is re-checked under the row lock, since a
+    concurrent injection or a cancellation may have landed since the ids were
+    selected; ``revalidate`` adds the caller's own conditions to that re-check.
+    """
+    injected = 0
+    for order_id in order_ids:
+        with transaction.atomic():
+            order = (
+                Order.objects.select_for_update(skip_locked=True)
+                .select_related("session__table", "session__reservation", "restaurant")
+                .filter(pk=order_id)
+                .first()
+            )
+            if order is None:
+                continue
+            if order.payment_status != OrderPaymentStatus.PAID:
+                continue
+            if order.source != OrderSource.CUSTOMER_PREORDER:
+                continue
+            if Ticket.objects.filter(order=order).exists():
+                continue
+            session = order.session
+            if session.reservation is None:
+                continue
+            if revalidate is not None and not revalidate(order):
+                continue
+
+            ticket = Ticket.objects.create(
+                restaurant=order.restaurant,
+                session=session,
+                order=order,
+                status=TicketStatus.INCOMING,
+                injected_at=now,
+            )
+            items_count = OrderItem.objects.filter(order=order).update(ticket=ticket)
+
+        def _emit_ticket_injected(
+            tk: Ticket = ticket, sess: Session = session, cnt: int = items_count
+        ) -> None:
+            emit_kitchen_ticket_injected(
+                sess.restaurant_id,
+                ticket_id=str(tk.public_id),
+                table_number=sess.table.public_number,
+                items_count=cnt,
+            )
+
+        transaction.on_commit(_emit_ticket_injected)
+        injected += 1
+
+    return injected
+
+
+def inject_preorders_for_reservation(reservation: Reservation) -> int:
+    """Hand the kitchen any pre-order rounds still waiting, because the party just sat down.
+
+    inject_scheduled_preorders only sweeps PENDING reservations due within
+    PREORDER_LEAD_MINUTES, and seating has no early window — a party seated
+    more than that ahead of its booking flips to ACTIVE before the sweep ever
+    matches, and the food would never be cooked. Seating is the other moment
+    the kitchen needs the ticket, so ask for it here as well; rounds the sweep
+    already injected are skipped on their existing Ticket.
+    """
+    order_ids = list(
+        _preorder_orders_awaiting_kitchen()
+        .filter(session__reservation=reservation)
+        .order_by("pk")
+        .values_list("pk", flat=True)
+    )
+    if not order_ids:
+        return 0
+    return _inject_preorder_orders(order_ids, now=timezone.now())
+
+
 def inject_scheduled_preorders(*, batch_size: int = _PREORDER_INJECT_BATCH_SIZE) -> int:
     """Create the kitchen Ticket for paid pre-orders nearing their reservation's start_at.
 
     confirm_and_pay_preorder builds and pays an Order/OrderItems up front but
     leaves them ticket-less, so the kitchen doesn't see them yet. This finds
     paid, ticket-less orders whose reservation is still PENDING and due within
-    PREORDER_LEAD_MINUTES, then does the same last step checkout_cart_session
-    does immediately for a live order: create the Ticket, attach it to the
-    order's items, notify the kitchen.
+    PREORDER_LEAD_MINUTES. A booking seated before this runs is handled by
+    inject_preorders_for_reservation instead.
     """
     now = timezone.now()
     lead_minutes = max(int(getattr(settings, "PREORDER_LEAD_MINUTES", 20)), 0)
     cutoff = now + timedelta(minutes=lead_minutes)
 
-    base = Order.objects.filter(
-        payment_status=OrderPaymentStatus.PAID,
-        tickets__isnull=True,
+    base = _preorder_orders_awaiting_kitchen().filter(
         session__reservation__status=ReservationStatus.PENDING,
         session__reservation__start_at__lte=cutoff,
     )
+
+    def _still_due(order: Order) -> bool:
+        reservation = order.session.reservation
+        assert reservation is not None
+        return reservation.status == ReservationStatus.PENDING and reservation.start_at <= cutoff
 
     total_injected = 0
     last_pk = 0
@@ -574,51 +670,6 @@ def inject_scheduled_preorders(*, batch_size: int = _PREORDER_INJECT_BATCH_SIZE)
         if not batch_ids:
             break
         last_pk = batch_ids[-1]
-
-        for order_id in batch_ids:
-            with transaction.atomic():
-                order = (
-                    Order.objects.select_for_update(skip_locked=True)
-                    .select_related("session__table", "session__reservation", "restaurant")
-                    .filter(pk=order_id)
-                    .first()
-                )
-                if order is None:
-                    continue
-                # Re-validate under the lock — a concurrent call may have
-                # already injected this order, or its reservation may have
-                # been cancelled, between the initial SELECT and this lock.
-                if order.payment_status != OrderPaymentStatus.PAID:
-                    continue
-                if Ticket.objects.filter(order=order).exists():
-                    continue
-                session = order.session
-                reservation = session.reservation
-                if reservation is None or reservation.status != ReservationStatus.PENDING:
-                    continue
-                if reservation.start_at > cutoff:
-                    continue
-
-                ticket = Ticket.objects.create(
-                    restaurant=order.restaurant,
-                    session=session,
-                    order=order,
-                    status=TicketStatus.INCOMING,
-                    injected_at=now,
-                )
-                items_count = OrderItem.objects.filter(order=order).update(ticket=ticket)
-
-            def _emit_ticket_injected(
-                tk: Ticket = ticket, sess: Session = session, cnt: int = items_count
-            ) -> None:
-                emit_kitchen_ticket_injected(
-                    sess.restaurant_id,
-                    ticket_id=str(tk.public_id),
-                    table_number=sess.table.public_number,
-                    items_count=cnt,
-                )
-
-            transaction.on_commit(_emit_ticket_injected)
-            total_injected += 1
+        total_injected += _inject_preorder_orders(batch_ids, now=now, revalidate=_still_due)
 
     return total_injected

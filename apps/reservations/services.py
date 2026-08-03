@@ -12,6 +12,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from apps.authentication.models import RoleCode, User
 from apps.orders.billing import close_reservation_carts, close_visit_session, ensure_visit_session
 from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
+from apps.orders.services.sessions import inject_preorders_for_reservation
 from apps.restaurants.models import RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS, _hhmm_to_minutes
 from common.exceptions import ReservationCancelError, ReservationConflictError, RestaurantClosedError
@@ -564,6 +565,7 @@ def activate_reservation_by_scan(
     reservation.save(update_fields=["status"])
 
     ensure_visit_session(reservation, opened_by=user)
+    inject_preorders_for_reservation(reservation)
 
     restaurant_id = reservation.restaurant_id
     table_id = str(table.public_id)
@@ -709,6 +711,7 @@ def activate_pending_reservation(
     # ensure_visit_session is get-or-create and converts that constraint into
     # a friendly TableOccupiedError as a backstop.
     session = ensure_visit_session(locked, opened_by=actor)
+    inject_preorders_for_reservation(locked)
 
     transaction.on_commit(
         lambda: emit_hall_table_status_changed(
