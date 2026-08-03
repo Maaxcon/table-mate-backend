@@ -1,6 +1,5 @@
 from typing import Any, cast
 
-from django.db import IntegrityError
 from django.db.models import QuerySet
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -143,10 +142,10 @@ class ShiftViewSet(
                 target_dates=serializer.validated_data["target_dates"],
                 employee_ids=[str(e) for e in employee_ids] if employee_ids else None,
             )
-        except IntegrityError:
+        except ValueError as e:
             return Response(
-                {"detail": "Some shifts already exist on target dates."},
-                status=status.HTTP_409_CONFLICT,
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         return Response({"copied": total}, status=status.HTTP_201_CREATED)

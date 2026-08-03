@@ -107,3 +107,9 @@ class RestaurantClosedError(DomainError):
     default_detail = "The restaurant is closed right now."
     default_code = "restaurant_closed"
     default_status_code = HTTPStatus.CONFLICT
+
+
+class ShiftCopyConflictError(DomainError):
+    default_detail = "Some shifts already exist on target dates."
+    default_code = "shift_copy_conflict"
+    default_status_code = HTTPStatus.CONFLICT

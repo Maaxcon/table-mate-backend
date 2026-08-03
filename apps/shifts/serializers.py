@@ -1,15 +1,13 @@
-from datetime import time as time_cls
 from typing import Any
 
 from django.db.models import QuerySet
 from rest_framework import serializers
 
 from apps.authentication.models import RoleCode, User
-from apps.restaurants.selectors import get_working_hours_for_date
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
 from .models import Shift
-from .services import find_overlapping_shifts
+from .services import find_overlapping_shifts, validate_shift_within_working_hours
 
 
 class _EmployeeSlugField(PublicIdRelatedField[User]):
@@ -92,18 +90,15 @@ class ShiftWriteSerializer(serializers.ModelSerializer[Shift]):
         if request is not None and date is not None and start_time is not None and end_time is not None:
             restaurant_id = get_restaurant_id_from_auth(request)
             if restaurant_id is not None:
-                hours = get_working_hours_for_date(restaurant_id, date)
-                if hours is not None:
-                    open_str, close_str = hours
-                    if open_str < close_str:
-                        open_h, open_m = map(int, open_str.split(":"))
-                        close_h, close_m = map(int, close_str.split(":"))
-                        open_time = time_cls(open_h, open_m)
-                        close_time = time_cls(close_h, close_m)
-                        if start_time < open_time or end_time > close_time:
-                            raise serializers.ValidationError(
-                                f"Shift must be within working hours ({open_str}–{close_str})."
-                            )
+                try:
+                    validate_shift_within_working_hours(
+                        restaurant_id=restaurant_id,
+                        date=date,
+                        start_time=start_time,
+                        end_time=end_time,
+                    )
+                except ValueError as e:
+                    raise serializers.ValidationError(str(e)) from e
 
         if employee is not None and date is not None and start_time is not None and end_time is not None:
             restaurant_id = get_restaurant_id_from_auth(request) if request else None

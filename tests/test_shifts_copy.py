@@ -3,6 +3,7 @@ from typing import Any
 import pytest
 
 from apps.authentication.models import RoleCode
+from apps.shifts.models import Shift
 
 pytestmark = [pytest.mark.django_db]
 
@@ -67,7 +68,33 @@ class TestCopyShifts:
 
         assert resp.status_code == 400
 
-    def test_copy_skips_overlapping_shifts(self, api: Any, restaurant: Any, user_factory: Any) -> None:
+    def test_copy_rejects_outside_working_hours(
+        self, api: Any, restaurant: Any, restaurant_settings: Any, user_factory: Any
+    ) -> None:
+        hours = dict(restaurant_settings.working_hours)
+        hours["tue"] = {"open": "18:00", "close": "20:00"}
+        restaurant_settings.working_hours = hours
+        restaurant_settings.save(update_fields=["working_hours"])
+
+        emp = user_factory(role=RoleCode.WAITER)
+        emp.save()
+        emp.restaurant_id = restaurant.id
+        emp.save(update_fields=["restaurant_id"])
+
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        self._create_shift(auth.client, str(emp.public_id), "2026-07-06", start="10:00", end="22:00")
+
+        resp = auth.client.post("/api/shifts/copy/", {
+            "source_date": "2026-07-06",
+            "target_dates": ["2026-07-07"],
+        }, format="json")
+
+        assert resp.status_code == 400
+        assert Shift.objects.filter(date="2026-07-07").count() == 0
+
+    def test_copy_rejects_when_target_date_already_has_shift(
+        self, api: Any, restaurant: Any, user_factory: Any
+    ) -> None:
         emp = user_factory(role=RoleCode.WAITER)
         emp.save()
         emp.restaurant_id = restaurant.id
@@ -82,10 +109,10 @@ class TestCopyShifts:
             "target_dates": ["2026-07-08"],
         }, format="json")
 
-        assert resp.status_code == 201
-        assert resp.data["copied"] == 0
+        assert resp.status_code == 409
+        assert Shift.objects.filter(date="2026-07-08").count() == 1
 
-    def test_copy_skips_partial_overlap(self, api: Any, restaurant: Any, user_factory: Any) -> None:
+    def test_copy_rejects_on_partial_overlap(self, api: Any, restaurant: Any, user_factory: Any) -> None:
         emp = user_factory(role=RoleCode.WAITER)
         emp.save()
         emp.restaurant_id = restaurant.id
@@ -100,10 +127,9 @@ class TestCopyShifts:
             "target_dates": ["2026-07-08"],
         }, format="json")
 
-        assert resp.status_code == 201
-        assert resp.data["copied"] == 0
+        assert resp.status_code == 409
 
-    def test_copy_skips_only_overlapping_on_multi_employee(
+    def test_copy_rejects_whole_copy_when_one_employee_overlaps(
         self, api: Any, restaurant: Any, user_factory: Any
     ) -> None:
         emp1 = user_factory(role=RoleCode.WAITER)
@@ -125,8 +151,8 @@ class TestCopyShifts:
             "target_dates": ["2026-07-08"],
         }, format="json")
 
-        assert resp.status_code == 201
-        assert resp.data["copied"] == 1
+        assert resp.status_code == 409
+        assert Shift.objects.filter(employee=emp2, date="2026-07-08").count() == 0
 
     def test_copy_empty_source_returns_0_copied(self, api: Any, restaurant: Any) -> None:
         auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
