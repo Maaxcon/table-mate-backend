@@ -627,7 +627,15 @@ def cancel_preorder(*, order: Order, user: User | None = None) -> Order:
         refunded = order.total_amount
         currency = order.currency
 
-        OrderItem.objects.filter(order=order).update(status=OrderItemStatus.VOIDED, is_paid=False)
+        # Same audit trail void_order_item writes: a refund is a void, and who
+        # asked for it has to survive log retention. None means the no-show
+        # sweep did it unattended.
+        OrderItem.objects.filter(order=order).update(
+            status=OrderItemStatus.VOIDED,
+            is_paid=False,
+            voided_at=timezone.now(),
+            voided_by=user,
+        )
         order.status = OrderStatus.CANCELLED
         order.payment_status = OrderPaymentStatus.REFUNDED
         order.tax_total = Decimal("0")

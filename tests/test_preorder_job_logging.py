@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from apps.menu.models import MenuItem
 from apps.orders.billing import cancel_preorder, confirm_and_pay_preorder
-from apps.orders.models import CartItem, CartSession, Order
+from apps.orders.models import CartItem, CartSession, Order, OrderItem
 from apps.orders.services import inject_scheduled_preorders
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.reservations.services import expire_noshow_reservations
@@ -89,3 +89,40 @@ def test_expiring_a_no_show_is_recorded(
     assert str(reservation.public_id) in caplog.text
     # The refund the sweep triggered is recorded too, not just the expiry.
     assert "Refunded" in caplog.text
+
+
+def test_a_refund_records_who_asked_for_it(
+    restaurant: Restaurant, table: Table, item: MenuItem, user_factory: Any
+) -> None:
+    """A log line doesn't survive log retention; the void audit fields do.
+
+    cancel_preorder took an actor and only logged it, so there was no
+    queryable answer to "who refunded this order" — the same question
+    void_order_item has always been able to answer.
+    """
+    actor = user_factory()
+    actor.save()
+    _reservation, order = _paid_preorder(restaurant, table, item, start_offset=timedelta(hours=5))
+
+    cancel_preorder(order=order, user=actor)
+
+    voided = OrderItem.objects.filter(order=order)
+    assert voided.count() == 1
+    for order_item in voided:
+        assert order_item.voided_by_id == actor.pk
+        assert order_item.voided_at is not None
+
+
+def test_an_unattended_refund_records_no_actor(
+    restaurant: Restaurant, table: Table, item: MenuItem, settings: Any
+) -> None:
+    # The no-show sweep has no user; voided_by stays null rather than being
+    # attributed to whoever happened to be around.
+    settings.RESERVATION_NO_SHOW_GRACE_MINUTES = 0
+    _reservation, order = _paid_preorder(restaurant, table, item, start_offset=-timedelta(hours=3))
+
+    assert expire_noshow_reservations() == 1
+
+    order_item = OrderItem.objects.get(order=order)
+    assert order_item.voided_by_id is None
+    assert order_item.voided_at is not None
