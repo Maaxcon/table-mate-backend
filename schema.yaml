@@ -290,6 +290,79 @@ paths:
               schema:
                 $ref: '#/components/schemas/Layout'
           description: ''
+  /api/editor/layouts/draft/:
+    get:
+      operationId: editor_layouts_draft_retrieve
+      description: 'GET: load the current admin''s draft (or latest published if no
+        draft). PUT: save a draft (validates same schema as publish, no Table/Zone
+        side effects). DELETE: discard the current draft.'
+      summary: Floor plan draft
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftLayout'
+          description: ''
+        '204':
+          description: No response body
+    put:
+      operationId: editor_layouts_draft_update
+      description: 'GET: load the current admin''s draft (or latest published if no
+        draft). PUT: save a draft (validates same schema as publish, no Table/Zone
+        side effects). DELETE: discard the current draft.'
+      summary: Floor plan draft
+      tags:
+      - Editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishLayout'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublishLayout'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublishLayout'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftLayout'
+          description: ''
+        '204':
+          description: No response body
+    delete:
+      operationId: editor_layouts_draft_destroy
+      description: 'GET: load the current admin''s draft (or latest published if no
+        draft). PUT: save a draft (validates same schema as publish, no Table/Zone
+        side effects). DELETE: discard the current draft.'
+      summary: Floor plan draft
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftLayout'
+          description: ''
+        '204':
+          description: No response body
   /api/editor/layouts/latest/:
     get:
       operationId: editor_layouts_latest_retrieve
@@ -325,6 +398,7 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PublishLayout'
+        required: true
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -1433,6 +1507,27 @@ paths:
                 items:
                   $ref: '#/components/schemas/BillItem'
           description: ''
+  /api/orders/cart/sessions/{session_pk}/call-waiter/:
+    post:
+      operationId: orders_cart_sessions_call_waiter_create
+      description: 'Guest action: ping staff that this table wants a waiter.'
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: Waiter notified.
+        '429':
+          description: Waiter already called recently (code waiter_call_cooldown).
   /api/orders/cart/sessions/{session_pk}/checkout/:
     post:
       operationId: orders_cart_sessions_checkout_create
@@ -4351,6 +4446,28 @@ components:
           format: uuid
       required:
       - reservation
+    DraftLayout:
+      type: object
+      properties:
+        draft_json:
+          allOf:
+          - $ref: '#/components/schemas/PublishLayout'
+          nullable: true
+        is_draft:
+          type: boolean
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        owner_id:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - is_draft
+      - owner_id
+      - updated_at
     EditorTable:
       type: object
       properties:
@@ -6434,6 +6551,10 @@ components:
     PublishLayout:
       type: object
       properties:
+        base_layout_version_id:
+          type: string
+          format: uuid
+          nullable: true
         canvas_cols:
           type: integer
           maximum: 50
@@ -6467,6 +6588,8 @@ components:
             format: uuid
         zones:
           $ref: '#/components/schemas/PendingZone'
+      required:
+      - base_layout_version_id
     Receipt:
       type: object
       properties:

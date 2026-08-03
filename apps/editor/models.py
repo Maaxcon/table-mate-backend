@@ -32,12 +32,8 @@ class Layout(RestaurantScopedModel):
 
 
 class LayoutVersion(models.Model):
-    public_id = models.UUIDField(
-        default=uuid.uuid4, db_index=True, unique=True, editable=False
-    )
-    restaurant = models.ForeignKey(
-        "restaurants.Restaurant", on_delete=models.PROTECT, related_name="layout_versions"
-    )
+    public_id = models.UUIDField(default=uuid.uuid4, db_index=True, unique=True, editable=False)
+    restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.PROTECT, related_name="layout_versions")
     parent_version = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
@@ -65,3 +61,26 @@ class LayoutVersion(models.Model):
 
     def __str__(self) -> str:
         return f"LayoutVersion {self.public_id} for restaurant {self.restaurant_id}"
+
+
+class LayoutDraft(models.Model):
+    restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.CASCADE, related_name="layout_drafts")
+    base_version = models.ForeignKey(
+        LayoutVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts_based_on",
+    )
+    draft_json = models.JSONField(default=dict)
+    owner = models.ForeignKey("authentication.User", on_delete=models.CASCADE)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["restaurant", "owner"], name="editor_layoutdraft_restaurant_owner_unique")
+        ]
+
+    def __str__(self) -> str:
+        return f"LayoutDraft for restaurant {self.restaurant_id}, owner {self.owner_id}"

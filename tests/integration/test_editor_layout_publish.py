@@ -17,10 +17,24 @@ from common.hall_events import emit_hall_layout_published, emit_hall_zone_update
 from tests.conftest import RestaurantFactory, UserFactory
 
 
+class _EditorAPIClient(APIClient):
+    def __init__(self, restaurant_id: int) -> None:
+        super().__init__()
+        self.restaurant_id = restaurant_id
+
+    def post(self, path: str, data: Any = None, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        if path == "/api/editor/layouts/publish/" and isinstance(data, dict) and "base_layout_version_id" not in data:
+            latest = (
+                LayoutVersion.objects.filter(restaurant_id=self.restaurant_id).order_by("-published_at", "-id").first()
+            )
+            data = {**data, "base_layout_version_id": str(latest.public_id) if latest else None}
+        return super().post(path, data, *args, **kwargs)
+
+
 def _admin_api(restaurant_id: int) -> APIClient:
     user = UserFactory.build(role=RoleCode.ADMIN)
     user.save()
-    client = APIClient()
+    client = _EditorAPIClient(restaurant_id)
     access, _ = issue_tokens_with_restaurant(user, restaurant_id)
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
     return client
@@ -283,6 +297,18 @@ class TestPublishEndpoint:
 
         mock_emit.assert_called_once()
 
+    def test_publish_requires_base_version_id(self, restaurant: Any, zone: Any) -> None:
+        user = UserFactory.build(role=RoleCode.ADMIN)
+        user.save()
+        client = APIClient()
+        access, _ = issue_tokens_with_restaurant(user, restaurant.id)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.post("/api/editor/layouts/publish/", _layout_a(str(zone.public_id)), format="json")
+
+        assert response.status_code == 400
+        assert "base_layout_version_id" in response.json()
+
     @pytest.mark.parametrize("role", [RoleCode.WAITER, RoleCode.COOK, RoleCode.CUSTOMER])
     def test_non_admin_gets_forbidden(self, restaurant: Any, role: str) -> None:
         client = _non_admin_api(role, restaurant.id)
@@ -332,6 +358,33 @@ class TestPublishEndpoint:
         assert resp3.status_code == 201
 
         assert LayoutVersion.objects.count() == 3
+
+    def test_stale_base_version_is_rejected_without_changing_live_layout(self, restaurant: Any, zone: Any) -> None:
+        client = _admin_api(restaurant.id)
+        zone_id = str(zone.public_id)
+
+        with patch("apps.editor.services.emit_hall_layout_published"):
+            first = client.post("/api/editor/layouts/publish/", _layout_a(zone_id), format="json")
+            first_version_id = first.json()["public_id"]
+            second = client.post(
+                "/api/editor/layouts/publish/",
+                {**_layout_b(zone_id), "base_layout_version_id": first_version_id},
+                format="json",
+            )
+            stale = client.post(
+                "/api/editor/layouts/publish/",
+                {**_layout_c(zone_id), "base_layout_version_id": first_version_id},
+                format="json",
+            )
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert stale.status_code == 409
+        assert stale.json()["current_layout_version_id"] == second.json()["public_id"]
+        assert LayoutVersion.objects.filter(restaurant=restaurant).count() == 2
+        latest = LayoutVersion.objects.filter(restaurant=restaurant).order_by("-published_at", "-id").first()
+        assert latest is not None
+        assert latest.layout_json == second.json()["layout_json"]
 
     def test_older_rows_remain_unchanged(self, restaurant: Any, zone: Any) -> None:
         zid = str(zone.public_id)
@@ -656,9 +709,7 @@ class TestPublishEndpoint:
         )
         assert response.status_code == 400
 
-    def test_rotation_360_is_accepted_and_normalized_to_zero(
-        self, restaurant: Any, zone: Any
-    ) -> None:
+    def test_rotation_360_is_accepted_and_normalized_to_zero(self, restaurant: Any, zone: Any) -> None:
         # 360 degrees is the same angle as 0 — a bare max_value=359 bound used
         # to reject it outright even though it's a perfectly valid rotation.
         zid = str(zone.public_id)
@@ -676,9 +727,7 @@ class TestPublishEndpoint:
         version = LayoutVersion.objects.get(public_id=response.json()["public_id"])
         assert version.layout_json["tables"][0]["rotation"] == 0
 
-    def test_rotation_extreme_negative_is_normalized_not_stored_raw(
-        self, restaurant: Any, zone: Any
-    ) -> None:
+    def test_rotation_extreme_negative_is_normalized_not_stored_raw(self, restaurant: Any, zone: Any) -> None:
         # No min_value meant an unbounded negative like -1000000 sailed
         # through un-normalized. Normalizing via modulo maps it to its
         # canonical angle instead of storing nonsense.
