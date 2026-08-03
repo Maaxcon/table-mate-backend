@@ -1,4 +1,6 @@
 from datetime import datetime
+from typing import Any
+from uuid import UUID
 
 from django.db.models import QuerySet
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -11,7 +13,7 @@ from rest_framework.response import Response
 from apps.authentication.models import RoleCode
 from apps.authentication.permissions import IsAdmin, IsFloor
 from apps.reservations.models import Reservation
-from apps.restaurants.models import Restaurant, Table
+from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from common.api import (
     PublicLookupMixin,
     PublicRestaurantQueryMixin,
@@ -23,16 +25,54 @@ from common.api import (
 )
 from common.permissions import HasAnyRole
 
-from .models import Layout, LayoutDraft, LayoutVersion
+from .models import Layout, LayoutDraft, LayoutEntityTranslation, LayoutVersion
 from .selectors import get_available_tables
 from .serializers import (
     DraftLayoutSerializer,
     EditorTableSerializer,
+    LayoutEntityTranslationSerializer,
     LayoutSerializer,
     LayoutVersionSerializer,
     PublishLayoutSerializer,
 )
-from .services import LayoutVersionConflictError, TableInUseError, delete_draft, publish_layout, save_draft
+from .services import (
+    LayoutVersionConflictError,
+    TableInUseError,
+    create_layout_entity_translation,
+    delete_draft,
+    delete_layout_entity_translation,
+    get_layout_entity_translations,
+    localize_layout_json,
+    publish_layout,
+    save_draft,
+    update_layout_entity_translation,
+)
+
+
+def _check_translation_conflict(
+    translation: LayoutEntityTranslation, current_data: dict[str, Any] | None
+) -> Response | None:
+    """Compare-and-swap guard matching the menu/zone/table translation endpoints.
+
+    Return a 409 Response when ``current_data`` doesn't match the DB, or ``None``
+    when the request is safe to proceed.
+    """
+    if not current_data:
+        return None
+    conflicts = {}
+    for field, expected in current_data.items():
+        actual = getattr(translation, field)
+        if actual != expected:
+            conflicts[field] = actual
+    if not conflicts:
+        return None
+    return Response(
+        {
+            "detail": "CONFLICT: Translation was modified. Please refresh and try again.",
+            "current": conflicts,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
 
 
 @extend_schema(tags=["Editor"])
@@ -97,11 +137,18 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
         if restaurant_id is None:
             return Response({"layout_json": None, "layout_version_id": None})
 
-        latest = LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
+        latest = self._latest_version(restaurant_id)
+        if latest is None:
+            return Response({"layout_json": None, "layout_version_id": None})
+
+        layout_json = latest.layout_json
+        lang = getattr(request, "active_language", None)
+        if lang:
+            layout_json = localize_layout_json(layout_json, lang, latest.pk)
         return Response(
             {
-                "layout_json": latest.layout_json if latest else None,
-                "layout_version_id": str(latest.public_id) if latest else None,
+                "layout_json": layout_json,
+                "layout_version_id": str(latest.public_id),
             }
         )
 
@@ -215,6 +262,231 @@ class LayoutViewSet(RestaurantScopedViewSetMixin[Layout], viewsets.ReadOnlyModel
         owner_id = request.user.pk
         if restaurant_id is not None and owner_id is not None:
             delete_draft(restaurant_id=restaurant_id, owner_id=owner_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # ── Floor plan entity translations (FR-027..FR-033) ─────────────
+
+    def _latest_version(self, restaurant_id: int) -> LayoutVersion | None:
+        return (
+            LayoutVersion.objects.filter(restaurant_id=restaurant_id)
+            .order_by("-published_at", "-id")
+            .first()
+        )
+
+    def _entity_exists_in_latest(self, version: LayoutVersion, entity_id: str) -> bool:
+        for entity_type in ("thresholds", "portals"):
+            for entity in version.layout_json.get(entity_type, []):
+                if str(entity.get("id")) == entity_id:
+                    return True
+        return False
+
+    def _default_language_for(self, restaurant_id: int) -> str | None:
+        settings = (
+            RestaurantSettings.objects.filter(restaurant_id=restaurant_id)
+            .values_list("locale", flat=True)
+            .first()
+        )
+        return settings
+
+    def _reject_default_language(self, restaurant_id: int, language_code: str) -> Response | None:
+        if self._default_language_for(restaurant_id) == language_code:
+            return Response(
+                {"detail": "Cannot translate the restaurant's primary language."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return None
+
+    def _parse_entity_id(self, raw: str) -> Response | str:
+        try:
+            return str(UUID(raw))
+        except ValueError:
+            return Response(
+                {"detail": "Invalid entity id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @extend_schema(
+        methods=["GET"],
+        summary="List floor plan entity translations",
+        description=(
+            "Returns label translations for thresholds/portals in the latest published layout. "
+            "Table labels are managed via TableTranslation and not included here."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="language",
+                type=str,
+                required=False,
+                description="Filter translations to a single language code.",
+            ),
+        ],
+        responses=LayoutEntityTranslationSerializer(many=True),
+    )
+    @extend_schema(
+        methods=["POST"],
+        summary="Create a floor plan entity translation",
+        description="Stores a label translation for a threshold/portal against the latest published layout version.",
+        request=LayoutEntityTranslationSerializer,
+        responses={201: LayoutEntityTranslationSerializer},
+    )
+    @action(
+        detail=False,
+        methods=["get", "post"],
+        url_path="entity-translations",
+        permission_classes=[IsAdmin],
+    )
+    def entity_translations(self, request: Request) -> Response:
+        if request.method == "POST":
+            return self._create_entity_translation(request)
+        return self._list_entity_translations(request)
+
+    def _list_entity_translations(self, request: Request) -> Response:
+        restaurant_id = require_restaurant_id_from_auth(request)
+        latest = self._latest_version(restaurant_id)
+        if latest is None:
+            return Response([])
+        translations = get_layout_entity_translations(
+            layout_version_id=latest.pk,
+            language_code=request.query_params.get("language"),
+        )
+        return Response(LayoutEntityTranslationSerializer(translations, many=True).data)
+
+    def _create_entity_translation(self, request: Request) -> Response:
+        restaurant_id = require_restaurant_id_from_auth(request)
+        latest = self._latest_version(restaurant_id)
+        if latest is None:
+            return Response(
+                {"detail": "No published layout yet."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = LayoutEntityTranslationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        entity_id = str(serializer.validated_data["entity_id"])
+        language_code = serializer.validated_data["language_code"]
+
+        rejected = self._reject_default_language(restaurant_id, language_code)
+        if rejected is not None:
+            return rejected
+        if not self._entity_exists_in_latest(latest, entity_id):
+            return Response(
+                {"detail": "Entity does not exist in the latest published layout."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if LayoutEntityTranslation.objects.filter(
+            layout_version_id=latest.pk, entity_id=entity_id, language_code=language_code
+        ).exists():
+            return Response(
+                {"detail": "A translation for this entity and language already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        translation = create_layout_entity_translation(
+            layout_version_id=latest.pk,
+            entity_id=entity_id,
+            language_code=language_code,
+            label=serializer.validated_data["label"],
+        )
+        return Response(
+            LayoutEntityTranslationSerializer(translation).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(
+        methods=["PUT"],
+        summary="Update a floor plan entity translation",
+        description=(
+            "Updates a label translation for a threshold/portal. Supports optimistic locking "
+            "via ``current``/``updated`` payloads; a stale ``current`` returns 409 CONFLICT."
+        ),
+        request=LayoutEntityTranslationSerializer,
+        responses={200: LayoutEntityTranslationSerializer},
+    )
+    @extend_schema(
+        methods=["DELETE"],
+        summary="Delete a floor plan entity translation",
+        responses={204: None},
+    )
+    @action(
+        detail=False,
+        methods=["put", "delete"],
+        url_path=r"entity-translations/(?P<entity_id>[^/.]+)/(?P<lang>[^/.]+)",
+        permission_classes=[IsAdmin],
+    )
+    def entity_translation(self, request: Request, entity_id: str, lang: str) -> Response:
+        if request.method == "DELETE":
+            return self._delete_entity_translation(request, entity_id, lang)
+        return self._update_entity_translation(request, entity_id, lang)
+
+    def _update_entity_translation(self, request: Request, entity_id: str, lang: str) -> Response:
+        restaurant_id = require_restaurant_id_from_auth(request)
+        parsed = self._parse_entity_id(entity_id)
+        if isinstance(parsed, Response):
+            return parsed
+        latest = self._latest_version(restaurant_id)
+        if latest is None:
+            return Response(
+                {"detail": "No published layout yet."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        rejected = self._reject_default_language(restaurant_id, lang)
+        if rejected is not None:
+            return rejected
+        if not self._entity_exists_in_latest(latest, parsed):
+            return Response(
+                {"detail": "Entity does not exist in the latest published layout."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        translation = (
+            LayoutEntityTranslation.objects.filter(
+                layout_version_id=latest.pk, entity_id=parsed, language_code=lang
+            ).first()
+        )
+        if translation is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        conflict = _check_translation_conflict(translation, request.data.get("current"))
+        if conflict:
+            return conflict
+        update_data = request.data.get(
+            "updated", {k: v for k, v in request.data.items() if k != "current"}
+        )
+        serializer = LayoutEntityTranslationSerializer(
+            data={"entity_id": parsed, "language_code": lang, **update_data}
+        )
+        serializer.is_valid(raise_exception=True)
+        translation = update_layout_entity_translation(
+            layout_version_id=latest.pk,
+            entity_id=parsed,
+            language_code=lang,
+            label=serializer.validated_data["label"],
+        )
+        return Response(LayoutEntityTranslationSerializer(translation).data)
+
+    def _delete_entity_translation(self, request: Request, entity_id: str, lang: str) -> Response:
+        restaurant_id = require_restaurant_id_from_auth(request)
+        parsed = self._parse_entity_id(entity_id)
+        if isinstance(parsed, Response):
+            return parsed
+        latest = self._latest_version(restaurant_id)
+        if latest is None:
+            return Response(
+                {"detail": "No published layout yet."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        rejected = self._reject_default_language(restaurant_id, lang)
+        if rejected is not None:
+            return rejected
+        if not self._entity_exists_in_latest(latest, parsed):
+            return Response(
+                {"detail": "Entity does not exist in the latest published layout."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        delete_layout_entity_translation(
+            layout_version_id=latest.pk,
+            entity_id=parsed,
+            language_code=lang,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

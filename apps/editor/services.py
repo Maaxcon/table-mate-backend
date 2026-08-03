@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import re
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -434,7 +435,13 @@ def get_layout_entity_translations(
 def localize_layout_json(
     layout_json: dict[str, Any], language_code: str, layout_version_id: int
 ) -> dict[str, Any]:
-    """Apply entity label translations to a layout JSON payload."""
+    """Apply entity label translations to a layout JSON payload.
+
+    Returns a deep copy so the stored ``layout_json`` is never mutated. Only
+    thresholds/portals are localized — table labels live in the DB-backed
+    ``TableTranslation`` rows instead. The normalized ``label`` field is written;
+    readers keep tolerating the legacy ``threshold_label``/``portal_label`` names.
+    """
     translations = LayoutEntityTranslation.objects.filter(
         layout_version_id=layout_version_id,
         language_code=language_code,
@@ -446,7 +453,7 @@ def localize_layout_json(
     if not translation_map:
         return layout_json
 
-    result = dict(layout_json)
+    result = copy.deepcopy(layout_json)
     for entity_type in ("thresholds", "portals"):
         entities = result.get(entity_type, [])
         for entity in entities:

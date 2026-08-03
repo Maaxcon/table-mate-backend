@@ -565,11 +565,15 @@ class TableViewSet(
         tables_serializer = self.get_serializer(tables_qs, many=True)
 
         from apps.editor.models import LayoutVersion
+        from apps.editor.services import localize_layout_json
 
         latest_layout = (
             LayoutVersion.objects.filter(restaurant_id=restaurant_id).order_by("-published_at", "-id").first()
         )
         layout_payload = latest_layout.layout_json if latest_layout else None
+        lang = getattr(request, "active_language", None)
+        if latest_layout is not None and layout_payload and lang:
+            layout_payload = localize_layout_json(layout_payload, lang, latest_layout.pk)
 
         layout_data = selectors.get_layout_data(restaurant_id)
 

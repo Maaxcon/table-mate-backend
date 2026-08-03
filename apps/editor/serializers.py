@@ -8,7 +8,7 @@ from apps.menu.services.localization import get_localized_content
 from apps.restaurants.models import Restaurant, Table, Zone
 from common.api import PublicIdRelatedField
 
-from .models import Layout, LayoutVersion
+from .models import Layout, LayoutEntityTranslation, LayoutVersion
 from .services import localize_layout_json
 
 GRID = 100
@@ -280,13 +280,10 @@ class DraftLayoutSerializer(serializers.Serializer[Any]):
     owner_id = serializers.CharField(read_only=True, allow_null=True, default=None)
 
 
-class LayoutEntityTranslationSerializer(serializers.Serializer[Any]):
-    entity_id = serializers.UUIDField()
-    language_code = serializers.CharField(max_length=10)
-    entity_label = serializers.CharField(max_length=255, source="label")
-
+class LayoutEntityTranslationSerializer(serializers.ModelSerializer[LayoutEntityTranslation]):
     class Meta:
-        fields = ["entity_id", "language_code", "entity_label"]
+        model = LayoutEntityTranslation
+        fields = ["entity_id", "language_code", "label"]
 
 
 class LayoutVersionSerializer(serializers.ModelSerializer[LayoutVersion]):
