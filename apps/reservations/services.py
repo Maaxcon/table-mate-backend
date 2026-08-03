@@ -445,9 +445,21 @@ def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
                 try:
                     cancel_reservation(reservation, actor=None)
                 except ReservationCancelError:
+                    logger.warning(
+                        "No-show %s could not be cancelled and stays pending.",
+                        reservation.public_id,
+                    )
                     continue
+                logger.info(
+                    "Expired no-show %s (booked %s, %s pre-order round(s) refunded).",
+                    reservation.public_id,
+                    reservation.start_at.isoformat(),
+                    len(paid_orders),
+                )
                 total_expired += 1
 
+    if total_expired:
+        logger.info("No-show sweep expired %s reservation(s).", total_expired)
     return total_expired
 
 

@@ -10,6 +10,7 @@ __all__ = [
 ]
 
 
+import logging
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
@@ -55,6 +56,8 @@ from .models import (
     TicketStatus,
 )
 from .services.cart import _broadcast_cart_updated
+
+logger = logging.getLogger(__name__)
 
 
 def _distribute_service_charge(
@@ -609,13 +612,20 @@ def cancel_preorder(*, order: Order, user: User | None = None) -> Order:
     working on it and it's too late to cancel from the guest side.
     """
     with transaction.atomic():
-        order = Order.objects.select_for_update().select_related("session").get(pk=order.pk)
+        order = (
+            Order.objects.select_for_update()
+            .select_related("session__reservation")
+            .get(pk=order.pk)
+        )
         if order.payment_status != OrderPaymentStatus.PAID:
             raise PreorderNotAllowedError("This pre-order isn't paid, so there's nothing to cancel.")
         if Ticket.objects.filter(order=order).exists():
             raise PreorderNotAllowedError(
                 "The kitchen has already started this pre-order — it can't be cancelled."
             )
+
+        refunded = order.total_amount
+        currency = order.currency
 
         OrderItem.objects.filter(order=order).update(status=OrderItemStatus.VOIDED, is_paid=False)
         order.status = OrderStatus.CANCELLED
@@ -627,6 +637,18 @@ def cancel_preorder(*, order: Order, user: User | None = None) -> Order:
             update_fields=["status", "payment_status", "tax_total", "service_charge", "total_amount"]
         )
         _recompute_session_totals(order.session)
+
+        # Money (simulated) moves here, so leave a trail: this runs both from
+        # the guest's own cancel and unattended from the no-show sweep, and a
+        # guest asking where their pre-order went is otherwise unanswerable.
+        logger.info(
+            "Refunded pre-order %s: %s %s, reservation %s, by %s",
+            order.public_id,
+            refunded,
+            currency,
+            order.session.reservation.public_id if order.session.reservation else None,
+            user.pk if user is not None else "system",
+        )
 
     return order
 

@@ -581,6 +581,12 @@ def _inject_preorder_orders(
                 .first()
             )
             if order is None:
+                # skip_locked: the row is either gone or held by another
+                # transaction. Benign on the periodic sweep, which comes back
+                # in a minute — but at seating time this is the whole reason
+                # inject_scheduled_preorders has to cover ACTIVE bookings too,
+                # so say it happened rather than dropping the round in silence.
+                logger.info("Pre-order order id=%s was busy or gone; not ticketed.", order_id)
                 continue
             if order.payment_status != OrderPaymentStatus.PAID:
                 continue
@@ -699,4 +705,8 @@ def inject_scheduled_preorders(*, batch_size: int = _PREORDER_INJECT_BATCH_SIZE)
         last_pk = batch_ids[-1]
         total_injected += _inject_preorder_orders(batch_ids, now=now, revalidate=_still_due)
 
+    # Only when something moved: this runs every 60s, and a "nothing to do"
+    # line each time would bury the ones that matter.
+    if total_injected:
+        logger.info("Handed %s pre-order round(s) to the kitchen.", total_injected)
     return total_injected
