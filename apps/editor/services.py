@@ -294,6 +294,35 @@ def publish_layout(
         published_by=published_by,
     )
 
+    # Copy forward entity translations from the parent version for entities that
+    # still exist in the new layout. The new version's rows are authoritative
+    # ("latest wins"); entities removed from the layout are dropped (FR-028).
+    if parent_version is not None:
+        surviving_ids = {
+            str(entity["id"])
+            for entity in (
+                *layout_json.get("thresholds", []),
+                *layout_json.get("portals", []),
+            )
+            if entity.get("id")
+        }
+        if surviving_ids:
+            parent_translations = LayoutEntityTranslation.objects.filter(
+                layout_version_id=parent_version.pk,
+                entity_id__in=surviving_ids,
+            )
+            LayoutEntityTranslation.objects.bulk_create(
+                [
+                    LayoutEntityTranslation(
+                        layout_version_id=version.pk,
+                        entity_id=t.entity_id,
+                        language_code=t.language_code,
+                        label=t.label,
+                    )
+                    for t in parent_translations
+                ]
+            )
+
     transaction.on_commit(
         lambda: emit_hall_layout_published(
             restaurant_id=restaurant_id,
