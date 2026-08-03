@@ -660,7 +660,8 @@ def inject_scheduled_preorders(*, batch_size: int = _PREORDER_INJECT_BATCH_SIZE)
 
     def _still_due(order: Order) -> bool:
         reservation = order.session.reservation
-        assert reservation is not None
+        if reservation is None:
+            return False
         return reservation.status == ReservationStatus.PENDING and reservation.start_at <= cutoff
 
     total_injected = 0
