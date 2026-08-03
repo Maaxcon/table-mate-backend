@@ -7,10 +7,14 @@ matched the order: the guest had paid, the kitchen never saw the food, and the
 never-served items then blocked close_visit_session at the end of the visit.
 """
 
+import concurrent.futures
+import threading
+import time
 from datetime import timedelta
 from typing import Any
 
 import pytest
+from django.db import connection, transaction
 from django.utils import timezone
 
 from apps.authentication.models import RoleCode
@@ -96,3 +100,55 @@ def test_seating_does_not_double_ticket_an_already_injected_preorder(
     activate_pending_reservation(reservation, actor=actor)
 
     assert Ticket.objects.filter(order=order).count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_preorder_skipped_at_seating_is_still_cooked(
+    restaurant: Restaurant, table: Table, item: MenuItem, user_factory: Any
+) -> None:
+    """The backstop in inject_scheduled_preorders for a skipped round.
+
+    inject_preorders_for_reservation selects with skip_locked, so a round
+    whose Order row is locked at seating time — an in-flight cancel_preorder,
+    say — is silently passed over. The booking is ACTIVE from then on, and a
+    PENDING-only sweep never came back for it: paid for, never cooked, and
+    nothing said so.
+    """
+    actor = user_factory(role=RoleCode.WAITER)
+    actor.save()
+    reservation = _pending_reservation(restaurant, table, start_offset=AHEAD_OF_SWEEP)
+    order = _pay_preorder(restaurant, reservation, item)
+
+    held = threading.Event()
+    release = threading.Event()
+
+    def _hold_the_order_row() -> None:
+        with transaction.atomic():
+            Order.objects.select_for_update().get(pk=order.pk)
+            held.set()
+            release.wait(timeout=5)
+        connection.close()
+
+    def _seat() -> None:
+        assert held.wait(timeout=5)
+        time.sleep(0.3)
+        try:
+            activate_pending_reservation(reservation, actor=actor)
+        finally:
+            release.set()
+            connection.close()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        hold_future = pool.submit(_hold_the_order_row)
+        seat_future = pool.submit(_seat)
+        seat_future.result(timeout=10)
+        hold_future.result(timeout=10)
+
+    reservation.refresh_from_db()
+    assert reservation.status == ReservationStatus.ACTIVE
+    assert not Ticket.objects.filter(order=order).exists(), "seating should have skipped it"
+
+    assert inject_scheduled_preorders() == 1
+
+    ticket = Ticket.objects.get(order=order)
+    assert OrderItem.objects.filter(order=order, ticket=ticket).count() == 1

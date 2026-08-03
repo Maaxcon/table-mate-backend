@@ -602,6 +602,12 @@ def _inject_preorder_orders(
                 injected_at=now,
             )
             items_count = OrderItem.objects.filter(order=order).update(ticket=ticket)
+            logger.info(
+                "Handed pre-order %s to the kitchen as ticket %s (%s items).",
+                order.public_id,
+                ticket.public_id,
+                items_count,
+            )
 
         def _emit_ticket_injected(
             tk: Ticket = ticket, sess: Session = session, cnt: int = items_count
@@ -645,23 +651,43 @@ def inject_scheduled_preorders(*, batch_size: int = _PREORDER_INJECT_BATCH_SIZE)
 
     confirm_and_pay_preorder builds and pays an Order/OrderItems up front but
     leaves them ticket-less, so the kitchen doesn't see them yet. This finds
-    paid, ticket-less orders whose reservation is still PENDING and due within
-    PREORDER_LEAD_MINUTES. A booking seated before this runs is handled by
+    paid, ticket-less orders due within PREORDER_LEAD_MINUTES. A booking
+    seated before this runs is normally handled by
     inject_preorders_for_reservation instead.
+
+    ACTIVE bookings are swept as well as PENDING ones, as a backstop for
+    inject_preorders_for_reservation. That one selects with skip_locked, so a
+    round whose Order row happens to be locked at seating time (an in-flight
+    cancel_preorder, say) is silently passed over — and once the booking is
+    ACTIVE, a PENDING-only sweep never came back for it. The guest had paid,
+    the kitchen never saw the food, and nothing said so.
+
+    The lead window applies only to PENDING rounds. Once the party is seated
+    there is nothing left to wait for, and a booking seated ahead of its slot
+    still has a start_at too far out to match the window.
     """
     now = timezone.now()
     lead_minutes = max(int(getattr(settings, "PREORDER_LEAD_MINUTES", 20)), 0)
     cutoff = now + timedelta(minutes=lead_minutes)
 
     base = _preorder_orders_awaiting_kitchen().filter(
-        session__reservation__status=ReservationStatus.PENDING,
-        session__reservation__start_at__lte=cutoff,
+        Q(
+            session__reservation__status=ReservationStatus.PENDING,
+            session__reservation__start_at__lte=cutoff,
+        )
+        | Q(session__reservation__status=ReservationStatus.ACTIVE)
     )
 
     def _still_due(order: Order) -> bool:
         reservation = order.session.reservation
         if reservation is None:
             return False
+        if reservation.status == ReservationStatus.ACTIVE:
+            logger.warning(
+                "Recovering pre-order %s: its booking was seated before the order was ticketed.",
+                order.public_id,
+            )
+            return True
         return reservation.status == ReservationStatus.PENDING and reservation.start_at <= cutoff
 
     total_injected = 0
