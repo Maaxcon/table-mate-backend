@@ -92,7 +92,7 @@ class GuestFeedbackCreateSerializer(serializers.Serializer[dict[str, object]]):
     overall_rating = serializers.IntegerField(min_value=1, max_value=5)
     service_rating = serializers.IntegerField(min_value=1, max_value=5)
     comment = serializers.CharField(required=False, allow_blank=True, default="")
-    dish_feedback = DishFeedbackInputSerializer(many=True, required=False, default=list)
+    dish_feedback = DishFeedbackInputSerializer(many=True, required=False)
 
     class Meta:
         fields = [

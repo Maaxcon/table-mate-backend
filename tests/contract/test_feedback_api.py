@@ -284,3 +284,119 @@ def test_admin_feedback_list_accepts_valid_filters(
     for params in valid_params:
         response = admin.client.get(list_url, params)
         assert response.status_code == status.HTTP_200_OK, (params, response.status_code)
+
+
+@pytest.mark.django_db
+def test_update_without_dish_feedback_keeps_dish_ratings(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    """Omitting dish_feedback on update must keep existing dish ratings."""
+    now = timezone.now()
+    Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=now - timedelta(minutes=30),
+        end_at=now + timedelta(hours=1),
+        status=ReservationStatus.ACTIVE,
+        type=ReservationType.PRE_BOOKED,
+    )
+    cart = ensure_active_cart_for_table(table=table)
+    guest_id = "guest-1"
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1, guest_identity=guest_id)
+
+    with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
+        order = checkout_cart_session(cart_session=cart, user=None)
+    order.status = OrderStatus.COMPLETED
+    order.save(update_fields=["status"])
+    order.items.update(status=OrderItemStatus.SERVED)
+
+    client = _feedback_client(guest_id)
+    create_response = client.post(
+        reverse("guest-feedback-create"),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 5,
+            "service_rating": 4,
+            "dish_feedback": [{"menu_item": str(item.public_id), "rating": 5}],
+        },
+        format="json",
+    )
+    assert create_response.status_code == status.HTTP_201_CREATED
+    feedback = Feedback.objects.get(order=order)
+    assert feedback.dish_feedback.count() == 1
+
+    update_response = client.put(
+        reverse("guest-feedback-detail", kwargs={"pk": feedback.public_id}),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 3,
+            "service_rating": 3,
+        },
+        format="json",
+    )
+    assert update_response.status_code == status.HTTP_200_OK
+    feedback.refresh_from_db()
+    assert feedback.overall_rating == 3
+    assert list(feedback.dish_feedback.values_list("menu_item_id", "rating")) == [(item.id, 5)]
+
+
+@pytest.mark.django_db
+def test_update_with_empty_dish_feedback_clears_dish_ratings(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    """An explicit empty dish_feedback list on update clears dish ratings."""
+    now = timezone.now()
+    Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=now - timedelta(minutes=30),
+        end_at=now + timedelta(hours=1),
+        status=ReservationStatus.ACTIVE,
+        type=ReservationType.PRE_BOOKED,
+    )
+    cart = ensure_active_cart_for_table(table=table)
+    guest_id = "guest-1"
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1, guest_identity=guest_id)
+
+    with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
+        order = checkout_cart_session(cart_session=cart, user=None)
+    order.status = OrderStatus.COMPLETED
+    order.save(update_fields=["status"])
+    order.items.update(status=OrderItemStatus.SERVED)
+
+    client = _feedback_client(guest_id)
+    create_response = client.post(
+        reverse("guest-feedback-create"),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 5,
+            "service_rating": 4,
+            "dish_feedback": [{"menu_item": str(item.public_id), "rating": 5}],
+        },
+        format="json",
+    )
+    assert create_response.status_code == status.HTTP_201_CREATED
+    feedback = Feedback.objects.get(order=order)
+    assert feedback.dish_feedback.count() == 1
+
+    update_response = client.put(
+        reverse("guest-feedback-detail", kwargs={"pk": feedback.public_id}),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 3,
+            "service_rating": 3,
+            "dish_feedback": [],
+        },
+        format="json",
+    )
+    assert update_response.status_code == status.HTTP_200_OK
+    feedback.refresh_from_db()
+    assert feedback.dish_feedback.count() == 0

@@ -122,31 +122,34 @@ def update_feedback(
     overall_rating: int,
     service_rating: int,
     comment: str,
-    dish_feedback_data: list[dict[str, Any]],
+    dish_feedback_data: list[dict[str, Any]] | None,
 ) -> Feedback:
-    resolved_dish_feedback = _resolve_dish_feedback_data(
-        order=feedback.order,
-        restaurant_id=feedback.restaurant_id,
-        dish_feedback_data=dish_feedback_data,
-    )
-
-    feedback.dish_feedback.all().delete()
     feedback.overall_rating = overall_rating
     feedback.service_rating = service_rating
     feedback.comment = comment
     feedback.save(update_fields=["overall_rating", "service_rating", "comment", "updated_at"])
 
-    DishFeedback.objects.bulk_create(
-        [
-            DishFeedback(
-                feedback=feedback,
-                menu_item=menu_item,
-                rating=item_data["rating"],
-                comment=item_data.get("comment", ""),
-            )
-            for menu_item, item_data in resolved_dish_feedback
-        ],
-    )
+    # Omitted dish_feedback means "keep the existing dish ratings"; only an
+    # explicit list (including []) replaces them.
+    if dish_feedback_data is not None:
+        resolved_dish_feedback = _resolve_dish_feedback_data(
+            order=feedback.order,
+            restaurant_id=feedback.restaurant_id,
+            dish_feedback_data=dish_feedback_data,
+        )
+        feedback.dish_feedback.all().delete()
+        DishFeedback.objects.bulk_create(
+            [
+                DishFeedback(
+                    feedback=feedback,
+                    menu_item=menu_item,
+                    rating=item_data["rating"],
+                    comment=item_data.get("comment", ""),
+                )
+                for menu_item, item_data in resolved_dish_feedback
+            ],
+        )
+
     feedback.refresh_from_db()
     return feedback
 

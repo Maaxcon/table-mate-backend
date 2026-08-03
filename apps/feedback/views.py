@@ -218,7 +218,7 @@ class GuestFeedbackViewSet(
                 overall_rating=serializer.validated_data["overall_rating"],
                 service_rating=serializer.validated_data["service_rating"],
                 comment=serializer.validated_data.get("comment", ""),
-                dish_feedback_data=serializer.validated_data.get("dish_feedback", []),
+                dish_feedback_data=serializer.validated_data.get("dish_feedback"),
             )
         except DomainError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
