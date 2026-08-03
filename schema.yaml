@@ -2117,8 +2117,10 @@ paths:
           enum:
           - closed
           - open
+          - scheduled
           - voided
         description: |-
+          * `scheduled` - Scheduled
           * `open` - Open
           * `closed` - Closed
           * `voided` - Voided
@@ -6778,11 +6780,13 @@ components:
             format: uuid
     SessionStatusEnum:
       enum:
+      - scheduled
       - open
       - closed
       - voided
       type: string
       description: |-
+        * `scheduled` - Scheduled
         * `open` - Open
         * `closed` - Closed
         * `voided` - Voided
