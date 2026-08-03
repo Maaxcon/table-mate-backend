@@ -8,7 +8,8 @@ from django.db import transaction
 from django.db.models import QuerySet
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -344,6 +345,22 @@ class TicketViewSet(
 
 
 @extend_schema(tags=["Orders"])
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="include_served",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "Include served and voided items. Off by default, so the kitchen "
+                    "board only sees outstanding work; the waiter's table overlay sets "
+                    "it to show the full bill."
+                ),
+            )
+        ]
+    )
+)
 class OrderItemViewSet(
     RestaurantScopedViewSetMixin[OrderItem],
     viewsets.ModelViewSet[OrderItem],
@@ -379,14 +396,29 @@ class OrderItemViewSet(
         if restaurant_id is None:
             return qs.none()
         qs = get_kitchen_order_items(restaurant_id)
-        # The kitchen board (queries by order__public_id/ticket) only wants
-        # active work, so served/voided items drop out once handled. The
-        # waiter's table overlay (queries by order__session__public_id) needs
-        # the full bill — served items must stay visible, just no longer
-        # actionable — so skip the exclusion for that view.
-        if self.action == "list" and "order__session__public_id" not in self.request.query_params:
+        if self.action == "list" and not self._wants_served_items():
             qs = qs.exclude(status__in=[OrderItemStatus.SERVED, OrderItemStatus.VOIDED])
         return qs
+
+    def _wants_served_items(self) -> bool:
+        """Whether this list call wants the whole bill, served/voided included.
+
+        The kitchen board only wants outstanding work, so handled items drop
+        off it. The waiter's table overlay needs every line the guest is being
+        charged for — served ones greyed out, but still visible. Callers ask
+        for the second with ``include_served=true``.
+
+        The original signal was the mere presence of an
+        ``order__session__public_id`` filter, which coupled the two views
+        through an undeclared string and meant ``?order__session__public_id=``
+        — empty, matching nothing — silently switched behaviour as well. Still
+        honoured so a client deployed before this change keeps its bill, but it
+        now needs a real value, and it can go once every caller sends the flag.
+        """
+        params = self.request.query_params
+        if params.get("include_served", "").strip().lower() in {"1", "true", "yes"}:
+            return True
+        return bool(params.get("order__session__public_id", "").strip())
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))

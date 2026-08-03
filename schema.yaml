@@ -1714,6 +1714,13 @@ paths:
       operationId: orders_order_items_list
       parameters:
       - in: query
+        name: include_served
+        schema:
+          type: boolean
+        description: Include served and voided items. Off by default, so the kitchen
+          board only sees outstanding work; the waiter's table overlay sets it to
+          show the full bill.
+      - in: query
         name: is_wasted
         schema:
           type: boolean
