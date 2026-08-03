@@ -19,6 +19,7 @@ from .models import (
     OrderItem,
     OrderItemStatus,
     OrderPaymentStatus,
+    OrderSource,
     Session,
     Ticket,
     TicketStatus,
@@ -207,10 +208,15 @@ def get_preorder_orders_for_reservation(reservation: Reservation) -> list[Order]
     payment) — every paid round is still owed and eaten, so callers must
     show them all, not just the latest. Cancelled rounds are excluded since
     they were refunded and no longer owed.
+
+    Scoped by source: an in-visit order on the same reservation is PAID too
+    once the guest settles up, and would otherwise be served back here as a
+    pre-order round the guest could still "cancel".
     """
     return list(
         Order.objects.filter(
             session__reservation=reservation,
+            source=OrderSource.CUSTOMER_PREORDER,
             payment_status=OrderPaymentStatus.PAID,
         )
         .select_related("session")

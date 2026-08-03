@@ -13,6 +13,7 @@ from apps.orders.models import (
     OrderItem,
     OrderItemStatus,
     OrderPaymentStatus,
+    OrderSource,
     Session,
     SessionStatus,
     Ticket,
@@ -50,11 +51,16 @@ def _session(restaurant: Restaurant, table: Table, reservation: Reservation) -> 
     )
 
 
-def _paid_order(restaurant: Restaurant, session: Session) -> Order:
+def _paid_order(
+    restaurant: Restaurant,
+    session: Session,
+    source: str = OrderSource.CUSTOMER_PREORDER,
+) -> Order:
     return Order.objects.create(
         restaurant=restaurant,
         session=session,
         currency="UAH",
+        source=source,
         payment_status=OrderPaymentStatus.PAID,
         total_amount=Decimal("100.00"),
     )
@@ -101,6 +107,23 @@ def test_paid_but_not_yet_injected_is_not_cooking_or_ready(
 
     has_preorder, cooking, ready = _flags(reservation)
     assert has_preorder is True
+    assert cooking is False
+    assert ready is False
+
+
+def test_an_in_visit_order_the_guest_paid_for_is_not_a_preorder(
+    restaurant: Restaurant, table: Table, item: MenuItem
+) -> None:
+    # Every in-visit order flips to PAID when the guest settles the bill, so
+    # payment_status alone reported an eaten meal as a pre-order in progress.
+    reservation = _reservation(restaurant, table)
+    session = _session(restaurant, table, reservation)
+    order = _paid_order(restaurant, session, source=OrderSource.CUSTOMER_PREPAID)
+    _item(restaurant, order, item, OrderItemStatus.IN_PROGRESS)
+    _ticket(restaurant, session, order)
+
+    has_preorder, cooking, ready = _flags(reservation)
+    assert has_preorder is False
     assert cooking is False
     assert ready is False
 

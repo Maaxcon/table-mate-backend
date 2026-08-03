@@ -5,7 +5,16 @@ from django.db.models import Exists, OuterRef, QuerySet
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from apps.orders.models import Order, OrderItem, OrderItemStatus, OrderPaymentStatus, Session, SessionStatus, Ticket
+from apps.orders.models import (
+    Order,
+    OrderItem,
+    OrderItemStatus,
+    OrderPaymentStatus,
+    OrderSource,
+    Session,
+    SessionStatus,
+    Ticket,
+)
 from apps.restaurants.models import Table
 
 from .models import Reservation, ReservationParticipant, ReservationStatus
@@ -18,18 +27,25 @@ def _annotate_has_preorder(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
     it — lets the UI show "paid" vs "being prepared" vs "ready" without a
     second request.
     """
+    # source, not payment_status, is what makes an order a pre-order: every
+    # in-visit order also flips to PAID once the guest settles the bill
+    # (_recompute_order_payment_status), and matching on PAID alone reported a
+    # meal the guest had already eaten as a pre-order still being prepared.
     preorder_paid = Order.objects.filter(
         session__reservation=OuterRef("pk"),
+        source=OrderSource.CUSTOMER_PREORDER,
         payment_status=OrderPaymentStatus.PAID,
     )
     preorder_cooking = Ticket.objects.filter(
         order__session__reservation=OuterRef("pk"),
+        order__source=OrderSource.CUSTOMER_PREORDER,
         order__payment_status=OrderPaymentStatus.PAID,
     )
     # Still-unfinished items on that same pre-order — once none remain (and
     # the ticket exists), the kitchen is done and it's ready to be served.
     preorder_unfinished_items = OrderItem.objects.filter(
         order__session__reservation=OuterRef("pk"),
+        order__source=OrderSource.CUSTOMER_PREORDER,
         order__payment_status=OrderPaymentStatus.PAID,
         status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS],
     )
