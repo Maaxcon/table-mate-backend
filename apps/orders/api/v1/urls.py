@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     CartBillView,
+    CartCallWaiterView,
     CartCheckoutView,
     CartPayView,
     CartSessionItemViewSet,
@@ -45,5 +46,10 @@ urlpatterns = [
         "sessions/<uuid:session_pk>/guest-name/",
         SetGuestNameView.as_view(),
         name="cart-guest-name",
+    ),
+    path(
+        "sessions/<uuid:session_pk>/call-waiter/",
+        CartCallWaiterView.as_view(),
+        name="cart-call-waiter",
     ),
 ]

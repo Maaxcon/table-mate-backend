@@ -92,9 +92,7 @@ class TableEntitySerializer(serializers.Serializer[Any]):
     # The frontend mints a throwaway local id; the backend never parses it as a UUID, it only
     # echoes it back in table_id_map / public_number_map so the client can reconcile after publish.
     # Hence a free-form string, not a UUIDField.
-    _client_id = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True, default=None
-    )
+    _client_id = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
     public_number = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
     x = serializers.IntegerField(min_value=-100)
     y = serializers.IntegerField(min_value=-100)
@@ -112,9 +110,7 @@ class TableEntitySerializer(serializers.Serializer[Any]):
         h = data.get("height")
 
         if shape == "round" and w != h:
-            raise serializers.ValidationError(
-                {"width": "Round tables must have equal width and height."}
-            )
+            raise serializers.ValidationError({"width": "Round tables must have equal width and height."})
         return data
 
 
@@ -133,9 +129,7 @@ class ThresholdEntitySerializer(serializers.Serializer[Any]):
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
     rotation = RotationField()
-    threshold_label = serializers.CharField(
-        max_length=64, required=False, allow_blank=True, default="", source="label"
-    )
+    threshold_label = serializers.CharField(max_length=64, required=False, allow_blank=True, default="", source="label")
     zone_id = serializers.UUIDField()
 
 
@@ -173,19 +167,16 @@ class PendingZoneSerializer(serializers.Serializer[Any]):
 
 
 class PublishLayoutSerializer(serializers.Serializer[Any]):
-    canvas_cols = serializers.IntegerField(
-        min_value=8, max_value=50, required=False, default=DEFAULT_CANVAS_COLS
-    )
-    canvas_rows = serializers.IntegerField(
-        min_value=8, max_value=50, required=False, default=DEFAULT_CANVAS_ROWS
-    )
+    # The editor sends the published layout version it started from. A null
+    # value is valid only when the restaurant has no published layout yet.
+    base_layout_version_id = serializers.UUIDField(allow_null=True)
+    canvas_cols = serializers.IntegerField(min_value=8, max_value=50, required=False, default=DEFAULT_CANVAS_COLS)
+    canvas_rows = serializers.IntegerField(min_value=8, max_value=50, required=False, default=DEFAULT_CANVAS_ROWS)
     tables = TableEntitySerializer(many=True, required=False, default=list)
     obstacles = ObstacleEntitySerializer(many=True, required=False, default=list)
     thresholds = ThresholdEntitySerializer(many=True, required=False, default=list)
     portals = PortalEntitySerializer(many=True, required=False, default=list)
-    deleted_table_ids = serializers.ListField(
-        child=serializers.UUIDField(), required=False, default=list
-    )
+    deleted_table_ids = serializers.ListField(child=serializers.UUIDField(), required=False, default=list)
     zones = PendingZoneSerializer(required=False)
 
     def _apply_canvas_limits(self, canvas_cols: int, canvas_rows: int) -> None:
@@ -236,6 +227,13 @@ class PublishLayoutSerializer(serializers.Serializer[Any]):
         self._apply_canvas_limits(canvas_cols, canvas_rows)
         result: dict[str, Any] = super().to_internal_value(data)
         return result
+
+
+class DraftLayoutSerializer(serializers.Serializer[Any]):
+    draft_json = PublishLayoutSerializer(required=False, allow_null=True)
+    is_draft = serializers.BooleanField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+    owner_id = serializers.CharField(read_only=True, allow_null=True, default=None)
 
 
 class LayoutVersionSerializer(serializers.ModelSerializer[LayoutVersion]):
