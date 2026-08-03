@@ -5119,10 +5119,6 @@ components:
           type: string
           format: uuid
           readOnly: true
-        key:
-          type: string
-          maxLength: 100
-          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 255
@@ -5147,7 +5143,6 @@ components:
           readOnly: true
       required:
       - created_at
-      - key
       - name
       - public_id
       - translations
@@ -5159,10 +5154,6 @@ components:
           type: string
           format: uuid
           readOnly: true
-        key:
-          type: string
-          maxLength: 100
-          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 255
@@ -5187,7 +5178,6 @@ components:
           readOnly: true
       required:
       - created_at
-      - key
       - name
       - public_id
       - translations
@@ -7058,10 +7048,6 @@ components:
           type: string
           format: uuid
           readOnly: true
-        key:
-          type: string
-          maxLength: 100
-          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 255
@@ -7091,10 +7077,6 @@ components:
           type: string
           format: uuid
           readOnly: true
-        key:
-          type: string
-          maxLength: 100
-          pattern: ^[-a-zA-Z0-9_]+$
         name:
           type: string
           maxLength: 255
