@@ -128,10 +128,23 @@ class CopyShiftsSerializer(serializers.Serializer[Any]):
     source_date = serializers.DateField()
     target_dates = serializers.ListField(child=serializers.DateField())
     employee_ids = serializers.ListField(
-        child=serializers.CharField(),
+        child=serializers.UUIDField(),
         required=False,
         allow_empty=True,
     )
+
+
+class ShiftListQuerySerializer(serializers.Serializer[Any]):
+    date = serializers.DateField(required=False)
+    date_from = serializers.DateField(required=False)
+    date_to = serializers.DateField(required=False)
+    employee_id = serializers.UUIDField(required=False)
+
+
+class MonthSummaryQuerySerializer(serializers.Serializer[Any]):
+    year = serializers.IntegerField()
+    month = serializers.IntegerField()
+    employee_id = serializers.UUIDField(required=False)
 
 
 class BatchShiftSerializer(serializers.Serializer[Any]):

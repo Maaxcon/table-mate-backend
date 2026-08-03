@@ -1,4 +1,3 @@
-from datetime import date as date_type
 from typing import Any, cast
 
 from django.db import IntegrityError
@@ -15,6 +14,8 @@ from .models import Shift
 from .selectors import get_month_summary, list_shifts
 from .serializers import (
     CopyShiftsSerializer,
+    MonthSummaryQuerySerializer,
+    ShiftListQuerySerializer,
     ShiftSerializer,
     ShiftWriteSerializer,
 )
@@ -73,39 +74,16 @@ class ShiftViewSet(
         if restaurant_id is None:
             return Response([])
 
-        params = request.query_params
-        date_param = params.get("date")
-        date_from = params.get("date_from")
-        date_to = params.get("date_to")
-        employee_id = params.get("employee_id")
-
-        date_obj: date_type | None = None
-        if date_param:
-            try:
-                date_obj = date_type.fromisoformat(date_param)
-            except (ValueError, TypeError):
-                pass
-
-        date_from_obj: date_type | None = None
-        if date_from:
-            try:
-                date_from_obj = date_type.fromisoformat(date_from)
-            except (ValueError, TypeError):
-                pass
-
-        date_to_obj: date_type | None = None
-        if date_to:
-            try:
-                date_to_obj = date_type.fromisoformat(date_to)
-            except (ValueError, TypeError):
-                pass
+        query_serializer = ShiftListQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        params = query_serializer.validated_data
 
         qs = list_shifts(
             restaurant_id,
-            date=date_obj,
-            date_from=date_from_obj,
-            date_to=date_to_obj,
-            employee_id=employee_id,
+            date=params.get("date"),
+            date_from=params.get("date_from"),
+            date_to=params.get("date_to"),
+            employee_id=str(params["employee_id"]) if params.get("employee_id") else None,
         )
         page = self.paginate_queryset(qs)
         if page is not None:
@@ -157,12 +135,13 @@ class ShiftViewSet(
         serializer = CopyShiftsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        employee_ids = serializer.validated_data.get("employee_ids")
         try:
             total = copy_shifts(
                 restaurant_id=restaurant_id,
                 source_date=serializer.validated_data["source_date"],
                 target_dates=serializer.validated_data["target_dates"],
-                employee_ids=serializer.validated_data.get("employee_ids"),
+                employee_ids=[str(e) for e in employee_ids] if employee_ids else None,
             )
         except IntegrityError:
             return Response(
@@ -178,30 +157,15 @@ class ShiftViewSet(
         if restaurant_id is None:
             return Response({"total_hours": 0.0, "shifts": []})
 
-        year = request.query_params.get("year")
-        month = request.query_params.get("month")
-        employee_id = request.query_params.get("employee_id")
-
-        if not year or not month:
-            return Response(
-                {"detail": "year and month query params are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            year_int = int(year)
-            month_int = int(month)
-        except (ValueError, TypeError):
-            return Response(
-                {"detail": "Invalid year or month."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        query_serializer = MonthSummaryQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        params = query_serializer.validated_data
 
         shifts = get_month_summary(
             restaurant_id,
-            year=year_int,
-            month=month_int,
-            employee_id=employee_id,
+            year=params["year"],
+            month=params["month"],
+            employee_id=str(params["employee_id"]) if params.get("employee_id") else None,
         )
 
         total_hours = sum(s["duration_hours"] for s in shifts)
