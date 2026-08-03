@@ -396,7 +396,13 @@ def pay_session_bill(
         return locked
 
 
+# SCHEDULED may be abandoned but not opened from here: promoting it to OPEN is
+# ensure_visit_session's job, which runs the table's occupancy checks first and
+# flips the reservation to ACTIVE. Without the entry, SCHEDULED falls through to
+# the terminal-state branch and staff get told a booking they can still cancel
+# is terminal.
 _SESSION_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    SessionStatus.SCHEDULED: {SessionStatus.CLOSED, SessionStatus.VOIDED},
     SessionStatus.OPEN: {SessionStatus.CLOSED, SessionStatus.VOIDED},
 }
 
