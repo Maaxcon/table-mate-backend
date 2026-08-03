@@ -79,11 +79,11 @@ def _dish(
 
 
 def _create_allergen(restaurant: Restaurant, name: str) -> Allergen:
-    return Allergen.objects.create(restaurant=restaurant, key=name, name=name, sort_order=0)
+    return Allergen.objects.create(restaurant=restaurant, name=name, sort_order=0)
 
 
 def _create_ingredient(restaurant: Restaurant, name: str) -> Ingredient:
-    return Ingredient.objects.create(restaurant=restaurant, key=name, name=name, sort_order=0)
+    return Ingredient.objects.create(restaurant=restaurant, name=name, sort_order=0)
 
 
 def _link_allergen(item: MenuItem, allergen: Allergen) -> MenuItemAllergen:
