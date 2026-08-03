@@ -60,10 +60,11 @@ As a waiter or cook, I can see my scheduled shifts for a given date range so I k
 **UX Specification**:
 
 - **Page**: My Schedule — accessible from the staff navigation (waiter/cook sidebar or top nav as "My Schedule" or "Shifts").
-- **Layout**: Calendar-month grid view for desktop, single-month scrollable list for mobile. Each day cell shows shift times (e.g., "09:00–17:00"). Current day is highlighted.
+- **Layout**: Calendar-month grid view for desktop, single-month scrollable list for mobile. Each day cell shows the authenticated user's shift times (e.g., "09:00–17:00") and a marker (dot) on days they are scheduled. Current day is highlighted. Selecting a day opens a **day-detail panel** below the calendar.
+- **Day-detail panel (team roster)**: Shows the full roster for the selected day — every employee's name, role, and shift hours, fetched from the restaurant-wide shift list for that date (no `employee_id` filter). The authenticated user's own row is highlighted and labeled "(You)". This team roster is intended: staff can see who else is working on a given day, while the calendar grid itself stays scoped to their own shifts.
 - **Navigation**: Date range picker or prev/next month arrows. Default view loads the current month on entry.
-- **Filter behavior**: On load, the page automatically filters to the authenticated user's shifts (derived from JWT — no manual `employee_id` selection). A "show all" toggle is NOT available for waiter/cook; they only see their own shifts.
-- **Shift card detail**: Tapping/clicking a shift card expands to show employee name (self), date, start_time, end_time, duration_hours, notes.
+- **Filter behavior**: The calendar-month grid filters to the authenticated user's shifts on load (derived from JWT — no manual `employee_id` selection). A "show all" toggle is NOT available for waiter/cook; the team roster is reachable only via the day-detail panel for a single selected day, not as a month-wide view.
+- **Shift card detail**: Tapping/clicking a shift card expands to show employee name, date, start_time, end_time, duration_hours, notes.
 - **Permissions enforcement**: No create/edit/delete UI elements are rendered for waiter/cook. The page is read-only. If the user navigates directly to a shift-edit URL, the frontend should redirect to the list view. Admin users on this page see the Admin Schedule Management page instead.
 - **Empty state**: "No shifts scheduled for this month" with a calendar icon illustration.
 - **Loading state**: Month grid skeleton with 7-column placeholder cells.
@@ -157,7 +158,7 @@ As a staff member (admin, waiter, or cook), I can see total hours per employee f
 - **FR-013**: System SHOULD detect and warn on overlapping shifts for the same employee on the same date.
 - **FR-014**: System SHOULD support recurring shift templates for weekly schedule patterns.
 - **FR-015**: Frontend MUST provide an admin schedule management page at `/shifts` with date/employee filtering, CRUD modals, and role enforcement.
-- **FR-016**: Frontend MUST provide a staff "My Schedule" page showing the authenticated user's shifts in a calendar-month layout (available to waiter/cook only).
+- **FR-016**: Frontend MUST provide a staff "My Schedule" page showing the authenticated user's shifts in a calendar-month layout (available to waiter/cook only), with a day-detail panel listing the full team roster for the selected day.
 - **FR-017**: Frontend MUST provide a "Month Summary" page (all employees for admin, self-only for waiter/cook) with sortable table and month selector.
 - **FR-018**: Frontend MUST enforce role-based UI rendering — waiter/cook see no create/edit/delete controls; admin sees the full management page, not the "My Schedule" view.
 - **FR-019**: Frontend MUST handle and display empty, loading, and error states for all shift-related pages as specified in the UX sections below.
@@ -171,8 +172,8 @@ As a staff member (admin, waiter, or cook), I can see total hours per employee f
 ### Role Access Matrix
 
 - **Admin**: Full CRUD on shifts, copy, month summary.
-- **Waiter**: Read-only — can list shifts (own or filtered), can view month summary for all employees, cannot create/update/delete.
-- **Cook**: Read-only — can list own shifts, can view month summary for all employees, cannot create/update/delete.
+- **Waiter**: Read-only — can list shifts for a date range and/or employee (including the restaurant-wide day roster for the My Schedule panel), can view month summary for all employees, cannot create/update/delete.
+- **Cook**: Read-only — same as waiter: can list shifts for a date range and/or employee (including the restaurant-wide day roster), can view month summary for all employees, cannot create/update/delete.
 - **Customer**: No shift access at all.
 
 ### Key Entities
