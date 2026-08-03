@@ -178,3 +178,54 @@ def test_receipt_owner_can_submit_feedback_for_qr_order(
     feedback = Feedback.objects.get(order=order)
     assert feedback.guest_id == customer.user.id
     assert feedback.guest_identity is None
+
+
+@pytest.mark.django_db
+def test_deleting_user_with_feedback_anonymizes_instead_of_breaking_constraint(
+    api: Any,
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    """User erasure must not abort on feedback_single_owner; ratings survive detached."""
+    customer = api()
+    now = timezone.now()
+    Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        customer=customer.user,
+        guest_count=2,
+        start_at=now - timedelta(minutes=30),
+        end_at=now + timedelta(hours=1),
+        status=ReservationStatus.ACTIVE,
+        type=ReservationType.PRE_BOOKED,
+    )
+    cart = ensure_active_cart_for_table(table=table)
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1, guest_identity="guest-1")
+
+    with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
+        order = checkout_cart_session(cart_session=cart, user=None)
+    order.status = OrderStatus.COMPLETED
+    order.save(update_fields=["status"])
+    order.items.update(status=OrderItemStatus.SERVED)
+
+    response = customer.client.post(
+        reverse("guest-feedback-create"),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 5,
+            "service_rating": 4,
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    feedback = Feedback.objects.get(order=order)
+    assert feedback.guest_id == customer.user.id
+
+    customer.user.delete()
+
+    feedback.refresh_from_db()
+    assert feedback.guest_id is None
+    assert feedback.guest_identity is not None
+    assert feedback.overall_rating == 5
