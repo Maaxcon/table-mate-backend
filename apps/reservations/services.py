@@ -356,8 +356,8 @@ def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
     in progress, so that one reservation is left for a human instead of being
     swept up automatically.
     """
-    from apps.orders.billing import cancel_preorder
-    from apps.orders.models import Order, OrderPaymentStatus
+    from apps.orders.billing import cancel_preorder_rounds
+    from apps.orders.models import Order, OrderPaymentStatus, OrderSource
     from common.exceptions import PreorderNotAllowedError
 
     now = timezone.now()
@@ -388,16 +388,19 @@ def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
                 .order_by("pk")
             )
             for reservation in reservations:
-                paid_orders = Order.objects.filter(
-                    session__reservation=reservation, payment_status=OrderPaymentStatus.PAID
+                paid_orders = list(
+                    Order.objects.filter(
+                        session__reservation=reservation,
+                        source=OrderSource.CUSTOMER_PREORDER,
+                        payment_status=OrderPaymentStatus.PAID,
+                    ).order_by("pk")
                 )
-                kitchen_already_started = False
-                for order in paid_orders:
-                    try:
-                        cancel_preorder(order=order, user=None)
-                    except PreorderNotAllowedError:
-                        kitchen_already_started = True
-                if kitchen_already_started:
+                try:
+                    cancel_preorder_rounds(orders=paid_orders, user=None)
+                except PreorderNotAllowedError:
+                    # Real food is already in progress on at least one round —
+                    # leave the whole booking for a human rather than refunding
+                    # part of it.
                     continue
 
                 try:

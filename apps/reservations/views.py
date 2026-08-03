@@ -21,7 +21,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.billing import cancel_preorder, close_visit_session
+from apps.orders.billing import cancel_preorder_rounds, close_visit_session
 from apps.orders.models import OrderItemStatus, Session, SessionStatus, Ticket
 from apps.orders.selectors import get_preorder_orders_for_reservation
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
@@ -325,8 +325,7 @@ class ReservationViewSet(
         if request.method == "DELETE":
             if not orders:
                 raise NotFound("No pre-order to cancel for this reservation.")
-            for order in orders:
-                cancel_preorder(order=order, user=cast(User, request.user))
+            cancel_preorder_rounds(orders=orders, user=cast(User, request.user))
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         if not orders:

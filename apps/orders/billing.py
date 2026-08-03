@@ -1,5 +1,6 @@
 __all__ = [
     "cancel_preorder",
+    "cancel_preorder_rounds",
     "checkout_cart_session",
     "close_reservation_carts",
     "close_visit_session",
@@ -9,7 +10,7 @@ __all__ = [
 ]
 
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
 from decimal import Decimal
@@ -600,3 +601,21 @@ def cancel_preorder(*, order: Order, user: User | None = None) -> Order:
         _recompute_session_totals(order.session)
 
     return order
+
+
+def cancel_preorder_rounds(*, orders: Sequence[Order], user: User | None = None) -> list[Order]:
+    """Cancel every one of a reservation's pre-order rounds, or none of them.
+
+    A guest can pay for several rounds before arriving, and the kitchen picks
+    them up per round. Cancelling them one at a time refunded the early rounds
+    and then raised on the first ticketed one, leaving the guest told the
+    cancellation failed while a round was already voided and refunded. The
+    whole set is checked and cancelled in one transaction so the caller's
+    error means nothing changed.
+    """
+    with transaction.atomic():
+        if Ticket.objects.filter(order__in=orders).exists():
+            raise PreorderNotAllowedError(
+                "The kitchen has already started this pre-order — it can't be cancelled."
+            )
+        return [cancel_preorder(order=order, user=user) for order in orders]
