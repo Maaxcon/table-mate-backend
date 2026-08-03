@@ -178,6 +178,17 @@ class ToggleMenuItemLikeResponseSerializer(serializers.Serializer[Any]):
     likes_count = serializers.IntegerField(min_value=0)
 
 
+class UpsellSuggestionResponseSerializer(serializers.Serializer[Any]):
+    """Read-only envelope for smart upsell suggestions.
+
+    ``results`` reuses the canonical ``MenuItemSerializer`` so clients render
+    suggestions with the same item component used across the menu.
+    """
+
+    count = serializers.IntegerField(min_value=0)
+    results = MenuItemSerializer(many=True)
+
+
 class ReorderEntrySerializer(serializers.Serializer[Any]):
     """One {public_id, sort_order} pair for a bulk reorder request."""
 
