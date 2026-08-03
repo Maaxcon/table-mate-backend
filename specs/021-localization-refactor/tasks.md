@@ -271,12 +271,13 @@ description: "Task list for Scalable Multi-Language Localization Architecture"
   - Dish deletion prunes unreferenced entries; entries still referenced elsewhere preserved (US-6 AS4)
   - Cross-restaurant isolation (US-7 AS3): pruning one restaurant's entry never touches another's
 - [X] T060 [P] Write tests for public endpoints in `tests/test_vocab_public_endpoints.py`:
-  - `AllergenListView` requires `?restaurant=`, is scoped, returns `[{key, name}]` localized (FR-024)
-  - `IngredientListView` unchanged shape `[{key, name}]` after fallback change
+  - `AllergenListView` requires `?restaurant=`, is scoped, returns `[{public_id, name}]` localized (FR-024)
+  - `IngredientListView` unchanged shape `[{public_id, name}]` after fallback change
 - [X] T061 [P] Update `schema.yaml` in the repo root (run `drf-spectacular` schema export) and regenerate the frontend OpenAPI types (`../table-mate-frontend/schema.yaml` → `src/types/api/types.gen.ts`) so `AdminAllergen`/`AdminIngredient` include `name` and the dish serializer documents name-based `allergens`/`ingredients` (canonical shared-entity contract compatibility per constitution §II)
 - [ ] T062 [P] Extend `specs/021-localization-refactor/quickstart.md` with allergen/ingredient validation scenarios (free-text create/reuse, pruning, per-restaurant scoping) and run the end-to-end validation against a seeded dev DB
 - [X] T063 [P] Run backend quality gates on changed files: `ruff check .`, `bandit`, `pytest` (all `tests/`)
 - [X] T064 [P] Run frontend quality gates in `../table-mate-frontend`: `npx tsc -b` (pre-existing unrelated errors only), `eslint`, `prettier`; rebuild the frontend Docker container (`table-mate-backend_frontend_1`)
+- [X] T065 [P] Remove the vestigial `key` field from `Allergen` and `Ingredient` (`apps/menu/models/__init__.py`), drop `key` from the admin serializers, `_unique_key`, `validate_key`, and the `{key, name}` public endpoint payloads (now `{public_id, name}`, FR-024); enforce `(restaurant, name)` uniqueness via migration `apps/menu/migrations/0026_allergen_ingredient_drop_key.py`; update `seed_menu.py` to match vocabulary by `name`, align Django admin `list_display`, update tests and regenerate `schema.yaml` + frontend types
 
 ---
 
