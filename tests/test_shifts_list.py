@@ -84,6 +84,11 @@ class TestListShifts:
         assert resp.status_code == 200
         assert len(resp.data["results"]) == 0
 
+    def test_list_rejects_invalid_employee_id(self, api: Any, restaurant: Any) -> None:
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        resp = auth.client.get("/api/shifts/", {"employee_id": "me"})
+        assert resp.status_code == 400
+
     def test_list_returns_employee_details(self, api: Any, restaurant: Any, user_factory: Any) -> None:
         emp = user_factory(role=RoleCode.WAITER)
         emp.save()

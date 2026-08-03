@@ -87,6 +87,15 @@ class TestMonthSummary:
         resp = auth.client.get("/api/shifts/month_summary/")
         assert resp.status_code == 400
 
+    def test_month_summary_rejects_invalid_employee_id(self, api: Any, restaurant: Any) -> None:
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        resp = auth.client.get("/api/shifts/month_summary/", {
+            "year": 2026,
+            "month": 7,
+            "employee_id": "me",
+        })
+        assert resp.status_code == 400
+
     def test_staff_can_access_month_summary(self, api: Any, restaurant: Any) -> None:
         auth = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
         resp = auth.client.get("/api/shifts/month_summary/", {"year": 2026, "month": 1})

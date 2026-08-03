@@ -57,6 +57,16 @@ class TestCopyShifts:
         assert resp.status_code == 201
         assert resp.data["copied"] == 1
 
+    def test_copy_rejects_invalid_employee_ids(self, api: Any, restaurant: Any) -> None:
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        resp = auth.client.post("/api/shifts/copy/", {
+            "source_date": "2026-07-01",
+            "target_dates": ["2026-07-08"],
+            "employee_ids": ["me"],
+        }, format="json")
+
+        assert resp.status_code == 400
+
     def test_copy_skips_overlapping_shifts(self, api: Any, restaurant: Any, user_factory: Any) -> None:
         emp = user_factory(role=RoleCode.WAITER)
         emp.save()
