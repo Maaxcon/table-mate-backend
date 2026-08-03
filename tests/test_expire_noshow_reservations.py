@@ -119,11 +119,10 @@ def test_cancels_unstarted_paid_preorder_along_with_the_reservation(
     assert order.payment_status == OrderPaymentStatus.REFUNDED
 
 
-def test_skips_reservation_whose_preorder_kitchen_already_started(
+def _cooked_preorder_noshow(
     restaurant: Restaurant, table: Table, item: MenuItem
-) -> None:
-    # A Ticket exists — real food is already being cooked, so this one is left
-    # for a human instead of being auto-cancelled.
+) -> tuple[Reservation, Session, Order, Ticket, OrderItem]:
+    """A no-show whose paid pre-order the kitchen already picked up."""
     reservation = _pending_reservation(restaurant, table, start_offset=timedelta(minutes=-150))
     session = Session.objects.create(
         restaurant=restaurant,
@@ -143,7 +142,7 @@ def test_skips_reservation_whose_preorder_kitchen_already_started(
         payment_status=OrderPaymentStatus.PAID,
         total_amount=Decimal("100.00"),
     )
-    OrderItem.objects.create(
+    order_item = OrderItem.objects.create(
         restaurant=restaurant,
         order=order,
         menu_item=item,
@@ -154,21 +153,60 @@ def test_skips_reservation_whose_preorder_kitchen_already_started(
         total_price=item.price,
         is_paid=True,
     )
-    Ticket.objects.create(
+    ticket = Ticket.objects.create(
         restaurant=restaurant,
         session=session,
         order=order,
         status=TicketStatus.INCOMING,
         injected_at=timezone.now(),
     )
+    # _inject_preorder_orders attaches the ticket to the order's items.
+    OrderItem.objects.filter(order=order).update(ticket=ticket)
+    order_item.refresh_from_db()
+    return reservation, session, order, ticket, order_item
+
+
+def test_cooked_preorder_noshow_is_completed_not_refunded(
+    restaurant: Restaurant, table: Table, item: MenuItem
+) -> None:
+    # The kitchen already cooked this food, so there is nothing to refund —
+    # but the booking still has to reach a terminal status, or it blocks the
+    # table for every later booking.
+    reservation, session, order, ticket, order_item = _cooked_preorder_noshow(restaurant, table, item)
 
     expired = expire_noshow_reservations()
 
     reservation.refresh_from_db()
     order.refresh_from_db()
-    assert expired == 0
-    assert reservation.status == ReservationStatus.PENDING
+    session.refresh_from_db()
+    ticket.refresh_from_db()
+    order_item.refresh_from_db()
+    assert expired == 1
+    assert reservation.status == ReservationStatus.COMPLETED
     assert order.payment_status == OrderPaymentStatus.PAID
+    assert session.status == SessionStatus.CLOSED
+    # Off the kitchen board, rather than sitting INCOMING forever.
+    assert ticket.status == TicketStatus.BUMPED
+    assert order_item.status == OrderItemStatus.VOIDED
+
+
+def test_cooked_preorder_noshow_stops_blocking_the_table(
+    restaurant: Restaurant, table: Table, item: MenuItem, user_factory: Any
+) -> None:
+    from apps.authentication.models import RoleCode
+    from apps.reservations.services import activate_pending_reservation
+
+    _cooked_preorder_noshow(restaurant, table, item)
+    expire_noshow_reservations()
+
+    actor = user_factory(role=RoleCode.WAITER)
+    actor.save()
+    tonight = _pending_reservation(restaurant, table, start_offset=timedelta(minutes=-5))
+
+    activate_pending_reservation(tonight, actor=actor)
+
+    tonight.refresh_from_db()
+    assert tonight.status == ReservationStatus.ACTIVE
 
 
 def test_closes_lingering_session_when_expiring(restaurant: Restaurant, table: Table) -> None:

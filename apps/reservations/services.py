@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -26,6 +27,8 @@ from common.notification_events import emit_hall_new_reservation_notification
 
 from ..editor.selectors import get_available_tables
 from .models import Reservation, ReservationStatus, ReservationType
+
+logger = logging.getLogger(__name__)
 
 
 def check_availability(
@@ -341,6 +344,35 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
 _NO_SHOW_BATCH_SIZE = 200
 
 
+def _close_out_cooked_noshow(reservation: Reservation) -> None:
+    """End a no-show whose pre-order the kitchen had already cooked.
+
+    The food was made and paid for, so there is nothing to refund — the
+    booking is spent, not cancelled. It still has to reach a terminal status:
+    left PENDING, activate_pending_reservation's "earlier pending reservation"
+    guard blocks every later booking on that table for good, and the cooked
+    ticket sits on the kitchen board forever because no cleanup job looks at a
+    SCHEDULED session.
+
+    Completing (rather than cancelling) keeps the charge and lets
+    close_visit_session snapshot a receipt, so the guest can see what they
+    paid for. force=True voids whatever the kitchen never served and bumps its
+    tickets off the board.
+    """
+    from apps.orders.billing import close_visit_session
+
+    reservation.status = ReservationStatus.COMPLETED
+    reservation.save(update_fields=["status", "updated_at"])
+
+    session = (
+        Session.objects.filter(reservation=reservation).exclude(status=SessionStatus.CLOSED).first()
+    )
+    if session is None:
+        close_reservation_carts(reservation)
+        return
+    close_visit_session(session=session, actor=None, force=True)
+
+
 def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
     """Auto-cancel PENDING reservations nobody seated within grace of start_at.
 
@@ -352,9 +384,10 @@ def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
     guard has no staleness cutoff of its own.
 
     A paid pre-order is cancelled too (refunded — payment here is simulated)
-    unless the kitchen already has a Ticket for it: that's real food already
-    in progress, so that one reservation is left for a human instead of being
-    swept up automatically.
+    unless the kitchen already has a Ticket for it: that food was cooked and
+    isn't refundable, so that booking is completed rather than cancelled (see
+    _close_out_cooked_noshow). Either way it leaves PENDING, which is the
+    point — a booking stuck PENDING blocks its table for good.
     """
     from apps.orders.billing import cancel_preorder_rounds
     from apps.orders.models import Order, OrderPaymentStatus, OrderSource
@@ -398,9 +431,15 @@ def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
                 try:
                     cancel_preorder_rounds(orders=paid_orders, user=None)
                 except PreorderNotAllowedError:
-                    # Real food is already in progress on at least one round —
-                    # leave the whole booking for a human rather than refunding
-                    # part of it.
+                    # Real food was already cooked on at least one round, so
+                    # none of it is refundable — close the booking out instead
+                    # of cancelling it.
+                    logger.info(
+                        "No-show %s had a cooked pre-order; completing instead of cancelling.",
+                        reservation.public_id,
+                    )
+                    _close_out_cooked_noshow(reservation)
+                    total_expired += 1
                     continue
 
                 try:
@@ -689,6 +728,11 @@ def activate_pending_reservation(
         # a booking they have nothing to do with.
         close_visit_session(session=stale_session, actor=None, force=True)
 
+    # Floor the window at the no-show grace: a booking older than that is one
+    # expire_noshow_reservations is about to clear, and must not take the table
+    # out of service in the meantime. Without the floor a single PENDING row
+    # that the sweep can't resolve blocks every later booking on this table.
+    noshow_grace = max(int(getattr(settings, "RESERVATION_NO_SHOW_GRACE_MINUTES", 120)), 0)
     earlier_pending = (
         Reservation.objects.filter(
             restaurant_id=reservation.restaurant_id,
@@ -696,6 +740,7 @@ def activate_pending_reservation(
             status=ReservationStatus.PENDING,
             start_at__lt=reservation.start_at,
             start_at__lte=now,
+            start_at__gt=now - timedelta(minutes=noshow_grace),
         )
         .exclude(id=reservation.id)
         .exists()

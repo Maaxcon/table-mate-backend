@@ -111,12 +111,16 @@ def test_no_show_sweep_keeps_a_partly_cooked_booking_whole(
     second = _pay_round(restaurant, reservation, item)
     _ticket(second)
 
-    assert expire_noshow_reservations() == 0
+    assert expire_noshow_reservations() == 1
 
     first.refresh_from_db()
+    second.refresh_from_db()
     reservation.refresh_from_db()
+    # One round was cooked, so no round is refunded — all or nothing.
     assert first.payment_status == OrderPaymentStatus.PAID
-    assert reservation.status == ReservationStatus.PENDING
+    assert second.payment_status == OrderPaymentStatus.PAID
+    # But the booking still closes out, or it blocks the table for good.
+    assert reservation.status == ReservationStatus.COMPLETED
 
 
 def test_no_show_sweep_refunds_every_round_when_the_kitchen_has_none(
