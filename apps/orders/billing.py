@@ -263,6 +263,31 @@ def _finalize_session_orders_for_history(session: Session) -> None:
 
     for order in orders:
         create_receipt_from_order(order)
+def _void_unserved_items(session: Session) -> int:
+    """Void what a forced close skipped and take its tickets off the kitchen board.
+
+    "Close anyway" means the waiter is telling us this food is not coming.
+    Leaving the items PENDING/IN_PROGRESS kept their tickets live on the
+    kitchen board for a visit that had already ended, and since those tickets
+    never reach COMPLETED the completed column's day filter never aged them
+    out either — with force_close_shift_end_sessions running nightly, they
+    accumulated.
+    """
+    unserved = OrderItem.objects.filter(
+        order__session=session,
+        status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
+    )
+    ticket_ids = set(unserved.exclude(ticket=None).values_list("ticket_id", flat=True))
+    voided = unserved.update(status=OrderItemStatus.VOIDED)
+
+    if ticket_ids:
+        Ticket.objects.filter(pk__in=ticket_ids).exclude(
+            status__in=[TicketStatus.COMPLETED, TicketStatus.BUMPED]
+        ).update(status=TicketStatus.BUMPED)
+
+    return voided
+
+
 def close_visit_session(*, session: Session, actor: User | None = None, force: bool = False) -> Session:
     """End a visit and free the table.
 
@@ -270,7 +295,8 @@ def close_visit_session(*, session: Session, actor: User | None = None, force: b
     still-active CartSession, and sets the reservation end_at to now.
     Checks that all order items are served/voided before allowing close,
     unless `force` is set (used by the end-of-shift cleanup, which closes
-    the table regardless so it doesn't stay wedged past closing).
+    the table regardless so it doesn't stay wedged past closing) — a forced
+    close voids what it skipped rather than leaving it live.
     Idempotent — safe to call on an already-closed session.
     """
     with transaction.atomic():
@@ -285,6 +311,8 @@ def close_visit_session(*, session: Session, actor: User | None = None, force: b
                 raise UnservedItemsError(
                     "Cannot close check: all items must be served or voided first.", count=pending_count
                 )
+            if pending_count:
+                _void_unserved_items(session)
 
             session.status = SessionStatus.CLOSED
             session.save(update_fields=["status"])
