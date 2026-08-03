@@ -137,9 +137,34 @@ The default-locale display name for allergens and ingredients is stored directly
 
 ---
 
+### User Story 9 - Admin Manages Floor Plan Entity Translations via a Layout Tab (Priority: P1)
+
+A restaurant admin manages translations for floor plan entities (tables, thresholds, portals) from a visual **Layout** tab in the Translations section: the published floor plan is rendered, and clicking an entity opens a single modal with a label input for every supported language. The standalone "table" tab is removed — table numbers are translated from the Layout tab instead, reusing the existing `TableTranslation` records.
+
+**Why this priority**: This is the active feature iteration — it completes the localization story for the floor plan and gives admins a spatially-contextual way to manage labels that are otherwise hard to find.
+
+**Independent Test**: Open the Translations → Layout tab, click a portal, add labels in each supported language, save; then request the floor plan in one of those languages and verify the portal label is localized (falling back to the default label otherwise).
+
+**Acceptance Scenarios**:
+
+1. **Given** a restaurant with a published layout, **When** the admin opens Translations → Layout, **Then** the floor plan is rendered and tables, thresholds, and portals are clickable
+2. **Given** a click on a threshold/portal/table, **When** the admin edits the label per supported language and saves, **Then** the translations are stored against the latest published layout version and reflected on the plan
+3. **Given** a table with a `public_number` translation, **When** the admin edits it from the Layout tab, **Then** the same `TableTranslation` record is updated (identical to the removed "table" tab)
+4. **Given** a threshold or portal, **When** the layout is republished, **Then** its existing translations are copied forward to the new version as long as the entity still exists
+5. **Given** a customer/floor-plan request in a non-default language, **When** a translation exists for a plan label, **Then** the localized label is returned; otherwise the default label is returned
+6. **Given** a layout entity that no longer exists in the latest published layout, **When** the admin tries to edit its translations, **Then** the request is rejected
+
+---
+
 ### Edge Cases
 
 - What happens when a translation field is partially filled (some fields translated, others not)? Fallback to default locale content per field.
+- What happens to threshold/portal translations when the layout is republished and an entity was deleted or moved? Translations for entities that no longer exist in the new layout are dropped; surviving entities (matched by stable id) keep their translations via copy-forward.
+- What happens with floor plan entities created before stable ids existed? On the next publish the backend assigns a stable id and the entity becomes translatable; until then it cannot carry translations.
+- What happens when an admin edits the same entity translation concurrently? Updates use optimistic locking (`current`/`updated`) and return a `CONFLICT` error, matching the menu translation endpoints.
+- What happens when the admin tries to translate the restaurant's default language? It is rejected — the default-language label lives on the entity (table `public_number`, threshold/portal `label`).
+- What happens when there is no published layout? The Layout tab shows an empty state; no translations can be managed until a layout is published.
+- What happens when an existing layout JSON has inconsistent label fields (`threshold_label`/`portal_label`/`label`)? Field names are normalized to a single `label` for thresholds and portals; reads tolerate legacy names.
 - How does the system handle language codes that do not match any supported locale? Reject with a clear error message on configuration, silently fallback on read.
 - How are existing untranslated menu items handled after the migration? Existing data is treated as the default locale content; no data loss.
 - What happens during bulk menu import or seed operations? The import creates content in the restaurant's default locale only; translations can be added later.
@@ -178,17 +203,26 @@ The default-locale display name for allergens and ingredients is stored directly
 - **FR-022**: Translation management MUST reject creating or editing a translation for the restaurant's default language
 - **FR-023**: The standard allergen vocabulary MUST be provisioned per restaurant through database migrations, not runtime seed scripts
 - **FR-024**: Public allergen and ingredient vocabulary endpoints MUST be restaurant-scoped and return each entry's public_id and the localized display name
+- **FR-025**: The layout JSON MUST persist a stable unique `id` for every threshold and portal so entity labels can be referenced across layout versions (tables already carry `id` = `public_id`)
+- **FR-026**: Threshold and portal label fields in the layout JSON MUST be normalized to a single `label` field (legacy `threshold_label`/`portal_label` read as aliases)
+- **FR-027**: The system MUST provide admin CRUD endpoints to list/create/update/delete translations for floor plan entities (tables, thresholds, portals), scoped to the latest published layout version
+- **FR-028**: On each layout publish, entity translations MUST be copied forward from the previous version for entities that still exist in the new layout ("latest wins" — rows on the new version are authoritative)
+- **FR-029**: The editor `latest` endpoint and the public restaurant floor-plan `layout` endpoint MUST return localized entity labels when a non-default language is active, falling back to the default labels
+- **FR-030**: The admin Translations section MUST include a Layout tab that renders the published floor plan where clicking a table/threshold/portal opens translation editing for all supported languages in one modal
+- **FR-031**: The standalone "table" translation tab MUST be removed; table translations are managed via the Layout tab and reuse the same `TableTranslation` records
+- **FR-032**: The system MUST reject translations for the restaurant's default language — the default label lives on the entity (table `public_number`, threshold/portal `label`)
+- **FR-033**: The system MUST reject translation writes for entities that do not exist in the latest published layout
 
 ### Non-Functional Requirements
 
 - **NFR-001**: Adding translations MUST NOT require downtime or schema migrations for existing production data
 - **NFR-002**: Read queries for localized content MUST NOT add significant latency compared to current single-language queries
 - **NFR-003**: The translation architecture MUST support at least 10 languages per restaurant without performance degradation
-- **NFR-004**: Admin translation management MUST be accessible via the existing API patterns (not require a separate translation management UI in v1)
+- **NFR-004**: Admin translation management MUST be accessible via the existing API patterns; the admin Translations section (including the Layout tab) is the supported UI for managing translations
 
 ### Canonical Contract Impact
 
-- **Impacted Entities**: Menu, MenuCategory, MenuItem, RestaurantSettings, MenuItemLike (allergens display), Allergen, Ingredient
+- **Impacted Entities**: Menu, MenuCategory, MenuItem, RestaurantSettings, MenuItemLike (allergens display), Allergen, Ingredient, Zone, Table, ZoneTranslation, TableTranslation, LayoutVersion, LayoutEntityTranslation
 - **Contract Delta**:
   - `RestaurantSettings`: Add `supported_languages` (list of language codes), extend `locale` semantics as default language
   - `Menu.name`: Becomes translatable (stored content is default locale)
@@ -198,6 +232,11 @@ The default-locale display name for allergens and ingredients is stored directly
   - `Allergen`: Becomes restaurant-scoped and gains a default-locale `name` field; translations hold only non-default languages
   - `Ingredient`: Gains a default-locale `name` field; translations hold only non-default languages
   - `MenuItem.allergens` / `MenuItem.ingredients` (admin read/write): Carried as display names instead of internal identifiers
+  - `ZoneTranslation` / `TableTranslation`: DB-backed translation tables for zone names and table numbers (stable across layout versions)
+  - `LayoutVersion.layout_json`: Thresholds and portals gain a stable `id` (UUID) and a single normalized `label` field; table entries keep `id` = `public_id`
+  - `LayoutEntityTranslation`: FK to `LayoutVersion` + `entity_id` + `language_code` + `label`, unique per `(layout_version, entity_id, language_code)`
+  - New admin endpoints under `/api/editor/layouts/` to list/create/update/delete floor-plan entity translations against the latest published version
+  - Read endpoints (`/api/editor/layouts/latest/`, restaurant floor-plan `layout`) return localized labels when a non-default language is active
 - **Backend Source of Truth Rule**: Backend selects and returns the correct language content; client never selects translation variant
 
 ### Role Access Matrix
@@ -206,8 +245,8 @@ The default-locale display name for allergens and ingredients is stored directly
 - **Cook Restricted**: Cannot create or modify translations
 - **Waiter**: View menu content in restaurant's configured locale only; no translation management access
 - **Waiter Restricted**: Cannot create or modify translations
-- **Admin**: Full read/write access to all translations for their managed restaurant; full management of their restaurant's allergen and ingredient vocabulary
-- **Admin Restricted**: Cannot set unsupported language codes as default; cannot create translations in the restaurant's default language
+- **Admin**: Full read/write access to all translations for their managed restaurant; full management of their restaurant's allergen and ingredient vocabulary; full management of floor plan entity translations via the Layout tab
+- **Admin Restricted**: Cannot set unsupported language codes as default; cannot create translations in the restaurant's default language (including floor plan entity labels)
 
 ### Key Entities
 
@@ -216,6 +255,9 @@ The default-locale display name for allergens and ingredients is stored directly
 - **Allergen System**: Hardcoded Ukrainian labels in seed data need to be locale-aware
 - **Allergen**: Restaurant-scoped vocabulary entry with a default-locale `name` and translations for non-default languages; automatically created from typed dish-form names and pruned when unreferenced
 - **Ingredient**: Restaurant-scoped vocabulary entry with a default-locale `name` and translations for non-default languages; automatically created from typed dish-form names and pruned when unreferenced
+- **ZoneTranslation / TableTranslation**: DB-backed translation tables for zone names and table numbers; stable across layout versions because they attach to DB rows, not to a layout snapshot
+- **LayoutEntityTranslation**: Stores translated labels for floor plan entities (thresholds/portals, and any entity id in the layout JSON) scoped to a specific `LayoutVersion`; copied forward across publishes for entities that survive
+- **Layout tab**: Admin UI in the Translations section that renders the published floor plan and lets the admin click tables/thresholds/portals to edit labels for all supported languages in one modal
 
 ## Success Criteria
 
@@ -230,15 +272,21 @@ The default-locale display name for allergens and ingredients is stored directly
 - **SC-007**: Removing the last dish reference to an allergen or ingredient deletes the entry automatically, while entries still referenced by another dish are preserved
 - **SC-008**: Two restaurants can each maintain independent allergen vocabularies containing the same names without conflict
 - **SC-009**: Allergen and ingredient names shown in dish forms and customer views are localized display names (never internal identifiers), with the default-locale name stored on the entity as the fallback
+- **SC-010**: An admin can manage translations for every table/threshold/portal on the published floor plan from the Layout tab, in one modal per entity, without leaving the plan
+- **SC-011**: Threshold/portal translations survive a layout republish for entities that still exist (copy-forward), and are dropped for entities that were removed
+- **SC-012**: Customer-facing floor plan labels are returned in the active language with fallback to the default labels; the editor `latest` and floor-plan `layout` endpoints both honor this
 
 ## Assumptions
 
 - The existing `RestaurantSettings.locale` field will be repurposed as the restaurant's default operating language (it currently stores "en" or "uk")
-- Translation management in v1 is API-only; a dedicated admin translation UI is out of scope
+- Translation management is exposed through the API and through the admin Translations section (which includes the menu/zone tabs and the new Layout tab)
 - The system will use the `Accept-Language` HTTP header as the customer's language preference signal
 - Notifications, order data, and operational fields (prices, availability, sort order) are NOT translatable — only display-oriented content fields are in scope
 - The existing Django i18n infrastructure (`USE_I18N = True`) will be leveraged for static/source-level translations (labels, messages, validation errors), while translatable model content uses a separate storage mechanism
-- Frontend integration (language switcher UI, translation management UI) is out of scope for this backend refactoring
+- Frontend integration (language switcher UI) is out of scope for this backend refactoring; the admin Translations section (including the Layout tab) IS in scope as the supported translation management UI
+- Layout entity translations are scoped to the latest published layout version; older `LayoutVersion` snapshots are immutable and never editable
+- Threshold/portal labels stored in the layout JSON are the default-locale source of truth; translations for non-default languages live in `LayoutEntityTranslation`
+- Floor plan table translations reuse `TableTranslation` (DB-backed) rather than `LayoutEntityTranslation`, so they survive layout republishes without copy-forward
 - Staff-operated admin dish forms always enter allergen/ingredient names in the restaurant's default locale (staff requests resolve to the restaurant's configured locale)
 - Name matching for typed allergens/ingredients is scoped to the active language only; the same concept typed in two different languages is treated as two entries (accepted limitation)
 - Vocabulary provisioning happens through data migrations; legacy seed scripts are stale and unused
