@@ -1,8 +1,11 @@
+from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, serializers, status, viewsets
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -13,7 +16,7 @@ from apps.authentication.permissions import IsAdmin
 from common.api import RestaurantScopedViewSetMixin
 from common.exceptions import DomainError
 
-from .models import Feedback
+from .models import Feedback, FeedbackReviewStatus
 from .selectors import get_feedback_list, get_guest_feedback_list
 from .serializers import (
     FeedbackDetailSerializer,
@@ -22,6 +25,56 @@ from .serializers import (
     GuestFeedbackListSerializer,
 )
 from .services import create_feedback, mark_feedback_reviewed, update_feedback
+
+_ALLOWED_ORDERING_FIELDS = frozenset(
+    {"id", "created_at", "updated_at", "overall_rating", "service_rating", "review_status"}
+)
+
+
+def _parse_optional_int(value: str | None, *, field: str) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise ValidationError(f"{field} must be an integer.") from None
+    if not 1 <= parsed <= 5:
+        raise ValidationError(f"{field} must be between 1 and 5.")
+    return parsed
+
+
+def _parse_optional_datetime(value: str | None, *, field: str) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise ValidationError(f"{field} must be a valid ISO-8601 date or datetime.") from None
+
+
+def _parse_optional_uuid(value: str | None, *, field: str) -> str | None:
+    if value is None:
+        return None
+    try:
+        UUID(value)
+    except (ValueError, AttributeError, TypeError):
+        raise ValidationError(f"{field} must be a valid UUID.") from None
+    return value
+
+
+def _parse_ordering(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    fields: list[str] = []
+    for token in value.split(","):
+        field = token.strip()
+        if not field:
+            continue
+        name = field[1:] if field.startswith("-") else field
+        if name not in _ALLOWED_ORDERING_FIELDS:
+            raise ValidationError(f"Invalid ordering field: {field!r}.")
+        fields.append(field)
+    return fields
 
 
 class IsAuthenticatedOrTableGuest(BasePermission):
@@ -50,15 +103,23 @@ class AdminFeedbackViewSet(
 
     def safely_get_queryset(self, qs: QuerySet[Feedback]) -> QuerySet[Feedback]:
         review_status = self.request.query_params.get("review_status")
-        overall_rating_param = self.request.query_params.get("overall_rating")
-        service_rating_param = self.request.query_params.get("service_rating")
-        dish_id = self.request.query_params.get("dish_id")
-        date_from = self.request.query_params.get("date_from")
-        date_to = self.request.query_params.get("date_to")
-        ordering = self.request.query_params.get("ordering")
-
-        overall_rating = int(overall_rating_param) if overall_rating_param is not None else None
-        service_rating = int(service_rating_param) if service_rating_param is not None else None
+        if review_status is not None and review_status not in FeedbackReviewStatus.values:
+            raise ValidationError("review_status must be 'new' or 'reviewed'.")
+        overall_rating = _parse_optional_int(
+            self.request.query_params.get("overall_rating"),
+            field="overall_rating",
+        )
+        service_rating = _parse_optional_int(
+            self.request.query_params.get("service_rating"),
+            field="service_rating",
+        )
+        dish_id = _parse_optional_uuid(self.request.query_params.get("dish_id"), field="dish_id")
+        date_from = _parse_optional_datetime(
+            self.request.query_params.get("date_from"),
+            field="date_from",
+        )
+        date_to = _parse_optional_datetime(self.request.query_params.get("date_to"), field="date_to")
+        ordering = _parse_ordering(self.request.query_params.get("ordering"))
 
         return get_feedback_list(
             queryset=qs,

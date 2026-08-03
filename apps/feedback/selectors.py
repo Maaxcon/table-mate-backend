@@ -14,9 +14,9 @@ def get_feedback_list(
     overall_rating: int | None = None,
     service_rating: int | None = None,
     dish_id: str | None = None,
-    date_from: datetime | str | None = None,
-    date_to: datetime | str | None = None,
-    ordering: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    ordering: list[str] | None = None,
 ) -> QuerySet[Feedback]:
     qs = queryset.select_related("restaurant", "guest", "order").prefetch_related("dish_feedback__menu_item")
 
@@ -34,7 +34,7 @@ def get_feedback_list(
         qs = qs.filter(dish_feedback__menu_item__public_id=dish_id).distinct()
 
     if ordering:
-        qs = qs.order_by(ordering)
+        qs = qs.order_by(*ordering)
     else:
         qs = qs.order_by("-created_at", "-id")
 

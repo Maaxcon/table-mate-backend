@@ -229,3 +229,58 @@ def test_deleting_user_with_feedback_anonymizes_instead_of_breaking_constraint(
     assert feedback.guest_id is None
     assert feedback.guest_identity is not None
     assert feedback.overall_rating == 5
+
+
+@pytest.mark.django_db
+def test_admin_feedback_list_rejects_malformed_filters(
+    api: Any,
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    """Malformed admin filters must return 400, never 500."""
+    admin = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+    list_url = reverse("admin-feedback-list")
+
+    bad_params = [
+        {"overall_rating": "abc"},
+        {"service_rating": "abc"},
+        {"overall_rating": "9"},
+        {"date_from": "not-a-date"},
+        {"date_to": "2023-13-40"},
+        {"dish_id": "not-a-uuid"},
+        {"ordering": "nonexistent_field_xyz"},
+        {"ordering": "guest__email"},
+        {"review_status": "archived"},
+    ]
+    for params in bad_params:
+        response = admin.client.get(list_url, params)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, (params, response.status_code)
+
+
+@pytest.mark.django_db
+def test_admin_feedback_list_accepts_valid_filters(
+    api: Any,
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    """Valid admin filters are accepted and do not error."""
+    admin = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+    list_url = reverse("admin-feedback-list")
+
+    valid_params = [
+        {"overall_rating": "5"},
+        {"date_from": "2023-01-01"},
+        {"date_from": "2023-01-01T00:00:00"},
+        {"dish_id": str(item.public_id)},
+        {"ordering": "-created_at"},
+        {"ordering": "-overall_rating,-id"},
+        {"ordering": "created_at,review_status"},
+        {"review_status": "new"},
+    ]
+    for params in valid_params:
+        response = admin.client.get(list_url, params)
+        assert response.status_code == status.HTTP_200_OK, (params, response.status_code)
