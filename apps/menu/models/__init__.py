@@ -6,7 +6,6 @@ from django.db import models
 
 from common.models import BaseModel, RestaurantScopedModel
 
-from ..allergens import ALLERGEN_KEYS
 from .translations import AllergenTranslation as AllergenTranslation
 from .translations import IngredientTranslation as IngredientTranslation
 from .translations import MenuCategoryTranslation as MenuCategoryTranslation
@@ -21,16 +20,7 @@ def validate_str_list(value: object) -> None:
         raise ValidationError("Must be a list of strings.")
 
 
-def validate_allergens(value: object) -> None:
-    if not isinstance(value, list):
-        raise ValidationError("Must be a list.")
-    invalid = [v for v in value if v not in ALLERGEN_KEYS]
-    if invalid:
-        raise ValidationError(f"Invalid allergens: {invalid}. Choose from: {ALLERGEN_KEYS}")
-
-
 class Allergen(RestaurantScopedModel):
-    key = models.SlugField(max_length=100)
     name = models.CharField(max_length=255)
     sort_order = models.PositiveIntegerField(default=0)
 
@@ -38,17 +28,16 @@ class Allergen(RestaurantScopedModel):
         ordering = ["sort_order", "id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["restaurant", "key"],
-                name="allergen_restaurant_key_unique",
+                fields=["restaurant", "name"],
+                name="allergen_restaurant_name_unique",
             ),
         ]
 
     def __str__(self) -> str:
-        return self.name or self.key
+        return self.name
 
 
 class Ingredient(RestaurantScopedModel):
-    key = models.SlugField(max_length=100)
     name = models.CharField(max_length=255)
     sort_order = models.PositiveIntegerField(default=0)
 
@@ -56,13 +45,13 @@ class Ingredient(RestaurantScopedModel):
         ordering = ["sort_order", "id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["restaurant", "key"],
-                name="ingredient_restaurant_key_unique",
+                fields=["restaurant", "name"],
+                name="ingredient_restaurant_name_unique",
             ),
         ]
 
     def __str__(self) -> str:
-        return self.name or self.key
+        return self.name
 
 
 class Menu(RestaurantScopedModel):
