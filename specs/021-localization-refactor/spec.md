@@ -146,7 +146,7 @@ The default-locale display name for allergens and ingredients is stored directly
 - What happens when a typed allergen/ingredient name differs only in case or whitespace from an existing entry? The existing entry is reused (case-insensitive, trimmed matching).
 - What happens when an admin types the same allergen name in a different language than the existing entry? It is treated as a new entry, since matching is scoped to the active language (documented limitation to keep behavior predictable).
 - What happens when a vocabulary entry is referenced by dishes in more than one restaurant? Entries are restaurant-scoped, so a dish can only ever reference an entry in its own restaurant; pruning is isolated per restaurant.
-- What happens when two typed names resolve to the same internal identifier? The system disambiguates the internal identifier so no entry is lost or overwritten.
+- What happens when two typed names differ only in case or whitespace from existing entries? Entries are matched case-insensitively with trimmed values, so the existing entry is reused and `(restaurant, name)` uniqueness keeps the vocabulary clean.
 - What happens when a dish is deleted while referencing allergens/ingredients? Entries referenced only by that dish are pruned; entries still referenced elsewhere are preserved.
 - How does the system avoid creating a translation for the restaurant's default language? Such requests are rejected, since the default-language content is stored on the entity itself.
 
@@ -177,7 +177,7 @@ The default-locale display name for allergens and ingredients is stored directly
 - **FR-021**: Customer-facing dish responses MUST show allergen and ingredient names in the active language, falling back to the entity's default-locale name
 - **FR-022**: Translation management MUST reject creating or editing a translation for the restaurant's default language
 - **FR-023**: The standard allergen vocabulary MUST be provisioned per restaurant through database migrations, not runtime seed scripts
-- **FR-024**: Public allergen and ingredient vocabulary endpoints MUST be restaurant-scoped and return both the stable key and the localized display name
+- **FR-024**: Public allergen and ingredient vocabulary endpoints MUST be restaurant-scoped and return each entry's public_id and the localized display name
 
 ### Non-Functional Requirements
 
@@ -214,8 +214,8 @@ The default-locale display name for allergens and ingredients is stored directly
 - **RestaurantSettings**: Extends to include `supported_languages` configuration; `locale` becomes the default language for fallback and staff-facing operations
 - **Menu / MenuCategory / MenuItem**: Core menu entities whose display-oriented text fields (name, description, ingredients) become translatable
 - **Allergen System**: Hardcoded Ukrainian labels in seed data need to be locale-aware
-- **Allergen**: Restaurant-scoped vocabulary entry with a default-locale `name`, a stable key, and translations for non-default languages; automatically created from typed dish-form names and pruned when unreferenced
-- **Ingredient**: Restaurant-scoped vocabulary entry with a default-locale `name`, a stable key, and translations for non-default languages; automatically created from typed dish-form names and pruned when unreferenced
+- **Allergen**: Restaurant-scoped vocabulary entry with a default-locale `name` and translations for non-default languages; automatically created from typed dish-form names and pruned when unreferenced
+- **Ingredient**: Restaurant-scoped vocabulary entry with a default-locale `name` and translations for non-default languages; automatically created from typed dish-form names and pruned when unreferenced
 
 ## Success Criteria
 
