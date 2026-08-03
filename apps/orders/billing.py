@@ -165,6 +165,14 @@ def ensure_visit_session(
     down and the table genuinely becomes occupied. Callers are all inside a
     transaction, so the select_for_update below serialises concurrent seatings
     of the same reservation.
+
+    Promotion re-reads table and ends_at from the reservation. A SCHEDULED
+    session can outlive several reschedules — reschedule_reservation and
+    batch_update_reservations only rewrite the Session of an ACTIVE booking, so
+    a pending one moved after its pre-order was paid leaves those two fields
+    stale. Seating on the old table would occupy the wrong one, and a stale
+    ends_at is already past, so close_overdue_visit_sessions would shut the
+    visit on its next run.
     """
     table_id = reservation.table_id
     if table_id is None:
@@ -178,8 +186,19 @@ def ensure_visit_session(
             existing.status = SessionStatus.OPEN
             existing.opened_at = timezone.now()
             existing.opened_by = opened_by
+            existing.table_id = table_id
+            existing.ends_at = reservation.end_at
             with _table_occupied_on_conflict():
-                existing.save(update_fields=["status", "opened_at", "opened_by", "updated_at"])
+                existing.save(
+                    update_fields=[
+                        "status",
+                        "opened_at",
+                        "opened_by",
+                        "table",
+                        "ends_at",
+                        "updated_at",
+                    ]
+                )
         return existing
 
     with _table_occupied_on_conflict():
