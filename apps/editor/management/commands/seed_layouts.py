@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 
 from django.core.management.base import BaseCommand
@@ -45,6 +46,11 @@ def _obs(gx: int, gy: int, gw: int, gh: int, zone: str = "", rotation: int = 0) 
         "rotation": rotation,
         "zone_name": zone,
     }
+
+
+def _entity_id(kind: str, zone: str, label: str, x: int, y: int, w: int, h: int) -> str:
+    key = f"{kind}:{zone}:{label}:{x}:{y}:{w}:{h}"
+    return str(uuid.uuid5(uuid.NAMESPACE_OID, key))
 
 
 def _portal(gx: int, gy: int, gw: int, gh: int, target_zone: str, label: str, zone: str = "") -> dict[str, Any]:
@@ -613,14 +619,24 @@ class Command(BaseCommand):
             portals_payload: list[dict[str, Any]] = []
             for pd in cfg.get("portals", []):
                 tz = zones.get(pd["target_zone_name"])
+                portal_label = pd.get("portal_label") or pd.get("label", "")
                 portals_payload.append(
                     {
+                        "id": _entity_id(
+                            "portal",
+                            pd.get("zone_name", ""),
+                            portal_label,
+                            pd["x"],
+                            pd["y"],
+                            pd["width"],
+                            pd["height"],
+                        ),
                         "x": pd["x"],
                         "y": pd["y"],
                         "width": pd["width"],
                         "height": pd["height"],
                         "target_zone_id": str(tz.public_id) if tz else None,
-                        "portal_label": pd.get("portal_label") or pd.get("label", ""),
+                        "label": portal_label,
                         "zone_id": _zone_id(pd.get("zone_name", "")),
                     }
                 )
@@ -642,6 +658,15 @@ class Command(BaseCommand):
             for thd in cfg.get("thresholds", []):
                 thresholds_payload.append(
                     {
+                        "id": _entity_id(
+                            "threshold",
+                            thd.get("zone_name", ""),
+                            thd.get("label", ""),
+                            thd["x"],
+                            thd["y"],
+                            thd["width"],
+                            thd["height"],
+                        ),
                         "x": thd["x"],
                         "y": thd["y"],
                         "width": thd["width"],

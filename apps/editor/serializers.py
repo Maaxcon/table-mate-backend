@@ -148,23 +148,37 @@ class ObstacleEntitySerializer(serializers.Serializer[Any]):
 
 
 class ThresholdEntitySerializer(serializers.Serializer[Any]):
+    id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    # Opaque client-side correlation handle (same contract as TableEntitySerializer).
+    _client_id = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=None
+    )
     x = serializers.IntegerField(min_value=-100)
     y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
     rotation = RotationField()
-    threshold_label = serializers.CharField(max_length=64, required=False, allow_blank=True, default="", source="label")
+    label = serializers.CharField(  # type: ignore[assignment]
+        max_length=64, required=False, allow_blank=True, default=""
+    )
     zone_id = serializers.UUIDField()
 
 
 class PortalEntitySerializer(serializers.Serializer[Any]):
+    id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    # Opaque client-side correlation handle (same contract as TableEntitySerializer).
+    _client_id = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=None
+    )
     x = serializers.IntegerField(min_value=-100)
     y = serializers.IntegerField(min_value=-100)
     width = serializers.IntegerField(min_value=1)
     height = serializers.IntegerField(min_value=1)
     rotation = RotationField()
     target_zone_id = serializers.UUIDField(required=False, allow_null=True, default=None)
-    portal_label = serializers.CharField(max_length=64, required=False, allow_blank=True, default="", source="label")
+    label = serializers.CharField(  # type: ignore[assignment]
+        max_length=64, required=False, allow_blank=True, default=""
+    )
     zone_id = serializers.UUIDField()
 
 
@@ -236,6 +250,12 @@ class PublishLayoutSerializer(serializers.Serializer[Any]):
                     f.validators.append(MaxValueValidator(max_val))
 
     def to_internal_value(self, data: dict[str, Any]) -> dict[str, Any]:
+        # Normalize legacy threshold_label/portal_label payload keys to the single
+        # canonical ``label`` field (FR-026); newer clients already send ``label``.
+        for entity_type, legacy_key in (("thresholds", "threshold_label"), ("portals", "portal_label")):
+            for entity in data.get(entity_type, []):
+                if "label" not in entity and legacy_key in entity:
+                    entity["label"] = entity[legacy_key]
         canvas_cols = data.get("canvas_cols", DEFAULT_CANVAS_COLS)
         canvas_rows = data.get("canvas_rows", DEFAULT_CANVAS_ROWS)
         try:

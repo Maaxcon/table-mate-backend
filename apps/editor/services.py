@@ -272,6 +272,16 @@ def publish_layout(
             table.save(update_fields=["active", "updated_at"])
         zone.delete()
 
+    # Assign stable UUID ids to thresholds/portals that lack one, so their labels
+    # can be referenced across layout versions (FR-025). Tables already carry
+    # ``id`` = server ``public_id``.
+    for entity in (
+        *layout_data.get("thresholds", []),
+        *layout_data.get("portals", []),
+    ):
+        if not entity.get("id"):
+            entity["id"] = uuid.uuid4()
+
     # Normalize UUID objects (zone_id, target_zone_id, ...) to strings before the
     # layout is written to the JSONField.
     layout_json = _to_jsonable(layout_data)
