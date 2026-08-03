@@ -363,6 +363,149 @@ paths:
           description: ''
         '204':
           description: No response body
+  /api/editor/layouts/entity-translations/:
+    get:
+      operationId: editor_layouts_entity_translations_list
+      description: Returns label translations for thresholds/portals in the latest
+        published layout. Table labels are managed via TableTranslation and not included
+        here.
+      summary: List floor plan entity translations
+      parameters:
+      - in: query
+        name: language
+        schema:
+          type: string
+        description: Filter translations to a single language code.
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: published_at
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: published_by
+        schema:
+          type: integer
+      - in: query
+        name: version
+        schema:
+          type: integer
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLayoutEntityTranslationList'
+          description: ''
+    post:
+      operationId: editor_layouts_entity_translations_create
+      description: Stores a label translation for a threshold/portal against the latest
+        published layout version.
+      summary: Create a floor plan entity translation
+      tags:
+      - Editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LayoutEntityTranslation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LayoutEntityTranslation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LayoutEntityTranslation'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LayoutEntityTranslation'
+          description: ''
+  /api/editor/layouts/entity-translations/{entity_id}/{lang}/:
+    put:
+      operationId: editor_layouts_entity_translations_update
+      description: Updates a label translation for a threshold/portal. Supports optimistic
+        locking via ``current``/``updated`` payloads; a stale ``current`` returns
+        409 CONFLICT.
+      summary: Update a floor plan entity translation
+      parameters:
+      - in: path
+        name: entity_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      tags:
+      - Editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LayoutEntityTranslation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LayoutEntityTranslation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LayoutEntityTranslation'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LayoutEntityTranslation'
+          description: ''
+    delete:
+      operationId: editor_layouts_entity_translations_destroy
+      summary: Delete a floor plan entity translation
+      parameters:
+      - in: path
+        name: entity_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      tags:
+      - Editor
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/editor/layouts/latest/:
     get:
       operationId: editor_layouts_latest_retrieve
@@ -6148,6 +6291,22 @@ components:
       - restaurant
       - updated_at
       - version
+    LayoutEntityTranslation:
+      type: object
+      properties:
+        entity_id:
+          type: string
+          format: uuid
+        language_code:
+          type: string
+          maxLength: 10
+        label:
+          type: string
+          maxLength: 255
+      required:
+      - entity_id
+      - label
+      - language_code
     LayoutResponse:
       type: object
       properties:
@@ -6900,6 +7059,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Employee'
+    PaginatedLayoutEntityTranslationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LayoutEntityTranslation'
     PaginatedLayoutList:
       type: object
       required:
@@ -8148,6 +8330,14 @@ components:
     PortalEntity:
       type: object
       properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        _client_id:
+          type: string
+          nullable: true
+          title: ' client id'
         x:
           type: integer
           minimum: -100
@@ -8167,7 +8357,7 @@ components:
           type: string
           format: uuid
           nullable: true
-        portal_label:
+        label:
           type: string
           default: ''
           maxLength: 64
@@ -9059,6 +9249,14 @@ components:
     ThresholdEntity:
       type: object
       properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        _client_id:
+          type: string
+          nullable: true
+          title: ' client id'
         x:
           type: integer
           minimum: -100
@@ -9074,7 +9272,7 @@ components:
         rotation:
           type: integer
           default: 0
-        threshold_label:
+        label:
           type: string
           default: ''
           maxLength: 64
