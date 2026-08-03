@@ -4,6 +4,7 @@ from typing import Any, TypedDict
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from apps.menu.allergens import ALLERGEN_LABELS
 from apps.menu.models import (
     Allergen,
     Ingredient,
@@ -41,22 +42,13 @@ _ALLERGEN_RULES: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 
-def _slugify(value: str) -> str:
-    import re
-
-    value = value.lower().strip()
-    value = re.sub(r"[^a-z0-9а-яіїєґ'\u0301]+", "-", value)
-    value = value.strip("-")
-    return value[:100] or "ingredient"
-
-
 def _infer_allergens(ingredients: list[str]) -> list[str]:
-    """Return list of allergen keys inferred from ingredient keywords."""
+    """Return list of allergen display names (default locale) inferred from ingredient keywords."""
     allergens: list[str] = []
     normalized = " ".join(ing.lower() for ing in ingredients)
     for allergen_key, needles in _ALLERGEN_RULES:
         if any(needle in normalized for needle in needles):
-            allergens.append(allergen_key)
+            allergens.append(ALLERGEN_LABELS[allergen_key]["uk"])
     return allergens
 
 
@@ -692,11 +684,10 @@ class Command(BaseCommand):
                         # Sync ingredients via M2M
                         item.item_ingredients.all().delete()
                         for sort_order, name in enumerate(ingredient_names):
-                            key = _slugify(name)
                             ing, _ = Ingredient.objects.get_or_create(
                                 restaurant=restaurant,
-                                key=key,
-                                defaults={"name": name, "sort_order": sort_order},
+                                name=name,
+                                defaults={"sort_order": sort_order},
                             )
                             IngredientTranslation.objects.get_or_create(
                                 ingredient=ing,
@@ -711,11 +702,11 @@ class Command(BaseCommand):
 
                         # Sync allergens via M2M
                         item.item_allergens.all().delete()
-                        allergen_keys = _infer_allergens(ingredient_names)
-                        for sort_order, key in enumerate(allergen_keys):
+                        allergen_names = _infer_allergens(ingredient_names)
+                        for sort_order, name in enumerate(allergen_names):
                             try:
                                 allerg = Allergen.objects.get(
-                                    restaurant=restaurant, key=key
+                                    restaurant=restaurant, name=name
                                 )
                                 MenuItemAllergen.objects.create(
                                     menu_item=item,

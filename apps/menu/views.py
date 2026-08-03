@@ -911,8 +911,8 @@ class AllergenListView(APIView):
         result = []
         for a in allergens:
             by_code = {t.language_code: t.name for t in a.translations.all()}
-            name = by_code.get(lang, a.name or a.key)
-            result.append({"key": a.key, "name": name})
+            name = by_code.get(lang, a.name)
+            result.append({"public_id": str(a.public_id), "name": name})
         return Response(result)
 
 
@@ -956,6 +956,6 @@ class IngredientListView(APIView):
         result = []
         for ing in ingredients:
             by_code = {t.language_code: t.name for t in ing.translations.all()}
-            name = by_code.get(lang, ing.name or ing.key)
-            result.append({"key": ing.key, "name": name})
+            name = by_code.get(lang, ing.name)
+            result.append({"public_id": str(ing.public_id), "name": name})
         return Response(result)

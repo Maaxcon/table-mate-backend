@@ -102,7 +102,7 @@ class MenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         for through in through_qs:
             entity = getattr(through, fk_name)
             by_code = {t.language_code: t.name for t in entity.translations.all()}
-            name = by_code.get(lang, entity.name or entity.key)
+            name = by_code.get(lang, entity.name)
             names.append(name)
         return names
 
@@ -271,7 +271,7 @@ class LocalizedM2MNamesField(serializers.ListField):
         for through in through_qs:
             entity = getattr(through, self.fk_name)
             by_code = {t.language_code: t.name for t in entity.translations.all()}
-            name = by_code.get(lang, entity.name or entity.key)
+            name = by_code.get(lang, entity.name)
             names.append(name)
         return names
 
@@ -397,11 +397,9 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         ).first()
         if existing is not None:
             return existing
-        key = self._unique_key(Allergen, restaurant_id, normalized)
         return Allergen.objects.create(
             restaurant_id=restaurant_id,
             name=normalized,
-            key=key,
         )
 
     def _get_or_create_ingredient(self, restaurant_id: int, name: str) -> Ingredient:
@@ -412,23 +410,10 @@ class AdminMenuItemSerializer(serializers.ModelSerializer[MenuItem]):
         ).first()
         if existing is not None:
             return existing
-        key = self._unique_key(Ingredient, restaurant_id, normalized)
         return Ingredient.objects.create(
             restaurant_id=restaurant_id,
             name=normalized,
-            key=key,
         )
-
-    def _unique_key(self, model: type[Allergen | Ingredient], restaurant_id: int, name: str) -> str:
-        from django.utils.text import slugify
-
-        base = slugify(name)[:100] or "item"
-        candidate = base
-        counter = 2
-        while model.objects.filter(restaurant_id=restaurant_id, key=candidate).exists():
-            candidate = f"{base}-{counter}"
-            counter += 1
-        return candidate
 
 
 class ToggleMenuItemLikeRequestSerializer(serializers.Serializer[Any]):
@@ -493,7 +478,7 @@ class AdminAllergenSerializer(serializers.ModelSerializer[Allergen]):
 
     class Meta:
         model = Allergen
-        fields = ["public_id", "key", "name", "sort_order", "translations", "created_at", "updated_at"]
+        fields = ["public_id", "name", "sort_order", "translations", "created_at", "updated_at"]
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
     def get_translations(self, obj: Allergen) -> list[dict[str, str]]:
@@ -533,7 +518,7 @@ class AdminIngredientSerializer(serializers.ModelSerializer[Ingredient]):
 
     class Meta:
         model = Ingredient
-        fields = ["public_id", "key", "name", "sort_order", "translations", "created_at", "updated_at"]
+        fields = ["public_id", "name", "sort_order", "translations", "created_at", "updated_at"]
         read_only_fields = ["public_id", "created_at", "updated_at"]
 
     def get_translations(self, obj: Ingredient) -> list[dict[str, str]]:
@@ -556,22 +541,5 @@ class AdminIngredientSerializer(serializers.ModelSerializer[Ingredient]):
         if qs.exists():
             raise serializers.ValidationError(
                 f'An ingredient with name "{value}" already exists in this restaurant.'
-            )
-        return value
-
-    def validate_key(self, value: str) -> str:
-        ingredient_id = self.instance.pk if self.instance else None
-        request = self.context.get("request")
-        if request is None:
-            return value
-        restaurant_id = get_restaurant_id_from_auth(request)
-        if restaurant_id is None:
-            return value
-        qs = Ingredient.objects.filter(restaurant_id=restaurant_id, key=value)
-        if ingredient_id:
-            qs = qs.exclude(pk=ingredient_id)
-        if qs.exists():
-            raise serializers.ValidationError(
-                f'An ingredient with key "{value}" already exists in this restaurant.'
             )
         return value
