@@ -13,7 +13,7 @@ from apps.authentication.models import RoleCode
 from apps.feedback.models import Feedback
 from apps.menu.models import Menu, MenuItem
 from apps.orders.billing import checkout_cart_session
-from apps.orders.models import OrderItemStatus, OrderStatus
+from apps.orders.models import OrderItemStatus, OrderPaymentStatus, OrderStatus
 from apps.orders.services import add_item_to_cart, ensure_active_cart_for_table
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
@@ -55,8 +55,8 @@ def test_table_guest_can_submit_feedback_for_own_order(
 
     with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
         order = checkout_cart_session(cart_session=cart, user=None)
-    order.status = OrderStatus.COMPLETED
-    order.save(update_fields=["status"])
+    order.payment_status = OrderPaymentStatus.PAID
+    order.save(update_fields=["payment_status"])
     order.items.update(status=OrderItemStatus.SERVED)
 
     response = _feedback_client(guest_id).post(
@@ -161,7 +161,8 @@ def test_receipt_owner_can_submit_feedback_for_qr_order(
     with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
         order = checkout_cart_session(cart_session=cart, user=None)
     order.status = OrderStatus.COMPLETED
-    order.save(update_fields=["status"])
+    order.payment_status = OrderPaymentStatus.PAID
+    order.save(update_fields=["status", "payment_status"])
     order.items.update(status=OrderItemStatus.SERVED)
 
     response = customer.client.post(
@@ -178,6 +179,47 @@ def test_receipt_owner_can_submit_feedback_for_qr_order(
     feedback = Feedback.objects.get(order=order)
     assert feedback.guest_id == customer.user.id
     assert feedback.guest_identity is None
+
+
+@pytest.mark.django_db
+def test_feedback_rejected_for_unpaid_order(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    """Feedback must not be accepted before the order is paid."""
+    now = timezone.now()
+    Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=now - timedelta(minutes=30),
+        end_at=now + timedelta(hours=1),
+        status=ReservationStatus.ACTIVE,
+        type=ReservationType.PRE_BOOKED,
+    )
+    cart = ensure_active_cart_for_table(table=table)
+    guest_id = "guest-1"
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1, guest_identity=guest_id)
+
+    with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
+        order = checkout_cart_session(cart_session=cart, user=None)
+    order.items.update(status=OrderItemStatus.SERVED)
+
+    response = _feedback_client(guest_id).post(
+        reverse("guest-feedback-create"),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 5,
+            "service_rating": 4,
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert "paid" in response.data["detail"]
+    assert not Feedback.objects.filter(order=order).exists()
 
 
 @pytest.mark.django_db
@@ -207,7 +249,8 @@ def test_deleting_user_with_feedback_anonymizes_instead_of_breaking_constraint(
     with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
         order = checkout_cart_session(cart_session=cart, user=None)
     order.status = OrderStatus.COMPLETED
-    order.save(update_fields=["status"])
+    order.payment_status = OrderPaymentStatus.PAID
+    order.save(update_fields=["status", "payment_status"])
     order.items.update(status=OrderItemStatus.SERVED)
 
     response = customer.client.post(
@@ -310,8 +353,8 @@ def test_update_without_dish_feedback_keeps_dish_ratings(
 
     with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
         order = checkout_cart_session(cart_session=cart, user=None)
-    order.status = OrderStatus.COMPLETED
-    order.save(update_fields=["status"])
+    order.payment_status = OrderPaymentStatus.PAID
+    order.save(update_fields=["payment_status"])
     order.items.update(status=OrderItemStatus.SERVED)
 
     client = _feedback_client(guest_id)
@@ -368,8 +411,8 @@ def test_update_with_empty_dish_feedback_clears_dish_ratings(
 
     with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
         order = checkout_cart_session(cart_session=cart, user=None)
-    order.status = OrderStatus.COMPLETED
-    order.save(update_fields=["status"])
+    order.payment_status = OrderPaymentStatus.PAID
+    order.save(update_fields=["payment_status"])
     order.items.update(status=OrderItemStatus.SERVED)
 
     client = _feedback_client(guest_id)

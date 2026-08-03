@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from apps.authentication.models import User
 from apps.menu.models import MenuItem
-from apps.orders.models import Order, OrderItemStatus, OrderStatus
+from apps.orders.models import Order, OrderItemStatus, OrderPaymentStatus
 from common.exceptions import DomainError
 
 from .models import DishFeedback, Feedback, FeedbackReviewStatus
@@ -18,8 +18,8 @@ def _validate_order_for_feedback(
     guest: User | None,
     guest_identity: str | None,
 ) -> None:
-    if order.status != OrderStatus.COMPLETED:
-        raise DomainError("Feedback can only be submitted for completed orders.")
+    if order.payment_status not in (OrderPaymentStatus.PAID, OrderPaymentStatus.SETTLED):
+        raise DomainError("Feedback can only be submitted for paid orders.")
     if guest is not None:
         owns_order = order.created_by_id == guest.id
         if not owns_order:
