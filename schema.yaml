@@ -4306,6 +4306,7 @@ components:
           type: array
           items:
             type: string
+            format: uuid
       required:
       - source_date
       - target_dates
