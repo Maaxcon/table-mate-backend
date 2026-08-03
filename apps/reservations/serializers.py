@@ -224,5 +224,10 @@ class PreorderDetailSerializer(serializers.Serializer[dict[str, object]]):
     tax = serializers.CharField()
     service_charge = serializers.CharField()
     total = serializers.CharField()
+    # Two separate facts, deliberately not folded together: is_cooking drives
+    # the "paid" vs "being prepared" badge, can_cancel drives the button. A
+    # participant who isn't the booking's owner can't cancel even though
+    # nothing is cooking yet.
+    is_cooking = serializers.BooleanField()
     can_cancel = serializers.BooleanField()
     items = PreorderItemSerializer(many=True)

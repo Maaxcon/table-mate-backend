@@ -23,7 +23,10 @@ from rest_framework.response import Response
 from apps.authentication.models import RoleCode, User
 from apps.orders.billing import cancel_preorder_rounds, close_visit_session
 from apps.orders.models import OrderItemStatus, Session, SessionStatus, Ticket
-from apps.orders.selectors import get_preorder_orders_for_reservation
+from apps.orders.selectors import (
+    _resolve_allowed_reservation_participant_ids,
+    get_preorder_orders_for_reservation,
+)
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS
 from common.api import (
@@ -316,6 +319,38 @@ class ReservationViewSet(
         serializer = self.get_serializer(result)
         return Response(serializer.data)
 
+    def _resolve_preorder_reservation(self, request: Request) -> tuple[Reservation, bool]:
+        """Resolve the booking for the pre-order actions, and who may cancel it.
+
+        Deliberately wider than get_object(): create_cart_session lets any
+        reservation participant open the cart and pay for a round, so someone
+        who paid has to be able to see what they paid for. get_queryset scopes
+        a customer to bookings they own — right for editing the booking itself,
+        wrong for a pre-order they helped pay for. The participant set comes
+        from the same helper create_cart_session gates on, so the two can't
+        drift apart.
+
+        Cancelling stays with the booking's owner (and staff), because
+        cancel_preorder_rounds is all-or-nothing across the whole reservation:
+        one guest cancelling would refund the entire party's food, not just
+        their own round.
+        """
+        reservation = Reservation.objects.filter(public_id=self.kwargs["public_id"]).first()
+        if reservation is None:
+            raise NotFound("Reservation not found.")
+
+        user = cast(User, request.user)
+        if getattr(user, "role", None) in (RoleCode.ADMIN, RoleCode.WAITER):
+            restaurant_id = get_restaurant_id_from_auth(request)
+            if restaurant_id is None or reservation.restaurant_id != restaurant_id:
+                raise NotFound("Reservation not found.")
+            return reservation, True
+
+        is_owner = reservation.customer_id == user.pk
+        if is_owner or user.pk in _resolve_allowed_reservation_participant_ids(reservation):
+            return reservation, is_owner
+        raise NotFound("Reservation not found.")
+
     @extend_schema(
         methods=["GET"],
         summary="View this reservation's pre-order",
@@ -334,6 +369,7 @@ class ReservationViewSet(
         responses={
             204: OpenApiResponse(description="Every round was cancelled."),
             404: OpenApiResponse(description="No pre-order to cancel."),
+            403: OpenApiResponse(description="Only the booking's owner may cancel."),
             409: OpenApiResponse(
                 description="The kitchen has already started a round (code preorder_not_allowed)."
             ),
@@ -341,10 +377,14 @@ class ReservationViewSet(
     )
     @action(detail=True, methods=["get", "delete"], url_path="preorder")
     def preorder(self, request: Request, *args: object, **kwargs: object) -> Response:
-        reservation = self.get_object()
+        reservation, may_cancel = self._resolve_preorder_reservation(request)
         orders = get_preorder_orders_for_reservation(reservation)
 
         if request.method == "DELETE":
+            if not may_cancel:
+                raise PermissionDenied(
+                    "Only the guest who booked the table can cancel its pre-order."
+                )
             if not orders:
                 raise NotFound("No pre-order to cancel for this reservation.")
             cancel_preorder_rounds(orders=orders, user=cast(User, request.user))
@@ -356,7 +396,11 @@ class ReservationViewSet(
         # A guest can pay for several rounds before arrival (each MenuPage
         # checkout reopens a fresh cart) — show them as one combined check
         # rather than only the most recent round.
-        can_cancel = not Ticket.objects.filter(order__in=orders).exists()
+        is_cooking = Ticket.objects.filter(order__in=orders).exists()
+        # Also false for a participant who isn't the owner, so the UI never
+        # offers a cancel button the DELETE above would refuse. is_cooking stays
+        # separate so that case doesn't render as "the kitchen already started".
+        can_cancel = may_cancel and not is_cooking
         items = [
             {
                 "name": item.menu_item.name,
@@ -382,6 +426,7 @@ class ReservationViewSet(
                 "tax": str(tax),
                 "service_charge": str(service_charge),
                 "total": str(total),
+                "is_cooking": is_cooking,
                 "can_cancel": can_cancel,
                 "items": items,
             }

@@ -2903,6 +2903,8 @@ paths:
           description: Every round was cancelled.
         '404':
           description: No pre-order to cancel.
+        '403':
+          description: Only the booking's owner may cancel.
         '409':
           description: The kitchen has already started a round (code preorder_not_allowed).
   /api/reservations/reservations/availability/:
@@ -6294,6 +6296,8 @@ components:
           type: string
         total:
           type: string
+        is_cooking:
+          type: boolean
         can_cancel:
           type: boolean
         items:
@@ -6303,6 +6307,7 @@ components:
       required:
       - can_cancel
       - currency
+      - is_cooking
       - items
       - order_id
       - service_charge

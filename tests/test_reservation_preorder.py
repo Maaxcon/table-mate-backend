@@ -19,7 +19,7 @@ from apps.orders.models import (
     Ticket,
     TicketStatus,
 )
-from apps.reservations.models import Reservation, ReservationStatus
+from apps.reservations.models import Reservation, ReservationParticipant, ReservationStatus
 from apps.restaurants.models import Restaurant, Table
 
 from .conftest import AuthContext
@@ -203,3 +203,70 @@ def test_delete_cancels_every_paid_round(
     second.refresh_from_db()
     assert first.payment_status == OrderPaymentStatus.REFUNDED
     assert second.payment_status == OrderPaymentStatus.REFUNDED
+
+
+def test_a_participant_can_see_the_preorder_they_helped_pay_for(
+    restaurant: Restaurant, table: Table, item: MenuItem, user_factory: Any, api: Any
+) -> None:
+    # create_cart_session lets any participant open the cart and pay, so the
+    # check has to be visible to them — it used to 404 for anyone but the owner.
+    customer = user_factory()
+    customer.save()
+    friend = user_factory()
+    friend.save()
+    reservation = _reservation(restaurant, table, customer)
+    ReservationParticipant.objects.create(reservation=reservation, user=friend)
+    session = _session(restaurant, table, reservation)
+    _paid_round(restaurant, session, item)
+
+    ctx: AuthContext = api(role=RoleCode.CUSTOMER)
+    ctx.client.force_authenticate(user=friend)
+
+    resp = ctx.client.get(_url(reservation))
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert len(resp.json()["items"]) == 1
+    # Cancelling is all-or-nothing across the booking, so it stays with the
+    # owner — and the flag says so, rather than offering a button that 403s.
+    assert resp.json()["can_cancel"] is False
+
+
+def test_a_participant_may_not_cancel_the_whole_bookings_preorder(
+    restaurant: Restaurant, table: Table, item: MenuItem, user_factory: Any, api: Any
+) -> None:
+    customer = user_factory()
+    customer.save()
+    friend = user_factory()
+    friend.save()
+    reservation = _reservation(restaurant, table, customer)
+    ReservationParticipant.objects.create(reservation=reservation, user=friend)
+    session = _session(restaurant, table, reservation)
+    order = _paid_round(restaurant, session, item)
+
+    ctx: AuthContext = api(role=RoleCode.CUSTOMER)
+    ctx.client.force_authenticate(user=friend)
+
+    resp = ctx.client.delete(_url(reservation))
+
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+    order.refresh_from_db()
+    assert order.payment_status == OrderPaymentStatus.PAID
+
+
+def test_an_unrelated_customer_sees_nothing(
+    restaurant: Restaurant, table: Table, item: MenuItem, user_factory: Any, api: Any
+) -> None:
+    customer = user_factory()
+    customer.save()
+    stranger = user_factory()
+    stranger.save()
+    reservation = _reservation(restaurant, table, customer)
+    session = _session(restaurant, table, reservation)
+    _paid_round(restaurant, session, item)
+
+    ctx: AuthContext = api(role=RoleCode.CUSTOMER)
+    ctx.client.force_authenticate(user=stranger)
+
+    # 404, not 403 — a stranger shouldn't learn the booking exists.
+    assert ctx.client.get(_url(reservation)).status_code == status.HTTP_404_NOT_FOUND
+    assert ctx.client.delete(_url(reservation)).status_code == status.HTTP_404_NOT_FOUND
