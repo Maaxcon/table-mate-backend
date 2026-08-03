@@ -198,9 +198,9 @@ def test_public_item_serializer_localizes_vocab_names(
     menu: Any,
     category: Any,
 ) -> None:
-    allergen = Allergen.objects.create(restaurant=restaurant, key="gluten", name="Глютен", sort_order=0)
+    allergen = Allergen.objects.create(restaurant=restaurant, name="Глютен", sort_order=0)
     AllergenTranslation.objects.create(allergen=allergen, language_code="en", name="Gluten")
-    ingredient = Ingredient.objects.create(restaurant=restaurant, key="tomato", name="Помідор", sort_order=0)
+    ingredient = Ingredient.objects.create(restaurant=restaurant, name="Помідор", sort_order=0)
     IngredientTranslation.objects.create(ingredient=ingredient, language_code="en", name="Tomato")
     item = MenuItem.objects.create(
         restaurant=restaurant,

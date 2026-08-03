@@ -88,10 +88,9 @@ def _create_vocab_entry(
     restaurant: Restaurant,
     *,
     model: type[Allergen | Ingredient],
-    key: str,
     name: str,
 ) -> Allergen | Ingredient:
-    return model.objects.create(restaurant=restaurant, key=key, name=name, sort_order=0)
+    return model.objects.create(restaurant=restaurant, name=name, sort_order=0)
 
 
 # --- US-8: name stored on the entity, translations hold non-default languages ---
@@ -99,7 +98,7 @@ def _create_vocab_entry(
 
 @pytest.mark.django_db
 def test_name_lives_on_entity_and_translation_stored_separately(restaurant_a: Restaurant, settings_a: Any) -> None:
-    allergen = _create_vocab_entry(restaurant_a, model=Allergen, key="gluten", name="Глютен")
+    allergen = _create_vocab_entry(restaurant_a, model=Allergen, name="Глютен")
     AllergenTranslation.objects.create(allergen=allergen, language_code="en", name="Gluten")
 
     allergen.refresh_from_db()
@@ -109,7 +108,7 @@ def test_name_lives_on_entity_and_translation_stored_separately(restaurant_a: Re
 
 @pytest.mark.django_db
 def test_default_locale_translation_create_rejected(restaurant_a: Restaurant, settings_a: Any) -> None:
-    allergen = _create_vocab_entry(restaurant_a, model=Allergen, key="gluten", name="Глютен")
+    allergen = _create_vocab_entry(restaurant_a, model=Allergen, name="Глютен")
     locale = get_restaurant_locale(restaurant_a.pk)
     assert locale == "uk"
 
@@ -124,7 +123,7 @@ def test_default_locale_translation_create_rejected(restaurant_a: Restaurant, se
 
 @pytest.mark.django_db
 def test_default_locale_translation_update_rejected(restaurant_a: Restaurant, settings_a: Any) -> None:
-    allergen = _create_vocab_entry(restaurant_a, model=Allergen, key="gluten", name="Глютен")
+    allergen = _create_vocab_entry(restaurant_a, model=Allergen, name="Глютен")
     AllergenTranslation.objects.create(allergen=allergen, language_code="en", name="Gluten")
     locale = get_restaurant_locale(restaurant_a.pk)
 
@@ -139,7 +138,7 @@ def test_default_locale_translation_update_rejected(restaurant_a: Restaurant, se
 
 @pytest.mark.django_db
 def test_default_locale_ingredient_translation_rejected(restaurant_a: Restaurant, settings_a: Any) -> None:
-    ingredient = _create_vocab_entry(restaurant_a, model=Ingredient, key="tomato", name="Помідор")
+    ingredient = _create_vocab_entry(restaurant_a, model=Ingredient, name="Помідор")
 
     with pytest.raises(ValidationError):
         create_ingredient_translation(ingredient_id=ingredient.pk, language_code="uk", name="Помідор")
@@ -147,7 +146,7 @@ def test_default_locale_ingredient_translation_rejected(restaurant_a: Restaurant
 
 @pytest.mark.django_db
 def test_ingredient_name_stored_on_entity(restaurant_a: Restaurant, settings_a: Any) -> None:
-    ingredient = _create_vocab_entry(restaurant_a, model=Ingredient, key="tomato", name="Помідор")
+    ingredient = _create_vocab_entry(restaurant_a, model=Ingredient, name="Помідор")
     IngredientTranslation.objects.create(ingredient=ingredient, language_code="en", name="Tomato")
 
     ingredient.refresh_from_db()
@@ -160,26 +159,26 @@ def test_ingredient_name_stored_on_entity(restaurant_a: Restaurant, settings_a: 
 
 @pytest.mark.django_db
 def test_allergens_are_restaurant_scoped(restaurant_a: Restaurant, restaurant_b: Restaurant) -> None:
-    a = _create_vocab_entry(restaurant_a, model=Allergen, key="gluten", name="Глютен")
-    b = _create_vocab_entry(restaurant_b, model=Allergen, key="gluten", name="Gluten")
+    a = _create_vocab_entry(restaurant_a, model=Allergen, name="Глютен")
+    b = _create_vocab_entry(restaurant_b, model=Allergen, name="Gluten")
 
     assert a.pk != b.pk
-    assert Allergen.objects.filter(key="gluten").count() == 2
+    assert Allergen.objects.count() == 2
     assert list(Allergen.objects.filter(restaurant_id=restaurant_a.pk)) == [a]
     assert list(Allergen.objects.filter(restaurant_id=restaurant_b.pk)) == [b]
 
 
 @pytest.mark.django_db
 def test_admin_list_is_scoped_to_own_restaurant(admin_a: Callable[..., AuthContext], restaurant_a: Restaurant, restaurant_b: Restaurant) -> None:
-    _create_vocab_entry(restaurant_a, model=Allergen, key="gluten", name="Глютен")
-    _create_vocab_entry(restaurant_b, model=Allergen, key="gluten", name="Gluten")
+    _create_vocab_entry(restaurant_a, model=Allergen, name="Глютен")
+    _create_vocab_entry(restaurant_b, model=Allergen, name="Gluten")
 
     ctx = admin_a()
     response = ctx.client.get("/api/menu/admin/allergens/")
     assert response.status_code == 200
     results = response.data["results"]
     assert len(results) == 1
-    assert results[0]["key"] == "gluten"
+    assert results[0]["name"] == "Глютен"
 
 
 @pytest.mark.django_db
@@ -189,8 +188,8 @@ def test_admin_allergen_translation_scoped(
     restaurant_b: Restaurant,
     settings_a: Any,
 ) -> None:
-    mine = _create_vocab_entry(restaurant_a, model=Allergen, key="gluten", name="Глютен")
-    other = _create_vocab_entry(restaurant_b, model=Allergen, key="gluten", name="Gluten")
+    mine = _create_vocab_entry(restaurant_a, model=Allergen, name="Глютен")
+    other = _create_vocab_entry(restaurant_b, model=Allergen, name="Gluten")
 
     ctx = admin_a()
     response = ctx.client.post(
@@ -262,7 +261,7 @@ def test_admin_api_creates_name_on_entity(admin_a: Callable[..., AuthContext], r
     ctx = admin_a()
     response = ctx.client.post(
         "/api/menu/admin/allergens/",
-        {"key": "mustard", "name": "Гірчиця", "sort_order": 0},
+        {"name": "Гірчиця", "sort_order": 0},
         format="json",
     )
     assert response.status_code == 201

@@ -41,15 +41,15 @@ def settings_b(restaurant_b: Restaurant) -> RestaurantSettings:
     )
 
 
-def _create_allergen(restaurant: Restaurant, *, key: str, name: str) -> Allergen:
-    return Allergen.objects.create(restaurant=restaurant, key=key, name=name, sort_order=0)
+def _create_allergen(restaurant: Restaurant, *, name: str) -> Allergen:
+    return Allergen.objects.create(restaurant=restaurant, name=name, sort_order=0)
 
 
-def _create_ingredient(restaurant: Restaurant, *, key: str, name: str) -> Ingredient:
-    return Ingredient.objects.create(restaurant=restaurant, key=key, name=name, sort_order=0)
+def _create_ingredient(restaurant: Restaurant, *, name: str) -> Ingredient:
+    return Ingredient.objects.create(restaurant=restaurant, name=name, sort_order=0)
 
 
-# --- FR-024 / US-7: AllergenListView is restaurant-scoped [{key, name}] ---
+# --- FR-024 / US-7: AllergenListView is restaurant-scoped [{public_id, name}] ---
 
 
 def test_allergen_list_requires_restaurant_param() -> None:
@@ -66,19 +66,19 @@ def test_allergen_list_scoped_to_restaurant(
     restaurant_a: Restaurant,
     restaurant_b: Restaurant,
 ) -> None:
-    _create_allergen(restaurant_a, key="gluten", name="Глютен")
-    _create_allergen(restaurant_b, key="gluten", name="Gluten")
+    allergen = _create_allergen(restaurant_a, name="Глютен")
+    _create_allergen(restaurant_b, name="Gluten")
 
     resp = APIClient().get(f"/api/menu/allergens/?restaurant={restaurant_a.public_id}")
     assert resp.status_code == 200
-    assert resp.json() == [{"key": "gluten", "name": "Глютен"}]
+    assert resp.json() == [{"public_id": str(allergen.public_id), "name": "Глютен"}]
 
 
 def test_allergen_list_localized(
     restaurant_a: Restaurant,
     settings_a: RestaurantSettings,
 ) -> None:
-    allergen = _create_allergen(restaurant_a, key="gluten", name="Глютен")
+    allergen = _create_allergen(restaurant_a, name="Глютен")
     AllergenTranslation.objects.create(allergen=allergen, language_code="en", name="Gluten")
 
     client = APIClient()
@@ -87,15 +87,15 @@ def test_allergen_list_localized(
     # Default locale: falls back to entity.name.
     resp = client.get(url)
     assert resp.status_code == 200
-    assert resp.json() == [{"key": "gluten", "name": "Глютен"}]
+    assert resp.json() == [{"public_id": str(allergen.public_id), "name": "Глютен"}]
 
     # English preference: localized display name.
     resp = client.get(url, HTTP_ACCEPT_LANGUAGE="en")
     assert resp.status_code == 200
-    assert resp.json() == [{"key": "gluten", "name": "Gluten"}]
+    assert resp.json() == [{"public_id": str(allergen.public_id), "name": "Gluten"}]
 
 
-# --- FR-024 / US-7: IngredientListView keeps the [{key, name}] shape ---
+# --- FR-024 / US-7: IngredientListView keeps the [{public_id, name}] shape ---
 
 
 def test_ingredient_list_requires_restaurant_param() -> None:
@@ -108,23 +108,23 @@ def test_ingredient_list_unknown_restaurant_returns_404() -> None:
     assert resp.status_code == 404
 
 
-def test_ingredient_list_scoped_and_key_name_shape(
+def test_ingredient_list_scoped_and_public_id_name_shape(
     restaurant_a: Restaurant,
     restaurant_b: Restaurant,
 ) -> None:
-    _create_ingredient(restaurant_a, key="tomato", name="Помідор")
-    _create_ingredient(restaurant_b, key="tomato", name="Tomato")
+    ingredient = _create_ingredient(restaurant_a, name="Помідор")
+    _create_ingredient(restaurant_b, name="Tomato")
 
     resp = APIClient().get(f"/api/menu/ingredients/?restaurant={restaurant_a.public_id}")
     assert resp.status_code == 200
-    assert resp.json() == [{"key": "tomato", "name": "Помідор"}]
+    assert resp.json() == [{"public_id": str(ingredient.public_id), "name": "Помідор"}]
 
 
 def test_ingredient_list_localized_fallback_to_entity_name(
     restaurant_a: Restaurant,
     settings_a: RestaurantSettings,
 ) -> None:
-    ingredient = _create_ingredient(restaurant_a, key="tomato", name="Помідор")
+    ingredient = _create_ingredient(restaurant_a, name="Помідор")
     IngredientTranslation.objects.create(ingredient=ingredient, language_code="en", name="Tomato")
 
     client = APIClient()
@@ -132,19 +132,8 @@ def test_ingredient_list_localized_fallback_to_entity_name(
 
     resp = client.get(url, HTTP_ACCEPT_LANGUAGE="en")
     assert resp.status_code == 200
-    assert resp.json() == [{"key": "tomato", "name": "Tomato"}]
+    assert resp.json() == [{"public_id": str(ingredient.public_id), "name": "Tomato"}]
 
     resp = client.get(url)
     assert resp.status_code == 200
-    assert resp.json() == [{"key": "tomato", "name": "Помідор"}]
-
-
-def test_ingredient_list_fallback_to_key_when_no_name(
-    restaurant_a: Restaurant,
-    settings_a: RestaurantSettings,
-) -> None:
-    _create_ingredient(restaurant_a, key="chicken", name="")
-
-    resp = APIClient().get(f"/api/menu/ingredients/?restaurant={restaurant_a.public_id}")
-    assert resp.status_code == 200
-    assert resp.json() == [{"key": "chicken", "name": "chicken"}]
+    assert resp.json() == [{"public_id": str(ingredient.public_id), "name": "Помідор"}]
