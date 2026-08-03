@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("restaurants", "0029_tabletranslation_zonetranslation"),
         ("menu", "0025_allergen_ingredient_finalize_not_null"),
-        ("editor", "0006_layoutentitytranslation"),
+        ("editor", "0010_layoutentitytranslation"),
         ("authentication", "0008_seed_django_admin_superuser"),
     ]
 
