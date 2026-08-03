@@ -281,6 +281,43 @@ description: "Task list for Scalable Multi-Language Localization Architecture"
 
 ---
 
+## Phase 12: Floor Plan Entity Translations — Admin Layout Tab (US-9, P1)
+
+**Goal**: Complete the floor plan localization story. Persist stable ids for thresholds/portals in the layout JSON, expose floor plan entity translation CRUD endpoints scoped to the latest published version, localize the read endpoints that render the floor plan, and add an admin **Layout** tab to the Translations section where clicking tables/thresholds/portals opens per-language label editing in one modal. The standalone "table" tab is removed — table translations are managed from the Layout tab via the same `TableTranslation` records (FR-025..FR-033).
+
+**Independent Test**: POST a translation for a threshold/portal via the new endpoint, republish the layout, verify the translation was copied forward; request the floor plan in that language and verify the localized label; open Translations → Layout in the FE and edit an entity's labels for all supported languages.
+
+### Backend Foundation (already implemented on `037-localization-refactor`)
+
+- [X] T066 [US9] Add `LayoutEntityTranslation` model in `apps/editor/models.py` + migration `apps/editor/migrations/0006_layoutentitytranslation.py` (FK `LayoutVersion`, `entity_id` UUID, `language_code`, `label`; unique `(layout_version, entity_id, language_code)`)
+- [X] T067 [US9] Add `ZoneTranslation`/`TableTranslation` models in `apps/restaurants/models.py` + migration `0029_tabletranslation_zonetranslation` (DB-backed, stable across layout versions)
+- [X] T068 [US9] Add layout entity translation CRUD services in `apps/editor/services.py` (`create_layout_entity_translation`, `update_layout_entity_translation`, `delete_layout_entity_translation`, `get_layout_entity_translations`) + `localize_layout_json()` (currently unreachable — no callers)
+- [X] T069 [US9] Add `LayoutEntityTranslationSerializer` in `apps/editor/serializers.py` (defined but unwired)
+- [X] T070 [US9] Wire localization into `LayoutVersionSerializer.to_representation` (`apps/editor/serializers.py`) and Zone/Table read serializers (`apps/restaurants/serializers.py`) via `request.active_language`
+
+### Backend: Stable IDs, Copy-Forward, Endpoints
+
+- [X] T071 [US9] Persist stable `id` for thresholds/portals in layout JSON: `serializeEntities` emits `id`/`_client_id` in `../table-mate-frontend/src/features/editor/types.ts`, `deserializeLayout` round-trips `serverId` from `id`, and `publish_layout` assigns a UUID `id` when absent (`apps/editor/services.py`) (FR-025)
+- [X] T072 [US9] Normalize threshold/portal label field to `label` in `serializeEntities`/`deserializeLayout`/`localize_layout_json`; tolerate legacy `threshold_label`/`portal_label` on read (FR-026)
+- [X] T073 [US9] Copy-forward translations on publish in `publish_layout` (`apps/editor/services.py`): after creating the new `LayoutVersion`, bulk-copy parent rows whose `entity_id` still exists in the new layout (FR-028)
+- [X] T074 [US9] Add admin CRUD endpoints on `LayoutViewSet` (`apps/editor/views.py` + `urls.py`): `GET`/`POST /api/editor/layouts/entity-translations/`, `PUT`/`DELETE /api/editor/layouts/entity-translations/{entity_id}/{lang}/`; scoped to the latest version; reject unknown entity ids (FR-033); reject default-language writes (FR-032); permission `IsAdmin`; wire `LayoutEntityTranslationSerializer` + the T068 services; optimistic-lock `{current, updated}` updates with `CONFLICT` (FR-027)
+- [X] T075 [US9] Localize read endpoints: apply `localize_layout_json` in `LayoutViewSet.latest` (`apps/editor/views.py`) and `RestaurantViewSet.layout` (`apps/restaurants/views.py:559`) using `request.active_language` (FR-029)
+- [X] T076 [P] [US9] Backend tests in `tests/test_layout_entity_translations.py`: CRUD + list, unknown-entity rejection, default-language rejection, copy-forward on republish, localization on `latest`/floor-plan endpoints
+
+### Frontend: Layout Tab
+
+- [X] T077 [P] [US9] Add layout entity translation types + API helpers in `../table-mate-frontend/src/features/admin/types.ts` and `../table-mate-frontend/src/features/admin/api/layout.ts` (fetch latest layout + translations map, create/update/delete) mirroring `api/menu.ts`
+- [X] T078 [US9] Remove the standalone "table" tab from `../table-mate-frontend/src/features/admin/pages/TranslationsSection/TranslationsSection.tsx` (types, `TABS`, fetchers, save/delete cases, imports) + remove table-tab strings; keep `fetchTablesWithTranslations` only if used elsewhere (FR-031)
+- [X] T079 [US9] Add the Layout tab to `TranslationsSection.tsx`: fetch latest layout + translations; render `FloorPlanView` per zone (zone picker, canvas dims/edge styles from zone data) with clickable tables/thresholds/portals via `renderEntity`; translation-status indicator; empty state when no layout published (FR-030)
+- [X] T080 [US9] Add `LayoutEntityTranslationModal` (or extend `TranslationEditModal`): primary label read-only + one `label` input per supported language; save-all with optimistic updates and `CONFLICT` rollback
+- [X] T081 [US9] Add layout tab + modal strings to `../table-mate-frontend/src/i18n/locales/{en,uk}/translation.json` and `../table-mate-frontend/src/features/admin/strings.ts`; remove table-tab strings
+- [X] T082 [US9] Regenerate backend `schema.yaml` (drf-spectacular) + FE API types (`npm run generate:api` in `../table-mate-frontend`)
+- [ ] T083 [P] [US9] Frontend quality gates + tests: `npx tsc -b`, `eslint`, `prettier`, `vitest` (Layout tab render/click/edit, table-tab removal)
+
+**Checkpoint**: Floor plan entity translations are manageable from the visual Layout tab, survive republishes via copy-forward, and are returned localized on the floor plan read endpoints. T071-T082 are implemented; only the frontend quality gates/tests (T083) remain.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -296,6 +333,7 @@ description: "Task list for Scalable Multi-Language Localization Architecture"
 - **User Story 5 (Phase 9)**: Depends on US-8 (`name` field + migration) — can proceed in parallel with US-7
 - **User Story 6 (Phase 10)**: Depends on US-8 and US-5 (pruning operates on name-based get-or-create flows) — can proceed in parallel with US-7
 - **Polish (Phase 11)**: Depends on all desired user stories being complete
+- **Floor Plan Entity Translations (Phase 12)**: Depends on the foundational localization phase (Phase 2, `LanguageMiddleware`) and on the editor layout pipeline. T066-T082 are implemented (backend foundation, stable ids, copy-forward, endpoints, read-path localization, tests, Layout tab, schema/types regeneration); only the frontend quality gates + tests (T083) remain
 
 ### User Story Dependencies
 
@@ -303,6 +341,7 @@ description: "Task list for Scalable Multi-Language Localization Architecture"
 - **User Story 7 (P2)**: Depends on US-8; independent of US-5/US-6
 - **User Story 5 (P1)**: Depends on US-8; independent of US-7
 - **User Story 6 (P1)**: Depends on US-8 and US-5; independent of US-7
+- **User Story 9 (P1)**: Depends on Phase 2 foundation; independent of US-5..US-8 (own model + endpoints)
 
 ### Within Each User Story
 
@@ -323,6 +362,7 @@ description: "Task list for Scalable Multi-Language Localization Architecture"
 - T054 (service) before T055/T056 (both consume `prune_orphans`); T055 and T056 touch different files
 - All test tasks T057-T060 can run in parallel (separate test files)
 - T061-T064 can run in parallel at the end
+- T083 (FE gates/tests) runs last, after T082 (schema + types regeneration)
 
 ---
 
@@ -364,6 +404,7 @@ Task: "T043 Add name to AdminAllergen/AdminIngredient in ../table-mate-frontend/
 7. Add US5 (free-text entry) → dish form saves new vocabulary
 8. Add US6 (pruning) → no orphan accumulation
 9. Polish (tests, schema/types, quickstart)
+10. Add US9 (floor plan entity translations + Layout tab) → visual, full-coverage translation management
 
 ### Parallel Team Strategy
 
@@ -378,7 +419,10 @@ With multiple developers:
    - Developer A: US7 (allergen scoping)
    - Developer B: US5 (free-text entry, backend + frontend)
    - Developer C: US6 (pruning)
-4. Polish tasks distributed after all stories merge
+4. After US-6/US-7 land (or in parallel on separate files):
+   - Developer A: US9 backend (stable ids, copy-forward, endpoints, read-path localization)
+   - Developer B: US9 frontend (Layout tab, modal, table-tab removal)
+5. Polish tasks distributed after all stories merge
 
 ---
 
@@ -393,3 +437,7 @@ With multiple developers:
 - Default-locale content lives on the entity (`name`); translation tables hold only non-default languages; default-locale translation writes are rejected (FR-022)
 - Vocabulary is provisioned through data migrations only; legacy seed scripts (`apps/menu/management/commands/seed_menu.py`) are stale and unused
 - Guest `MenuItemModal.ALLERGEN_MAP` hardcoded icon/color map is explicitly deferred (see plan.md Known Follow-ups)
+- US-9 (Phase 12) touches two distinct translation stores: tables reuse `TableTranslation` (DB-backed, version-independent), while thresholds/portals use `LayoutEntityTranslation` (version-scoped, copy-forward on publish)
+- Threshold/portal `id` must be stable in `layout_json` for translations to survive republishes — `localize_layout_json` previously matched `entity["id"]`, which never existed for thresholds/portals (T071/T072 make it functional)
+- The admin Layout tab renders per-zone (entities are zone-relative; `FloorPlanView` needs the zone's canvas dims + edge styles) — zone data comes from the existing zones endpoint
+- `LayoutViewSet.latest` and the restaurant floor-plan `layout` endpoint currently return raw unlocalized `layout_json` — T075 wires localization into both
