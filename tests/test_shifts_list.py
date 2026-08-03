@@ -89,6 +89,12 @@ class TestListShifts:
         resp = auth.client.get("/api/shifts/", {"employee_id": "me"})
         assert resp.status_code == 400
 
+    @pytest.mark.parametrize("param", ["date", "date_from", "date_to"])
+    def test_list_rejects_invalid_date_params(self, api: Any, restaurant: Any, param: str) -> None:
+        auth = api(role=RoleCode.ADMIN, restaurant_id=restaurant.id)
+        resp = auth.client.get("/api/shifts/", {param: "13-45-2026"})
+        assert resp.status_code == 400
+
     def test_list_returns_employee_details(self, api: Any, restaurant: Any, user_factory: Any) -> None:
         emp = user_factory(role=RoleCode.WAITER)
         emp.save()
