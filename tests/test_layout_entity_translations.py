@@ -10,13 +10,27 @@ from apps.authentication.models import RoleCode
 from apps.authentication.services import issue_tokens_with_restaurant
 from apps.editor.models import LayoutEntityTranslation, LayoutVersion
 from apps.restaurants.models import RestaurantSettings
-from tests.conftest import RestaurantFactory, UserFactory
+from tests.conftest import UserFactory
+
+
+class _EditorAPIClient(APIClient):
+    def __init__(self, restaurant_id: int) -> None:
+        super().__init__()
+        self.restaurant_id = restaurant_id
+
+    def post(self, path: str, data: Any = None, *args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        if path == "/api/editor/layouts/publish/" and isinstance(data, dict) and "base_layout_version_id" not in data:
+            latest = (
+                LayoutVersion.objects.filter(restaurant_id=self.restaurant_id).order_by("-published_at", "-id").first()
+            )
+            data = {**data, "base_layout_version_id": str(latest.public_id) if latest else None}
+        return super().post(path, data, *args, **kwargs)
 
 
 def _client(role: str, restaurant_id: int) -> APIClient:
     user = UserFactory.build(role=role)
     user.save()
-    client = APIClient()
+    client = _EditorAPIClient(restaurant_id)
     access, _ = issue_tokens_with_restaurant(user, restaurant_id)
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
     return client
