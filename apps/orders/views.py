@@ -28,11 +28,25 @@ from common.api import (
     require_restaurant_id_from_auth,
 )
 from common.exceptions import TableOccupiedError
-from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
+from common.hall_events import (
+    emit_hall_reservations_updated,
+    emit_hall_table_status_changed,
+    emit_preorder_status_for_reservation,
+)
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
 from .billing import close_visit_session, ensure_visit_session
-from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, TicketStatus, VoidReason
+from .models import (
+    Order,
+    OrderItem,
+    OrderItemStatus,
+    OrderSource,
+    Session,
+    SessionStatus,
+    Ticket,
+    TicketStatus,
+    VoidReason,
+)
 from .serializers import (
     CreateOrderSerializer,
     OrderItemSerializer,
@@ -453,6 +467,11 @@ class OrderItemViewSet(
                     menu_item_name=instance.menu_item.name if instance.menu_item else "",
                     status=instance.status,
                 )
+                if instance.order.source == OrderSource.CUSTOMER_PREORDER:
+                    emit_preorder_status_for_reservation(
+                        instance.restaurant_id,
+                        instance.order.session.reservation if instance.order.session else None,
+                    )
 
             transaction.on_commit(_emit)
 

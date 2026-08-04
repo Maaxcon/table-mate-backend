@@ -78,6 +78,22 @@ def _annotate_has_preorder(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
     )
 
 
+def preorder_status_for_reservation(reservation_id: int) -> str | None:
+    """"paid", "cooking" or "ready" for this booking's pre-order, None if it has none.
+
+    Reads the same annotation the reservation payload exposes, so a pushed
+    status and a re-fetched booking can never disagree.
+    """
+    row = _annotate_has_preorder(Reservation.objects.filter(pk=reservation_id)).first()
+    if row is None or not row.has_preorder:
+        return None
+    if row.preorder_ready:
+        return "ready"
+    if row.preorder_cooking:
+        return "cooking"
+    return "paid"
+
+
 def get_active_reservation_for_table(table: Table) -> Reservation | None:
     """Return the reservation currently in progress on the table, or None.
 

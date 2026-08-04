@@ -25,7 +25,11 @@ from common.exceptions import (
     UnservedItemsError,
     WaiterCallCooldownError,
 )
-from common.hall_events import emit_hall_reservations_updated, emit_hall_session_auto_extended
+from common.hall_events import (
+    emit_hall_reservations_updated,
+    emit_hall_session_auto_extended,
+    emit_preorder_status_for_reservation,
+)
 from common.notification_events import emit_cart_created, emit_kitchen_ticket_injected, emit_waiter_called
 
 from ..models import (
@@ -624,6 +628,7 @@ def _inject_preorder_orders(
                 table_number=sess.table.public_number,
                 items_count=cnt,
             )
+            emit_preorder_status_for_reservation(sess.restaurant_id, sess.reservation)
 
         transaction.on_commit(_emit_ticket_injected)
         injected += 1
