@@ -471,7 +471,7 @@ class ReservationViewSet(
             raise PermissionDenied("Only the guest who booked the table can change its pre-order.")
 
         orders = get_preorder_orders_for_reservation(reservation)
-        item = OrderItem.objects.filter(order__in=orders, public_id=kwargs["item_id"]).first()
+        item = OrderItem.objects.filter(order__in=orders, public_id=str(kwargs["item_id"])).first()
         if item is None or item.status == OrderItemStatus.VOIDED:
             raise NotFound("No such dish on this booking's pre-order.")
 

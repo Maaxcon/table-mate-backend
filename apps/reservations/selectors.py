@@ -100,11 +100,11 @@ def preorder_status_for_reservation(reservation_id: int) -> str | None:
     status and a re-fetched booking can never disagree.
     """
     row = _annotate_has_preorder(Reservation.objects.filter(pk=reservation_id)).first()
-    if row is None or not row.has_preorder:
+    if row is None or not getattr(row, "has_preorder", False):
         return None
-    if row.preorder_ready:
+    if getattr(row, "preorder_ready", False):
         return "ready"
-    if row.preorder_cooking:
+    if getattr(row, "preorder_cooking", False):
         return "cooking"
     return "paid"
 
