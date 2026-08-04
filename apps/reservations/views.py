@@ -444,6 +444,14 @@ class ReservationViewSet(
         description="Voids a single paid dish and refunds it — only while the kitchen "
         "hasn't started the round. Removing the last dish cancels the whole round, "
         "which answers 204. Otherwise returns the updated check.",
+        parameters=[
+            OpenApiParameter(
+                name="item_id",
+                type=str,
+                location=OpenApiParameter.PATH,
+                description="Public id of the dish, as returned in the pre-order's items.",
+            ),
+        ],
         responses={
             200: PreorderDetailSerializer,
             204: OpenApiResponse(description="That was the last dish; the pre-order is gone."),

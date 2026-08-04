@@ -2914,6 +2914,46 @@ paths:
           description: Only the booking's owner may cancel.
         '409':
           description: The kitchen has already started a round (code preorder_not_allowed).
+  /api/reservations/reservations/{public_id}/preorder/items/{item_id}/:
+    delete:
+      operationId: reservations_reservations_preorder_items_destroy
+      description: Voids a single paid dish and refunds it — only while the kitchen
+        hasn't started the round. Removing the last dish cancels the whole round,
+        which answers 204. Otherwise returns the updated check.
+      summary: Remove one dish from this reservation's pre-order
+      parameters:
+      - in: path
+        name: item_id
+        schema:
+          type: string
+        description: Public id of the dish, as returned in the pre-order's items.
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreorderDetail'
+          description: ''
+        '204':
+          description: That was the last dish; the pre-order is gone.
+        '404':
+          description: No such dish on this booking's pre-order.
+        '403':
+          description: Only the booking's owner may change it.
+        '409':
+          description: The kitchen has already started the round (code preorder_not_allowed).
   /api/reservations/reservations/availability/:
     get:
       operationId: reservations_reservations_availability_retrieve
@@ -5934,6 +5974,17 @@ components:
         preorder_ready:
           type: boolean
           readOnly: true
+        preorder_total:
+          type: string
+          nullable: true
+          readOnly: true
+        preorder_items_count:
+          type: integer
+          readOnly: true
+        preorder_currency:
+          type: string
+          nullable: true
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6324,6 +6375,8 @@ components:
     PreorderItem:
       type: object
       properties:
+        public_id:
+          type: string
         name:
           type: string
         quantity:
@@ -6334,6 +6387,7 @@ components:
           type: string
       required:
       - name
+      - public_id
       - quantity
       - total_price
       - unit_price
@@ -6636,6 +6690,17 @@ components:
         preorder_ready:
           type: boolean
           readOnly: true
+        preorder_total:
+          type: string
+          nullable: true
+          readOnly: true
+        preorder_items_count:
+          type: integer
+          readOnly: true
+        preorder_currency:
+          type: string
+          nullable: true
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6660,7 +6725,10 @@ components:
       - has_preorder
       - opened_at
       - preorder_cooking
+      - preorder_currency
+      - preorder_items_count
       - preorder_ready
+      - preorder_total
       - public_id
       - restaurant
       - restaurant_info
