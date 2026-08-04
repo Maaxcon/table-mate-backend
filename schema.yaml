@@ -6538,6 +6538,14 @@ components:
           type: string
           nullable: true
           readOnly: true
+        reservation_public_id:
+          type: string
+          nullable: true
+          description: |-
+            The booking this visit came from, so the guest's booking history can
+            offer the receipt. None for receipts entered by hand in the admin, and
+            for orders that never belonged to a booking.
+          readOnly: true
         visited_at:
           type: string
           format: date-time
@@ -6590,6 +6598,7 @@ components:
       - items
       - order_number
       - public_id
+      - reservation_public_id
       - restaurant_address
       - restaurant_image
       - restaurant_name
