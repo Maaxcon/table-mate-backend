@@ -4201,6 +4201,9 @@ components:
           format: decimal
           pattern: ^-?\d{0,10}(?:\.\d{0,4})?$
           readOnly: true
+        status:
+          type: string
+          readOnly: true
         is_paid:
           type: boolean
       required:
@@ -4209,6 +4212,7 @@ components:
       - name
       - payable
       - quantity
+      - status
     BookingSettings:
       type: object
       properties:

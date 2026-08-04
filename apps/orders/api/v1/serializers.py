@@ -146,6 +146,9 @@ class BillItemSerializer(serializers.ModelSerializer[OrderItem]):
     # The goods-only total_price is deliberately NOT exposed here — a consumer
     # summing it would under-charge (tax + service missing).
     payable = serializers.DecimalField(max_digits=14, decimal_places=4, read_only=True)
+    # Live status so the guest UI can gate feedback on the same rule the backend
+    # enforces: every item must be served or voided before feedback is accepted.
+    status = serializers.CharField(read_only=True)
 
     class Meta:
         model = OrderItem
@@ -155,6 +158,7 @@ class BillItemSerializer(serializers.ModelSerializer[OrderItem]):
             "guest_slot",
             "quantity",
             "payable",
+            "status",
             "is_paid",
         ]
 
