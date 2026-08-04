@@ -425,6 +425,21 @@ def test_each_table_guest_can_submit_feedback_for_shared_checkout(
     order.save(update_fields=["payment_status"])
     order.items.update(status=OrderItemStatus.SERVED)
 
+    unauthorized_response = _feedback_client("guest-a").post(
+        reverse("guest-feedback-create"),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 1,
+            "service_rating": 1,
+            "dish_feedback": [{"menu_item": str(second_item.public_id), "rating": 1}],
+        },
+        format="json",
+    )
+
+    assert unauthorized_response.status_code == status.HTTP_400_BAD_REQUEST
+    assert unauthorized_response.data["detail"] == f"Menu item {second_item.public_id} is not part of your order."
+    assert not Feedback.objects.filter(order=order).exists()
+
     for guest_id, menu_item in (("guest-a", item), ("guest-b", second_item)):
         response = _feedback_client(guest_id).post(
             reverse("guest-feedback-create"),

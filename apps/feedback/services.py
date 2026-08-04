@@ -53,10 +53,17 @@ def _resolve_dish_feedback_data(
     *,
     order: Order,
     restaurant_id: int,
+    guest: User | None,
+    guest_identity: str | None,
     dish_feedback_data: list[dict[str, Any]],
 ) -> list[tuple[MenuItem, dict[str, Any]]]:
     resolved: list[tuple[MenuItem, dict[str, Any]]] = []
     menu_item_ids: set[str] = set()
+    owned_order_items = (
+        order.items.filter(order__created_by=guest)
+        if guest is not None
+        else order.items.filter(guest_identity=guest_identity)
+    )
 
     for item_data in dish_feedback_data:
         menu_item_public_id = item_data["menu_item"]
@@ -71,8 +78,8 @@ def _resolve_dish_feedback_data(
         ).first()
         if menu_item is None:
             raise DomainError(f"Menu item {menu_item_public_id} not found.")
-        if not order.items.filter(menu_item_id=menu_item.id).exists():
-            raise DomainError(f"Menu item {menu_item_public_id} is not part of this order.")
+        if not owned_order_items.filter(menu_item_id=menu_item.id).exists():
+            raise DomainError(f"Menu item {menu_item_public_id} is not part of your order.")
         resolved.append((menu_item, item_data))
 
     return resolved
@@ -99,6 +106,8 @@ def create_feedback(
     resolved_dish_feedback = _resolve_dish_feedback_data(
         order=order,
         restaurant_id=order.restaurant_id,
+        guest=guest,
+        guest_identity=guest_identity,
         dish_feedback_data=dish_feedback_data or [],
     )
 
@@ -143,6 +152,8 @@ def update_feedback(
         resolved_dish_feedback = _resolve_dish_feedback_data(
             order=feedback.order,
             restaurant_id=feedback.restaurant_id,
+            guest=feedback.guest,
+            guest_identity=feedback.guest_identity,
             dish_feedback_data=dish_feedback_data,
         )
         feedback.dish_feedback.all().delete()
