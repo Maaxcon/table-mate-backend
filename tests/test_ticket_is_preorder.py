@@ -6,7 +6,7 @@ import pytest
 from django.utils import timezone
 
 from apps.menu.models import MenuItem
-from apps.orders.billing import checkout_cart_session, confirm_and_pay_preorder
+from apps.orders.billing import checkout_cart_session
 from apps.orders.models import CartItem, CartSession, Ticket
 from apps.orders.selectors import get_kitchen_tickets
 from apps.orders.serializers import TicketSerializer
@@ -14,6 +14,7 @@ from apps.orders.services import ensure_active_cart_for_table, inject_scheduled_
 from apps.orders.services.cart import add_item_to_cart
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.restaurants.models import Restaurant, Table
+from tests.conftest import pay_preorder_outside_lead_window
 
 pytestmark = pytest.mark.django_db
 
@@ -52,7 +53,7 @@ def test_preorder_ticket_is_flagged_after_injection(
     reservation = _pending_reservation(restaurant, table, start_offset=timedelta(minutes=10))
     cart = _preorder_cart(restaurant, reservation, item)
 
-    confirm_and_pay_preorder(cart_session=cart)
+    pay_preorder_outside_lead_window(cart, reservation)
     injected = inject_scheduled_preorders()
 
     assert injected == 1
@@ -87,7 +88,7 @@ def test_kitchen_ticket_selector_annotates_is_preorder_via_serializer(
 ) -> None:
     reservation = _pending_reservation(restaurant, table, start_offset=timedelta(minutes=5))
     cart = _preorder_cart(restaurant, reservation, item)
-    confirm_and_pay_preorder(cart_session=cart)
+    pay_preorder_outside_lead_window(cart, reservation)
     inject_scheduled_preorders()
 
     tickets = get_kitchen_tickets(restaurant.id)

@@ -12,12 +12,12 @@ from rest_framework import status
 
 from apps.authentication.models import RoleCode
 from apps.menu.models import MenuItem
-from apps.orders.billing import confirm_and_pay_preorder
 from apps.orders.models import CartItem, CartSession, OrderItem, OrderItemStatus
 from apps.orders.services import inject_scheduled_preorders
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.reservations.selectors import preorder_status_for_reservation
 from apps.restaurants.models import Restaurant, Table
+from tests.conftest import pay_preorder_outside_lead_window
 
 pytestmark = pytest.mark.django_db
 
@@ -46,7 +46,7 @@ def _paid_preorder(restaurant: Restaurant, table: Table, item: MenuItem) -> Rese
     CartItem.objects.create(
         restaurant=restaurant, cart_session=cart, menu_item=item, quantity=1, guest_slot=1
     )
-    confirm_and_pay_preorder(cart_session=cart)
+    pay_preorder_outside_lead_window(cart, reservation)
     return reservation
 
 

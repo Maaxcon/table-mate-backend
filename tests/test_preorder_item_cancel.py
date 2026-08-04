@@ -25,6 +25,7 @@ from apps.orders.models import (
     TicketStatus,
 )
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
+from apps.reservations.selectors import preorder_window_open
 from apps.restaurants.models import Restaurant, RestaurantSettings, Table
 from common.exceptions import PreorderNotAllowedError
 
@@ -200,3 +201,66 @@ def test_someone_elses_booking_is_not_found(
     assert resp.status_code == status.HTTP_404_NOT_FOUND
     dish.refresh_from_db()
     assert dish.status != OrderItemStatus.VOIDED
+
+
+def test_adding_a_round_is_refused_once_the_kitchen_window_opens(
+    restaurant: Restaurant, table: Table, item: MenuItem, restaurant_settings: RestaurantSettings
+) -> None:
+    # PREORDER_LEAD_MINUTES (20) before the start the sweep hands the food to
+    # the kitchen, so a further round would arrive out of step with the rest.
+    now = timezone.now()
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=now + timedelta(minutes=10),
+        end_at=now + timedelta(hours=2),
+        status=ReservationStatus.PENDING,
+        type=ReservationType.PRE_BOOKED,
+    )
+    cart = CartSession.objects.create(restaurant=restaurant, reservation=reservation)
+    CartItem.objects.create(
+        restaurant=restaurant, cart_session=cart, menu_item=item, quantity=1, guest_slot=1
+    )
+
+    with pytest.raises(PreorderNotAllowedError):
+        confirm_and_pay_preorder(cart_session=cart)
+
+    assert not preorder_window_open(reservation)
+
+
+def test_the_window_is_open_for_a_booking_further_out(
+    restaurant: Restaurant, table: Table
+) -> None:
+    now = timezone.now()
+    reservation = Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=now + timedelta(hours=3),
+        end_at=now + timedelta(hours=5),
+        status=ReservationStatus.PENDING,
+        type=ReservationType.PRE_BOOKED,
+    )
+
+    assert preorder_window_open(reservation)
+
+
+def test_the_check_says_when_adding_is_over(
+    restaurant: Restaurant,
+    table: Table,
+    item: MenuItem,
+    restaurant_settings: RestaurantSettings,
+    api: Any,
+) -> None:
+    owner = api(role=RoleCode.CUSTOMER)
+    reservation = _reservation(restaurant, table, customer=owner.user)
+    _pay_round(restaurant, reservation, item, dishes=2)
+
+    resp = owner.client.get(f"/api/reservations/reservations/{reservation.public_id}/preorder/")
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.json()["can_add_more"] is True
+
+    Reservation.objects.filter(pk=reservation.pk).update(start_at=timezone.now() + timedelta(minutes=5))
+    resp = owner.client.get(f"/api/reservations/reservations/{reservation.public_id}/preorder/")
+    assert resp.json()["can_add_more"] is False

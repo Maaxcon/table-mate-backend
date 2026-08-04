@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from apps.authentication.models import User
 from apps.reservations.models import Reservation, ReservationStatus
+from apps.reservations.selectors import preorder_window_open
 from apps.restaurants.models import RestaurantSettings
 from apps.restaurants.selectors import is_restaurant_open
 from common.exceptions import (
@@ -582,6 +583,11 @@ def confirm_and_pay_preorder(
         reservation = cart_session.reservation
         if reservation.status != ReservationStatus.PENDING:
             raise PreorderNotAllowedError()
+        if not preorder_window_open(reservation):
+            raise PreorderNotAllowedError(
+                "The kitchen is already getting this booking's food ready — "
+                "it's too late to add to the pre-order."
+            )
 
         currency, tax_rate, service_charge_rate = _restaurant_billing(reservation.restaurant_id)
         session = ensure_preorder_session(reservation, opened_by=user, currency=currency)

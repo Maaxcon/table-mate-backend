@@ -16,7 +16,6 @@ from django.utils import timezone
 
 from apps.authentication.models import RoleCode
 from apps.menu.models import MenuItem
-from apps.orders.billing import confirm_and_pay_preorder
 from apps.orders.models import (
     CartItem,
     CartSession,
@@ -30,6 +29,7 @@ from apps.reservations.models import Reservation, ReservationStatus, Reservation
 from apps.reservations.services import expire_noshow_reservations
 from apps.restaurants.models import Restaurant, Table
 from common.exceptions import PreorderNotAllowedError
+from tests.conftest import pay_preorder_outside_lead_window
 
 pytestmark = pytest.mark.django_db
 
@@ -52,7 +52,7 @@ def _pay_round(restaurant: Restaurant, reservation: Reservation, item: MenuItem)
     CartItem.objects.create(
         restaurant=restaurant, cart_session=cart, menu_item=item, quantity=1, guest_slot=1
     )
-    confirm_and_pay_preorder(cart_session=cart)
+    pay_preorder_outside_lead_window(cart, reservation)
     return Order.objects.filter(session__reservation=reservation).order_by("pk").last()
 
 

@@ -227,3 +227,29 @@ def item(menu: Menu, category: MenuCategory, restaurant: Restaurant) -> MenuItem
 @pytest.fixture
 def restaurant_settings(restaurant: Restaurant) -> RestaurantSettings:
     return RestaurantSettingsFactory.create(restaurant=restaurant)
+
+
+def pay_preorder_outside_lead_window(cart_session: Any, reservation: Any) -> None:
+    """Pay a pre-order round for a booking that starts inside the kitchen window.
+
+    confirm_and_pay_preorder refuses within PREORDER_LEAD_MINUTES of the start,
+    because the kitchen is already being handed that booking's food. Tests that
+    need a paid round on an imminent booking pay while it is still far out and
+    then put the real start time back — the order the clock would produce.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.orders.billing import confirm_and_pay_preorder
+    from apps.reservations.models import Reservation
+
+    start_at, end_at = reservation.start_at, reservation.end_at
+    now = timezone.now()
+    Reservation.objects.filter(pk=reservation.pk).update(
+        start_at=now + timedelta(hours=4),
+        end_at=now + timedelta(hours=6),
+    )
+    confirm_and_pay_preorder(cart_session=cart_session)
+    Reservation.objects.filter(pk=reservation.pk).update(start_at=start_at, end_at=end_at)
+    reservation.refresh_from_db()

@@ -5985,6 +5985,9 @@ components:
           type: string
           nullable: true
           readOnly: true
+        can_preorder:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6358,11 +6361,14 @@ components:
           type: boolean
         can_cancel:
           type: boolean
+        can_add_more:
+          type: boolean
         items:
           type: array
           items:
             $ref: '#/components/schemas/PreorderItem'
       required:
+      - can_add_more
       - can_cancel
       - currency
       - is_cooking
@@ -6701,6 +6707,9 @@ components:
           type: string
           nullable: true
           readOnly: true
+        can_preorder:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6717,6 +6726,7 @@ components:
           format: date-time
           readOnly: true
       required:
+      - can_preorder
       - created_at
       - customer
       - customer_name

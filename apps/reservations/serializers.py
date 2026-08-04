@@ -8,6 +8,7 @@ from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
 from .models import Reservation, ReservationStatus
+from .selectors import preorder_window_open
 
 
 class TableInfoSerializer(serializers.ModelSerializer[Table]):
@@ -51,6 +52,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
     preorder_total = serializers.SerializerMethodField()
     preorder_items_count = serializers.SerializerMethodField()
     preorder_currency = serializers.SerializerMethodField()
+    can_preorder = serializers.SerializerMethodField()
 
     class Meta:
         model = Reservation
@@ -77,6 +79,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "preorder_total",
             "preorder_items_count",
             "preorder_currency",
+            "can_preorder",
             "status",
             "created_by_staff",
             "notes",
@@ -98,6 +101,7 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "preorder_total",
             "preorder_items_count",
             "preorder_currency",
+            "can_preorder",
             "created_at",
             "updated_at",
         ]
@@ -135,6 +139,9 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
 
     def get_preorder_currency(self, obj: Reservation) -> str | None:
         return getattr(obj, "preorder_currency", None)
+
+    def get_can_preorder(self, obj: Reservation) -> bool:
+        return preorder_window_open(obj)
 
     def get_customer_name(self, obj: Reservation) -> str:
         if obj.guest_name:
@@ -250,4 +257,7 @@ class PreorderDetailSerializer(serializers.Serializer[dict[str, object]]):
     # nothing is cooking yet.
     is_cooking = serializers.BooleanField()
     can_cancel = serializers.BooleanField()
+    # Separate again: the guest may still look at (and cancel) the check after
+    # the window for paying another round has closed.
+    can_add_more = serializers.BooleanField()
     items = PreorderItemSerializer(many=True)

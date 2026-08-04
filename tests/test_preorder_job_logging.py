@@ -14,12 +14,13 @@ import pytest
 from django.utils import timezone
 
 from apps.menu.models import MenuItem
-from apps.orders.billing import cancel_preorder, confirm_and_pay_preorder
+from apps.orders.billing import cancel_preorder
 from apps.orders.models import CartItem, CartSession, Order, OrderItem
 from apps.orders.services import inject_scheduled_preorders
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.reservations.services import expire_noshow_reservations
 from apps.restaurants.models import Restaurant, Table
+from tests.conftest import pay_preorder_outside_lead_window
 
 pytestmark = pytest.mark.django_db
 
@@ -50,7 +51,7 @@ def _paid_preorder(
     CartItem.objects.create(
         restaurant=restaurant, cart_session=cart, menu_item=item, quantity=1, guest_slot=1
     )
-    confirm_and_pay_preorder(cart_session=cart)
+    pay_preorder_outside_lead_window(cart, reservation)
     return reservation, Order.objects.get(session__reservation=reservation)
 
 

@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.db.models import Exists, OuterRef, QuerySet, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -76,6 +77,20 @@ def _annotate_has_preorder(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
         preorder_items_count=Coalesce(Subquery(preorder_items_count), 0),
         preorder_currency=Subquery(preorder_paid.values("currency")[:1]),
     )
+
+
+def preorder_window_open(reservation: Reservation, *, now: datetime | None = None) -> bool:
+    """Whether the guest may still pay for a (further) pre-order round.
+
+    Closes PREORDER_LEAD_MINUTES before the booking starts: from that moment
+    inject_scheduled_preorders hands the paid rounds to the kitchen, and food
+    added after that would arrive whenever it happens to be cooked rather than
+    with the rest of the order.
+    """
+    if reservation.status != ReservationStatus.PENDING:
+        return False
+    lead_minutes = max(int(getattr(settings, "PREORDER_LEAD_MINUTES", 20)), 0)
+    return (now or timezone.now()) < reservation.start_at - timedelta(minutes=lead_minutes)
 
 
 def preorder_status_for_reservation(reservation_id: int) -> str | None:

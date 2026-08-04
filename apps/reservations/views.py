@@ -47,6 +47,7 @@ from .selectors import (
     get_customer_reservations,
     get_session_grace_cutoffs,
     get_unavailable_table_ids,
+    preorder_window_open,
 )
 from .serializers import (
     BatchUpdateErrorSerializer,
@@ -434,6 +435,7 @@ class ReservationViewSet(
                 "total": str(total),
                 "is_cooking": is_cooking,
                 "can_cancel": can_cancel,
+                "can_add_more": preorder_window_open(reservation),
                 "items": items,
             }
         )
