@@ -26,6 +26,7 @@ from apps.receipts.models import Receipt
 from apps.reservations.models import Reservation, ReservationStatus, ReservationType
 from apps.reservations.selectors import get_active_reservation_for_table
 from apps.restaurants.models import Restaurant, Table
+from common.exceptions import UnservedItemsError
 
 
 def _active_reservation(restaurant: Restaurant, table: Table) -> Reservation:
@@ -184,3 +185,95 @@ def test_close_creates_receipt_with_dishes_for_waiter_walk_in(
     assert receipt_item.name == item.name
     assert receipt_item.quantity == 2
     assert receipt_item.unit_price == Decimal("29.99")
+
+
+def _unserved_order(restaurant: Restaurant, session: Any, item: MenuItem, *, count: int = 1) -> Order:
+    order = Order.objects.create(restaurant=restaurant, session=session, currency="UAH")
+    for _ in range(count):
+        OrderItem.objects.create(
+            restaurant=restaurant,
+            order=order,
+            menu_item=item,
+            guest_slot=1,
+            quantity=1,
+            status=OrderItemStatus.READY,
+            unit_price=Decimal("29.9900"),
+            total_price=Decimal("29.9900"),
+        )
+    return order
+
+
+@pytest.mark.django_db
+def test_close_without_force_raises_with_unserved_count(
+    restaurant: Restaurant, table: Table, item: MenuItem
+) -> None:
+    reservation = _active_reservation(restaurant, table)
+    session = ensure_visit_session(reservation)
+    _unserved_order(restaurant, session, item, count=3)
+
+    with pytest.raises(UnservedItemsError) as exc_info:
+        close_visit_session(session=session)
+
+    assert exc_info.value.count == 3
+    session.refresh_from_db()
+    assert session.status != SessionStatus.CLOSED
+
+
+@pytest.mark.django_db
+def test_close_with_force_closes_despite_unserved_items(
+    restaurant: Restaurant, table: Table, item: MenuItem
+) -> None:
+    reservation = _active_reservation(restaurant, table)
+    session = ensure_visit_session(reservation)
+    _unserved_order(restaurant, session, item, count=2)
+
+    close_visit_session(session=session, force=True)
+
+    session.refresh_from_db()
+    reservation.refresh_from_db()
+    assert session.status == SessionStatus.CLOSED
+    assert reservation.status == ReservationStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_close_endpoint_returns_409_with_count_when_items_unserved(
+    restaurant: Restaurant,
+    table: Table,
+    item: MenuItem,
+    api: Callable[..., Any],
+) -> None:
+    reservation = _active_reservation(restaurant, table)
+    session = ensure_visit_session(reservation)
+    _unserved_order(restaurant, session, item, count=3)
+    staff = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+
+    resp = staff.client.post(f"/api/orders/sessions/{session.public_id}/close/")
+
+    assert resp.status_code == status.HTTP_409_CONFLICT
+    body = resp.json()
+    assert body["code"] == "unserved_items"
+    assert body["count"] == 3
+    session.refresh_from_db()
+    assert session.status != SessionStatus.CLOSED
+
+
+@pytest.mark.django_db
+def test_close_endpoint_force_true_closes_despite_unserved_items(
+    restaurant: Restaurant,
+    table: Table,
+    item: MenuItem,
+    api: Callable[..., Any],
+) -> None:
+    reservation = _active_reservation(restaurant, table)
+    session = ensure_visit_session(reservation)
+    _unserved_order(restaurant, session, item, count=1)
+    staff = api(role=RoleCode.WAITER, restaurant_id=restaurant.id)
+
+    resp = staff.client.post(
+        f"/api/orders/sessions/{session.public_id}/close/",
+        {"force": True},
+        format="json",
+    )
+
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.json()["status"] == SessionStatus.CLOSED

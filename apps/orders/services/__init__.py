@@ -25,6 +25,8 @@ from .sessions import (
     close_stale_cart_sessions,
     create_cart_session,
     ensure_active_cart_for_table,
+    force_close_sessions_past_shift_end,
+    inject_scheduled_preorders,
 )
 from .walk_in import create_walk_in_reservation
 
@@ -46,7 +48,9 @@ __all__ = [
     "create_walk_in_reservation",
     "emit_hall_table_status_changed",
     "ensure_active_cart_for_table",
+    "force_close_sessions_past_shift_end",
     "get_bill_order_items",
+    "inject_scheduled_preorders",
     "open_session",
     "pay_order_items",
     "pay_session_bill",

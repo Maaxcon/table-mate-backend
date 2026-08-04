@@ -14,6 +14,11 @@ from .guest_profile import GuestProfile as GuestProfile
 
 
 class SessionStatus(models.TextChoices):
+    # A paid pre-order needs somewhere to hang its Order before the party
+    # arrives, but the table is not occupied yet. Every occupancy check filters
+    # on OPEN, so SCHEDULED holds the bill without taking the table out of
+    # service; ensure_visit_session promotes it on seating.
+    SCHEDULED = "scheduled", "Scheduled"
     OPEN = "open", "Open"
     CLOSED = "closed", "Closed"
     VOIDED = "voided", "Voided"
@@ -22,6 +27,7 @@ class SessionStatus(models.TextChoices):
 class OrderSource(models.TextChoices):
     WAITER_MANUAL = "waiter_manual", "Waiter manual"
     CUSTOMER_PREPAID = "customer_prepaid", "Customer prepaid"
+    CUSTOMER_PREORDER = "customer_preorder", "Customer pre-order"
 
 
 class OrderStatus(models.TextChoices):
@@ -115,12 +121,16 @@ class Session(RestaurantScopedModel):
                 condition=models.Q(status__in=SessionStatus.values),
                 name="orders_session_status_valid",
             ),
-            # A physical table holds one seated party at a time. Sessions are only
-            # created for seated (active) parties, so at most one OPEN session may
-            # exist per table. This is the DB backstop for the batch re-seat / prolong
-            # path (which mutates Session.table/ends_at outside the Reservation
-            # exclusion constraint) and for the activate_pending TOCTOU race — both of
-            # which can otherwise double-book a table across concurrent transactions.
+            # A physical table holds one seated party at a time, so at most one OPEN
+            # session may exist per table. Scoped to OPEN deliberately: a table may
+            # carry any number of SCHEDULED sessions (one per future booking with a
+            # paid pre-order) without being occupied by any of them.
+            #
+            # This is the DB backstop for the batch re-seat / prolong path (which
+            # mutates Session.table/ends_at outside the Reservation exclusion
+            # constraint), for the activate_pending TOCTOU race, and for the
+            # SCHEDULED->OPEN promotion in ensure_visit_session — all of which can
+            # otherwise double-book a table across concurrent transactions.
             models.UniqueConstraint(
                 fields=["table"],
                 condition=models.Q(status=SessionStatus.OPEN),

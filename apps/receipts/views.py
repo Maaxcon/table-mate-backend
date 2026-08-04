@@ -18,6 +18,6 @@ class MyReceiptsView(generics.ListAPIView[Receipt]):
     def get_queryset(self) -> QuerySet[Receipt]:
         return (
             Receipt.objects.filter(customer_id=self.request.user.pk)
-            .select_related("restaurant")
+            .select_related("restaurant", "order__session__reservation")
             .prefetch_related("items")
         )

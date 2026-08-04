@@ -185,3 +185,56 @@ def test_receipt_falls_back_to_session_waiter_without_customer(
     receipt = create_receipt_from_order(order)
     assert receipt is not None
     assert receipt.customer_id == waiter.pk
+
+
+@pytest.mark.django_db
+def test_my_receipts_names_the_booking_it_came_from(
+    restaurant: Restaurant,
+    table: Table,
+    item: MenuItem,
+    user_factory: Callable[..., Any],
+    api_factory: Any,
+) -> None:
+    # The guest's past bookings offer the receipt, so the payload has to say
+    # which booking each receipt belongs to.
+    customer = user_factory(role=RoleCode.CUSTOMER)
+    customer.save()
+    waiter = user_factory(role=RoleCode.WAITER)
+    waiter.save()
+    order = _build_order(restaurant, table, item, customer, waiter)
+    create_receipt_from_order(order)
+
+    client = api_factory(customer, restaurant.id).client
+    resp = client.get("/api/receipts/my/")
+
+    assert resp.status_code == 200
+    row = resp.json()[0]
+    assert row["reservation_public_id"] == str(order.session.reservation.public_id)
+
+
+@pytest.mark.django_db
+def test_a_hand_written_receipt_names_no_booking(
+    restaurant: Restaurant,
+    user_factory: Callable[..., Any],
+    api_factory: Any,
+) -> None:
+    customer = user_factory(role=RoleCode.CUSTOMER)
+    customer.save()
+    Receipt.objects.create(
+        customer=customer,
+        restaurant=restaurant,
+        order_number="TM-MANUAL-1",
+        visited_at=timezone.now(),
+        currency="UAH",
+        table_label="Table 1",
+        server_name="Olena",
+        guests=2,
+        payment_method=PaymentMethod.CASH,
+        payment_status="Paid",
+    )
+
+    client = api_factory(customer, restaurant.id).client
+    resp = client.get("/api/receipts/my/")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["reservation_public_id"] is None

@@ -183,6 +183,7 @@ _FLOOR_EVENT_FIELDS: dict[str, set[str]] = {
     "ZONE_DELETED": {"event_name", "zone_public_id", "occurred_at"},
     "HALL_RESERVATIONS_UPDATED": {"event_name", "table_ids", "occurred_at"},
     "HALL_SESSION_AUTO_EXTENDED": {"event_name", "table_id", "ends_at", "clamped_by", "occurred_at"},
+    "HALL_PREORDER_STATUS_CHANGED": {"event_name", "reservation_id", "status", "occurred_at"},
 }
 
 

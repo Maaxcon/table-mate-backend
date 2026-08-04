@@ -12,7 +12,18 @@ from apps.menu.models import MenuItem
 from apps.reservations.models import Reservation
 from apps.reservations.selectors import get_reservation_participant_ids
 
-from .models import CartItem, CartSession, OrderItem, OrderItemStatus, Session, Ticket, TicketStatus
+from .models import (
+    CartItem,
+    CartSession,
+    Order,
+    OrderItem,
+    OrderItemStatus,
+    OrderPaymentStatus,
+    OrderSource,
+    Session,
+    Ticket,
+    TicketStatus,
+)
 
 
 def get_session(session_id: uuid.UUID, restaurant_id: int) -> Session | None:
@@ -175,6 +186,42 @@ def get_cart_session(restaurant_id: int, session_pk: str) -> CartSession | None:
         CartSession.objects.select_related("restaurant", "reservation")
         .filter(public_id=session_pk, restaurant_id=restaurant_id)
         .first()
+    )
+
+
+def get_cart_session_by_public_id(session_pk: str) -> CartSession | None:
+    """Look up a cart session without a restaurant_id to scope by.
+
+    A logged-in customer's JWT doesn't carry a restaurant_id claim (only staff
+    tokens do — see CustomTokenObtainPairSerializer), so customer-facing
+    lookups can't filter by it. public_id is globally unique, and the real
+    authorization boundary is the participant check callers run afterward.
+    """
+    return CartSession.objects.select_related("restaurant", "reservation").filter(public_id=session_pk).first()
+
+
+def get_preorder_orders_for_reservation(reservation: Reservation) -> list[Order]:
+    """All of the reservation's paid pre-order rounds (confirm_and_pay_preorder).
+
+    A reservation can accumulate more than one pre-order round (see
+    MenuPage's handleCheckout, which reopens a fresh cart after each
+    payment) — every paid round is still owed and eaten, so callers must
+    show them all, not just the latest. Cancelled rounds are excluded since
+    they were refunded and no longer owed.
+
+    Scoped by source: an in-visit order on the same reservation is PAID too
+    once the guest settles up, and would otherwise be served back here as a
+    pre-order round the guest could still "cancel".
+    """
+    return list(
+        Order.objects.filter(
+            session__reservation=reservation,
+            source=OrderSource.CUSTOMER_PREORDER,
+            payment_status=OrderPaymentStatus.PAID,
+        )
+        .select_related("session")
+        .prefetch_related("items__menu_item")
+        .order_by("created_at")
     )
 
 

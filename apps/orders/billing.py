@@ -1,20 +1,28 @@
 __all__ = [
+    "cancel_preorder",
+    "cancel_preorder_rounds",
     "checkout_cart_session",
     "close_reservation_carts",
     "close_visit_session",
+    "confirm_and_pay_preorder",
+    "ensure_preorder_session",
     "ensure_visit_session",
 ]
 
 
+import logging
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
 from apps.authentication.models import User
 from apps.reservations.models import Reservation, ReservationStatus
+from apps.reservations.selectors import preorder_window_open
 from apps.restaurants.models import RestaurantSettings
 from apps.restaurants.selectors import is_restaurant_open
 from common.exceptions import (
@@ -22,8 +30,11 @@ from common.exceptions import (
     CartSessionClosedError,
     DomainError,
     EmptyCartError,
-    ReservationConflictError,
+    PreorderNotAllowedError,
+    ReservationNotYetActiveError,
     RestaurantClosedError,
+    TableOccupiedError,
+    UnservedItemsError,
 )
 from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
 from common.money import quantize_money
@@ -46,6 +57,8 @@ from .models import (
     TicketStatus,
 )
 from .services.cart import _broadcast_cart_updated
+
+logger = logging.getLogger(__name__)
 
 
 def _distribute_service_charge(
@@ -80,35 +93,130 @@ def _restaurant_billing(restaurant_id: int) -> tuple[str, Decimal, Decimal]:
     return settings.currency or "USD", settings.default_tax_rate, settings.default_service_charge
 
 
-def ensure_visit_session(
+@contextmanager
+def _table_occupied_on_conflict() -> Iterator[None]:
+    """Translate orders_one_open_session_per_table into TableOccupiedError.
+
+    That constraint firing means another reservation's visit is still open on
+    this table (e.g. running over its slot). Surface a clear, specific error
+    instead of a generic "conflicts" 409.
+    """
+    try:
+        yield
+    except IntegrityError as exc:
+        if "orders_one_open_session_per_table" not in str(exc):
+            raise
+        raise TableOccupiedError(
+            "This table's previous visit hasn't ended yet — try again shortly."
+        ) from exc
+
+
+def ensure_preorder_session(
     reservation: Reservation,
     *,
     opened_by: User | None = None,
     currency: str | None = None,
 ) -> Session:
-    """Return (or create) the visit Session (bill) for a reservation.
+    """Return (or create) the SCHEDULED Session holding a paid pre-order's bill.
 
-    One Session per reservation (OneToOne). Created eagerly when a table is
-    opened — walk-in or pre-booked activation — so the floor plan shows the
-    table as occupied consistently, and reused at checkout.
+    A pre-order is paid before the party arrives, but Order.session is required
+    — so the bill has to exist now. It is created SCHEDULED rather than OPEN
+    precisely so it does not occupy the table: every occupancy check (conflict
+    detection, availability, orders_one_open_session_per_table, the cleanup
+    jobs) filters on OPEN, so a booking weeks out no longer takes its table out
+    of service for everyone else. ensure_visit_session promotes it when the
+    party is actually seated.
+
+    Repeat pre-order rounds reuse the same Session, as they did when this ran
+    through ensure_visit_session.
     """
     table_id = reservation.table_id
     if table_id is None:
         raise DomainError("Reservation has no table; cannot open a bill.")
     if currency is None:
         currency, _, _ = _restaurant_billing(reservation.restaurant_id)
-    session, _ = Session.objects.get_or_create(
+
+    existing = Session.objects.select_for_update().filter(reservation=reservation).first()
+    if existing is not None:
+        return existing
+
+    return Session.objects.create(
+        restaurant_id=reservation.restaurant_id,
+        table_id=table_id,
         reservation=reservation,
-        defaults={
-            "restaurant_id": reservation.restaurant_id,
-            "table_id": table_id,
-            "opened_by": opened_by,
-            "guest_count": reservation.guest_count,
-            "currency": currency,
-            "opened_at": timezone.now(),
-            "ends_at": reservation.end_at,
-        },
+        opened_by=opened_by,
+        guest_count=reservation.guest_count,
+        currency=currency,
+        status=SessionStatus.SCHEDULED,
+        opened_at=reservation.start_at,
+        ends_at=reservation.end_at,
     )
+
+
+def ensure_visit_session(
+    reservation: Reservation,
+    *,
+    opened_by: User | None = None,
+    currency: str | None = None,
+) -> Session:
+    """Return (or create) the OPEN visit Session (bill) for a reservation.
+
+    One Session per reservation (OneToOne). Called when the table is actually
+    opened — walk-in or pre-booked activation — so the floor plan shows the
+    table as occupied consistently, and reused at checkout.
+
+    A SCHEDULED session left behind by a paid pre-order is promoted to OPEN
+    here, with opened_at moved to now: this call is the moment the party sits
+    down and the table genuinely becomes occupied. Callers are all inside a
+    transaction, so the select_for_update below serialises concurrent seatings
+    of the same reservation.
+
+    Promotion re-reads table and ends_at from the reservation. A SCHEDULED
+    session can outlive several reschedules — reschedule_reservation and
+    batch_update_reservations only rewrite the Session of an ACTIVE booking, so
+    a pending one moved after its pre-order was paid leaves those two fields
+    stale. Seating on the old table would occupy the wrong one, and a stale
+    ends_at is already past, so close_overdue_visit_sessions would shut the
+    visit on its next run.
+    """
+    table_id = reservation.table_id
+    if table_id is None:
+        raise DomainError("Reservation has no table; cannot open a bill.")
+    if currency is None:
+        currency, _, _ = _restaurant_billing(reservation.restaurant_id)
+
+    existing = Session.objects.select_for_update().filter(reservation=reservation).first()
+    if existing is not None:
+        if existing.status == SessionStatus.SCHEDULED:
+            existing.status = SessionStatus.OPEN
+            existing.opened_at = timezone.now()
+            existing.opened_by = opened_by
+            existing.table_id = table_id
+            existing.ends_at = reservation.end_at
+            with _table_occupied_on_conflict():
+                existing.save(
+                    update_fields=[
+                        "status",
+                        "opened_at",
+                        "opened_by",
+                        "table",
+                        "ends_at",
+                        "updated_at",
+                    ]
+                )
+        return existing
+
+    with _table_occupied_on_conflict():
+        session = Session.objects.create(
+            restaurant_id=reservation.restaurant_id,
+            table_id=table_id,
+            reservation=reservation,
+            opened_by=opened_by,
+            guest_count=reservation.guest_count,
+            currency=currency,
+            opened_at=timezone.now(),
+            ends_at=reservation.end_at,
+        )
     return session
 
 
@@ -159,24 +267,56 @@ def _finalize_session_orders_for_history(session: Session) -> None:
 
     for order in orders:
         create_receipt_from_order(order)
-def close_visit_session(*, session: Session, actor: User | None = None) -> Session:
+def _void_unserved_items(session: Session) -> int:
+    """Void what a forced close skipped and take its tickets off the kitchen board.
+
+    "Close anyway" means the waiter is telling us this food is not coming.
+    Leaving the items PENDING/IN_PROGRESS kept their tickets live on the
+    kitchen board for a visit that had already ended, and since those tickets
+    never reach COMPLETED the completed column's day filter never aged them
+    out either — with force_close_shift_end_sessions running nightly, they
+    accumulated.
+    """
+    unserved = OrderItem.objects.filter(
+        order__session=session,
+        status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
+    )
+    ticket_ids = set(unserved.exclude(ticket=None).values_list("ticket_id", flat=True))
+    voided = unserved.update(status=OrderItemStatus.VOIDED)
+
+    if ticket_ids:
+        Ticket.objects.filter(pk__in=ticket_ids).exclude(
+            status__in=[TicketStatus.COMPLETED, TicketStatus.BUMPED]
+        ).update(status=TicketStatus.BUMPED)
+
+    return voided
+
+
+def close_visit_session(*, session: Session, actor: User | None = None, force: bool = False) -> Session:
     """End a visit and free the table.
 
     Closes the Session (bill), marks the Reservation completed, closes any
     still-active CartSession, and sets the reservation end_at to now.
-    Checks that all order items are served/voided before allowing close.
+    Checks that all order items are served/voided before allowing close,
+    unless `force` is set (used by the end-of-shift cleanup, which closes
+    the table regardless so it doesn't stay wedged past closing) — a forced
+    close voids what it skipped rather than leaving it live.
     Idempotent — safe to call on an already-closed session.
     """
     with transaction.atomic():
         session = Session.objects.select_for_update().select_related("reservation").get(pk=session.pk)
 
         if session.status != SessionStatus.CLOSED:
-            pending_items = OrderItem.objects.filter(
+            pending_count = OrderItem.objects.filter(
                 order__session=session,
                 status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS, OrderItemStatus.READY],
-            ).exists()
-            if pending_items:
-                raise ReservationConflictError("Cannot close check: all items must be served or voided first.")
+            ).count()
+            if pending_count and not force:
+                raise UnservedItemsError(
+                    "Cannot close check: all items must be served or voided first.", count=pending_count
+                )
+            if pending_count:
+                _void_unserved_items(session)
 
             session.status = SessionStatus.CLOSED
             session.save(update_fields=["status"])
@@ -250,6 +390,86 @@ def _prune_unavailable_cart_items(cart_session: CartSession) -> list[dict[str, s
     return removed
 
 
+def _build_order_from_cart(
+    *,
+    cart_session: CartSession,
+    session: Session,
+    user: User | None,
+    currency: str,
+    tax_rate: Decimal,
+    service_charge_rate: Decimal,
+    source: str = OrderSource.CUSTOMER_PREPAID,
+) -> tuple[Order, list[OrderItem]]:
+    """Turn a cart's items into an Order + OrderItems, closing the cart.
+
+    Leaves OrderItem.ticket unset — callers attach a Ticket themselves, either
+    immediately (checkout_cart_session) or later (confirm_and_pay_preorder,
+    picked up by inject_scheduled_preorders near the reservation's start_at).
+    """
+    cart_items = list(CartItem.objects.filter(cart_session=cart_session).select_related("menu_item"))
+    if not cart_items:
+        raise EmptyCartError("Cart has no items to check out.")
+
+    order = Order.objects.create(
+        restaurant_id=cart_session.restaurant_id,
+        session=session,
+        created_by=user,
+        created_by_source=CreatedBySource.CUSTOMER if user is not None else CreatedBySource.SYSTEM,
+        source=source,
+        status=OrderStatus.SUBMITTED,
+        payment_status=OrderPaymentStatus.UNPAID,
+        currency=currency,
+    )
+
+    order_items: list[OrderItem] = []
+    order_subtotal = Decimal("0")
+    order_tax = Decimal("0")
+    # Build a map of guest_identity → display_name for this session.
+    from apps.orders.models import GuestProfile
+
+    guest_names = dict(
+        GuestProfile.objects.filter(cart_session=cart_session).values_list("guest_identity", "display_name")
+    )
+    for cart_item in cart_items:
+        unit_price = cart_item.menu_item.price
+        line_total = quantize_money(unit_price * cart_item.quantity)
+        line_tax = quantize_money(line_total * tax_rate)
+        order_items.append(
+            OrderItem.objects.create(
+                restaurant_id=cart_session.restaurant_id,
+                order=order,
+                menu_item=cart_item.menu_item,
+                guest_slot=cart_item.guest_slot or 0,
+                guest_display_name=(
+                    guest_names.get(cart_item.guest_identity) if cart_item.guest_identity else None
+                ),
+                quantity=cart_item.quantity,
+                comment=cart_item.comment,
+                unit_price=unit_price,
+                total_price=line_total,
+                tax_rate=tax_rate,
+                tax_amount=line_tax,
+            )
+        )
+        order_subtotal += line_total
+        order_tax += line_tax
+
+    # Service charge applies to the goods subtotal and is not itself taxed.
+    order_service_charge = quantize_money(order_subtotal * service_charge_rate)
+    _distribute_service_charge(order_items, order_subtotal, order_service_charge)
+    order.tax_total = order_tax
+    order.service_charge = order_service_charge
+    order.total_amount = order_subtotal + order_tax + order_service_charge
+    order.save(update_fields=["tax_total", "service_charge", "total_amount"])
+
+    cart_session.status = CartSessionStatus.CLOSED
+    cart_session.save(update_fields=["status"])
+
+    _recompute_session_totals(session)
+
+    return order, order_items
+
+
 def checkout_cart_session(
     *,
     cart_session: CartSession,
@@ -278,23 +498,30 @@ def checkout_cart_session(
         if not is_restaurant_open(cart_session.restaurant_id):
             raise RestaurantClosedError()
 
-        cart_items = list(CartItem.objects.filter(cart_session=cart_session).select_related("menu_item"))
-        if not cart_items:
-            raise EmptyCartError("Cart has no items to check out.")
-
         reservation = cart_session.reservation
+        # Mirror of confirm_and_pay_preorder's PENDING guard, keeping the two
+        # checkout endpoints disjoint. Without it a guest holding a pre-order
+        # cart (create_cart_session does not gate on reservation status) could
+        # POST to plain /checkout/ instead of /preorder-checkout/ and promote
+        # their SCHEDULED session to OPEN weeks early — occupying the table and
+        # firing the kitchen ticket immediately. Every legitimate in-visit cart
+        # comes from ensure_active_cart_for_table, which already requires ACTIVE.
+        if reservation.status != ReservationStatus.ACTIVE:
+            raise ReservationNotYetActiveError(
+                "This booking hasn't started yet — pre-order instead of checking out.",
+                start_at=reservation.start_at.isoformat(),
+            )
+
         currency, tax_rate, service_charge_rate = _restaurant_billing(reservation.restaurant_id)
         session = ensure_visit_session(reservation, opened_by=user, currency=currency)
 
-        order = Order.objects.create(
-            restaurant_id=cart_session.restaurant_id,
+        order, order_items = _build_order_from_cart(
+            cart_session=cart_session,
             session=session,
-            created_by=user,
-            created_by_source=CreatedBySource.CUSTOMER if user is not None else CreatedBySource.SYSTEM,
-            source=OrderSource.CUSTOMER_PREPAID,
-            status=OrderStatus.SUBMITTED,
-            payment_status=OrderPaymentStatus.UNPAID,
+            user=user,
             currency=currency,
+            tax_rate=tax_rate,
+            service_charge_rate=service_charge_rate,
         )
 
         ticket = Ticket.objects.create(
@@ -304,53 +531,7 @@ def checkout_cart_session(
             status=TicketStatus.INCOMING,
             injected_at=timezone.now(),
         )
-
-        order_items: list[OrderItem] = []
-        order_subtotal = Decimal("0")
-        order_tax = Decimal("0")
-        # Build a map of guest_identity → display_name for this session.
-        from apps.orders.models import GuestProfile
-
-        guest_names = dict(
-            GuestProfile.objects.filter(cart_session=cart_session).values_list("guest_identity", "display_name")
-        )
-        for cart_item in cart_items:
-            unit_price = cart_item.menu_item.price
-            line_total = quantize_money(unit_price * cart_item.quantity)
-            line_tax = quantize_money(line_total * tax_rate)
-            order_items.append(
-                OrderItem.objects.create(
-                    restaurant_id=cart_session.restaurant_id,
-                    order=order,
-                    ticket=ticket,
-                    menu_item=cart_item.menu_item,
-                    guest_slot=cart_item.guest_slot or 0,
-                    guest_display_name=(
-                        guest_names.get(cart_item.guest_identity) if cart_item.guest_identity else None
-                    ),
-                    quantity=cart_item.quantity,
-                    comment=cart_item.comment,
-                    unit_price=unit_price,
-                    total_price=line_total,
-                    tax_rate=tax_rate,
-                    tax_amount=line_tax,
-                )
-            )
-            order_subtotal += line_total
-            order_tax += line_tax
-
-        # Service charge applies to the goods subtotal and is not itself taxed.
-        order_service_charge = quantize_money(order_subtotal * service_charge_rate)
-        _distribute_service_charge(order_items, order_subtotal, order_service_charge)
-        order.tax_total = order_tax
-        order.service_charge = order_service_charge
-        order.total_amount = order_subtotal + order_tax + order_service_charge
-        order.save(update_fields=["tax_total", "service_charge", "total_amount"])
-
-        cart_session.status = CartSessionStatus.CLOSED
-        cart_session.save(update_fields=["status"])
-
-        _recompute_session_totals(session)
+        OrderItem.objects.filter(pk__in=[item.pk for item in order_items]).update(ticket=ticket)
 
         transaction.on_commit(
             lambda: emit_cart_checked_out(
@@ -365,10 +546,208 @@ def checkout_cart_session(
                 cart_session.restaurant_id,
                 ticket_id=str(ticket.public_id),
                 table_number=session.table.public_number,
-                items_count=len(cart_items),
+                items_count=len(order_items),
             )
         )
 
     # Broadcast after commit so websocket consumers don't read a pre-commit cart.
     _broadcast_cart_updated(cart_session)
     return order
+
+
+def confirm_and_pay_preorder(
+    *,
+    cart_session: CartSession,
+    user: User | None = None,
+) -> Order:
+    """Guest confirms and pays for a pre-order, ahead of their reservation's start_at.
+
+    Builds the Order/OrderItems now, same as checkout, but leaves them without
+    a Ticket — the kitchen doesn't see them until inject_scheduled_preorders
+    creates one closer to arrival. Payment is the same simulated pattern used
+    to split the bill (_pay_order_items_for_session in services/cart.py): no
+    real money moves, items are simply marked paid.
+
+    Only allowed while the reservation is still PENDING — once it's ACTIVE the
+    guest just orders normally through checkout_cart_session.
+    """
+    removed = _prune_unavailable_cart_items(cart_session)
+    if removed:
+        raise CartChangedError(removed=removed)
+
+    with transaction.atomic():
+        cart_session = CartSession.objects.select_for_update().select_related("reservation").get(pk=cart_session.pk)
+        if cart_session.status != CartSessionStatus.ACTIVE:
+            raise CartSessionClosedError("Cart session is closed.")
+
+        reservation = cart_session.reservation
+        if reservation.status != ReservationStatus.PENDING:
+            raise PreorderNotAllowedError()
+        if not preorder_window_open(reservation):
+            raise PreorderNotAllowedError(
+                "The kitchen is already getting this booking's food ready — "
+                "it's too late to add to the pre-order."
+            )
+
+        currency, tax_rate, service_charge_rate = _restaurant_billing(reservation.restaurant_id)
+        session = ensure_preorder_session(reservation, opened_by=user, currency=currency)
+
+        order, order_items = _build_order_from_cart(
+            cart_session=cart_session,
+            session=session,
+            user=user,
+            currency=currency,
+            tax_rate=tax_rate,
+            service_charge_rate=service_charge_rate,
+            source=OrderSource.CUSTOMER_PREORDER,
+        )
+
+        OrderItem.objects.filter(pk__in=[item.pk for item in order_items]).update(is_paid=True)
+        order.payment_status = OrderPaymentStatus.PAID
+        order.save(update_fields=["payment_status"])
+
+    _broadcast_cart_updated(cart_session)
+    return order
+
+
+def cancel_preorder(*, order: Order, user: User | None = None) -> Order:
+    """Cancel a paid pre-order and simulate a refund, before the kitchen has it.
+
+    Only allowed while no Ticket exists yet for the order — once
+    inject_scheduled_preorders has picked it up, the kitchen is already
+    working on it and it's too late to cancel from the guest side.
+    """
+    with transaction.atomic():
+        order = (
+            Order.objects.select_for_update()
+            .select_related("session__reservation")
+            .get(pk=order.pk)
+        )
+        if order.payment_status != OrderPaymentStatus.PAID:
+            raise PreorderNotAllowedError("This pre-order isn't paid, so there's nothing to cancel.")
+        if Ticket.objects.filter(order=order).exists():
+            raise PreorderNotAllowedError(
+                "The kitchen has already started this pre-order — it can't be cancelled."
+            )
+
+        refunded = order.total_amount
+        currency = order.currency
+
+        # Same audit trail void_order_item writes: a refund is a void, and who
+        # asked for it has to survive log retention. None means the no-show
+        # sweep did it unattended.
+        OrderItem.objects.filter(order=order).update(
+            status=OrderItemStatus.VOIDED,
+            is_paid=False,
+            voided_at=timezone.now(),
+            voided_by=user,
+        )
+        order.status = OrderStatus.CANCELLED
+        order.payment_status = OrderPaymentStatus.REFUNDED
+        order.tax_total = Decimal("0")
+        order.service_charge = Decimal("0")
+        order.total_amount = Decimal("0")
+        order.save(
+            update_fields=["status", "payment_status", "tax_total", "service_charge", "total_amount"]
+        )
+        _recompute_session_totals(order.session)
+
+        # Money (simulated) moves here, so leave a trail: this runs both from
+        # the guest's own cancel and unattended from the no-show sweep, and a
+        # guest asking where their pre-order went is otherwise unanswerable.
+        logger.info(
+            "Refunded pre-order %s: %s %s, reservation %s, by %s",
+            order.public_id,
+            refunded,
+            currency,
+            order.session.reservation.public_id if order.session.reservation else None,
+            user.pk if user is not None else "system",
+        )
+
+    return order
+
+
+def cancel_preorder_item(*, order_item: OrderItem, user: User | None = None) -> Order:
+    """Void one dish off a paid pre-order and refund just that dish.
+
+    Same window as cancel_preorder: allowed only while no Ticket exists for the
+    round. Voiding the last remaining dish cancels the whole round instead of
+    leaving a paid order with nothing on it.
+
+    Per-item tax stays as it was charged; only the service charge is
+    redistributed, because it is derived from the goods subtotal that just
+    shrank.
+    """
+    with transaction.atomic():
+        order = (
+            Order.objects.select_for_update()
+            .select_related("session__reservation")
+            .get(pk=order_item.order_id)
+        )
+        if order.source != OrderSource.CUSTOMER_PREORDER:
+            raise PreorderNotAllowedError("This dish isn't part of a pre-order.")
+        if order.payment_status != OrderPaymentStatus.PAID:
+            raise PreorderNotAllowedError("This pre-order isn't paid, so there's nothing to refund.")
+        if Ticket.objects.filter(order=order).exists():
+            raise PreorderNotAllowedError(
+                "The kitchen has already started this pre-order — it can't be changed."
+            )
+
+        item = OrderItem.objects.select_for_update().get(pk=order_item.pk)
+        if item.status == OrderItemStatus.VOIDED:
+            raise PreorderNotAllowedError("This dish is already off the pre-order.")
+
+        survivors = list(
+            OrderItem.objects.filter(order=order).exclude(status=OrderItemStatus.VOIDED).exclude(pk=item.pk)
+        )
+        if not survivors:
+            return cancel_preorder(order=order, user=user)
+
+        refunded = item.total_price + item.tax_amount + item.service_charge_amount
+        item.status = OrderItemStatus.VOIDED
+        item.is_paid = False
+        item.voided_at = timezone.now()
+        item.voided_by = user
+        item.service_charge_amount = Decimal("0")
+        item.save(update_fields=["status", "is_paid", "voided_at", "voided_by", "service_charge_amount"])
+
+        _, _, service_charge_rate = _restaurant_billing(order.restaurant_id)
+        subtotal = sum((line.total_price for line in survivors), Decimal("0"))
+        tax = sum((line.tax_amount for line in survivors), Decimal("0"))
+        service_charge = quantize_money(subtotal * service_charge_rate)
+        _distribute_service_charge(survivors, subtotal, service_charge)
+
+        order.tax_total = tax
+        order.service_charge = service_charge
+        order.total_amount = subtotal + tax + service_charge
+        order.save(update_fields=["tax_total", "service_charge", "total_amount"])
+        _recompute_session_totals(order.session)
+
+        logger.info(
+            "Refunded %s %s for dish %s off pre-order %s (asked by %s).",
+            refunded,
+            order.currency,
+            item.public_id,
+            order.public_id,
+            getattr(user, "pk", None),
+        )
+
+    return order
+
+
+def cancel_preorder_rounds(*, orders: Sequence[Order], user: User | None = None) -> list[Order]:
+    """Cancel every one of a reservation's pre-order rounds, or none of them.
+
+    A guest can pay for several rounds before arriving, and the kitchen picks
+    them up per round. Cancelling them one at a time refunded the early rounds
+    and then raised on the first ticketed one, leaving the guest told the
+    cancellation failed while a round was already voided and refunded. The
+    whole set is checked and cancelled in one transaction so the caller's
+    error means nothing changed.
+    """
+    with transaction.atomic():
+        if Ticket.objects.filter(order__in=orders).exists():
+            raise PreorderNotAllowedError(
+                "The kitchen has already started this pre-order — it can't be cancelled."
+            )
+        return [cancel_preorder(order=order, user=user) for order in orders]

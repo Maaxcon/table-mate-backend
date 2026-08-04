@@ -11,10 +11,10 @@ from rest_framework.views import APIView
 
 from apps.authentication.authentication import GuestJWTAuthentication
 from apps.authentication.models import User
-from apps.orders.billing import checkout_cart_session
+from apps.orders.billing import checkout_cart_session, confirm_and_pay_preorder
 from apps.orders.models import CartItem, CartSession, GuestProfile
 from apps.orders.permissions import IsActiveTableGuest
-from apps.orders.selectors import get_cart_session, is_cart_participant
+from apps.orders.selectors import get_cart_session, get_cart_session_by_public_id, is_cart_participant
 from apps.orders.services import (
     add_item_to_cart,
     call_waiter,
@@ -25,7 +25,7 @@ from apps.orders.services import (
     update_cart_item_quantity,
 )
 from common.api import RestaurantScopedViewSetMixin, get_restaurant_id_from_auth
-from common.exceptions import CartChangedError, CartSessionNotFoundError, DomainError
+from common.exceptions import CartChangedError, CartSessionNotFoundError
 
 from .serializers import (
     AddCartItemSerializer,
@@ -110,12 +110,12 @@ class CartSessionViewSet(
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        # Staff tokens carry restaurant_id; a plain customer token doesn't, so
+        # fall back to the reservation's own restaurant — create_cart_session's
+        # real authorization check is reservation-participant based, not this.
         restaurant_id = get_restaurant_id_from_auth(request)
         if restaurant_id is None:
-            return Response(
-                {"detail": "Restaurant context required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            restaurant_id = serializer.validated_data["reservation"].restaurant_id
 
         user = cast(User, request.user)
         session = create_cart_session(
@@ -161,12 +161,6 @@ class CartSessionItemViewSet(
                 qs = qs.filter(cart_session__public_id=session_pk)
         return qs.select_related("menu_item", "cart_session").distinct()
 
-    def _get_restaurant_id(self) -> int:
-        rid = get_restaurant_id_from_auth(self.request)
-        if rid is None:
-            raise DomainError("Restaurant context required.")
-        return rid
-
     def _get_session(self) -> CartSession:
         session_pk = self.kwargs["session_pk"]
         if _is_guest_request(self.request):
@@ -177,8 +171,16 @@ class CartSessionItemViewSet(
                 raise PermissionDenied("Guest token is not scoped to this session.")
             session = CartSession.objects.filter(public_id=session_pk).first()
         else:
-            restaurant_id = self._get_restaurant_id()
-            session = get_cart_session(restaurant_id=restaurant_id, session_pk=str(session_pk))
+            # Staff tokens carry restaurant_id; a plain customer token doesn't,
+            # so fall back to an unscoped lookup — add/remove/update all check
+            # is_cart_participant themselves (services/cart.py), which is the
+            # real authorization boundary here.
+            restaurant_id = get_restaurant_id_from_auth(self.request)
+            session = (
+                get_cart_session(restaurant_id=restaurant_id, session_pk=str(session_pk))
+                if restaurant_id is not None
+                else get_cart_session_by_public_id(str(session_pk))
+            )
         if session is None:
             raise CartSessionNotFoundError(f"Cart session {session_pk} not found.")
         return session
@@ -267,10 +269,13 @@ def _resolve_checkout_session(request: Request, session_pk: str) -> CartSession:
         session = CartSession.objects.filter(public_id=session_pk).first()
     else:
         restaurant_id = get_restaurant_id_from_auth(request)
+        # Staff tokens carry restaurant_id; a plain customer token doesn't, so
+        # fall back to an unscoped lookup — the participant check right below
+        # is the real authorization boundary for that case.
         session = (
             get_cart_session(restaurant_id=restaurant_id, session_pk=str(session_pk))
             if restaurant_id is not None
-            else None
+            else get_cart_session_by_public_id(str(session_pk))
         )
         if session is not None:
             user = _request_user_or_none(request)
@@ -305,6 +310,51 @@ class CartCheckoutView(GuestFallbackAuthMixin, APIView):
             )
         # Goods subtotal isn't stored on Order; derive it so the receipt
         # reconciles: total = subtotal + tax + service_charge.
+        subtotal = order.total_amount - order.tax_total - order.service_charge
+        return Response(
+            {
+                "order_id": str(order.public_id),
+                "subtotal": str(subtotal),
+                "tax": str(order.tax_total),
+                "service_charge": str(order.service_charge),
+                "total": str(order.total_amount),
+                "currency": order.currency,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema(tags=["Cart"])
+class PreorderCheckoutView(GuestFallbackAuthMixin, APIView):
+    """Guest action: confirm and pay for a pre-order before the reservation starts.
+
+    Same response shape as CartCheckoutView, but the order is paid immediately
+    (simulated) and holds no kitchen Ticket yet — see confirm_and_pay_preorder.
+    """
+
+    permission_classes = [IsActiveTableGuest]
+    serializer_class = None
+
+    @extend_schema(
+        request=None,
+        responses={
+            201: CheckoutResponseSerializer,
+            400: OpenApiResponse(description="Cart is empty."),
+            409: OpenApiResponse(
+                description="Cart changed (code CART_CHANGED), or reservation "
+                "already started (code preorder_not_allowed)."
+            ),
+        },
+    )
+    def post(self, request: Request, session_pk: str) -> Response:
+        session = _resolve_checkout_session(request, session_pk)
+        try:
+            order = confirm_and_pay_preorder(cart_session=session, user=_request_user_or_none(request))
+        except CartChangedError as exc:
+            return Response(
+                {"detail": exc.default_detail, "code": exc.default_code, "removed": exc.removed},
+                status=status.HTTP_409_CONFLICT,
+            )
         subtotal = order.total_amount - order.tax_total - order.service_charge
         return Response(
             {

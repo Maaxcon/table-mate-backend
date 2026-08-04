@@ -1,13 +1,14 @@
 """Cart-session lifecycle: open, ensure-for-table, stale cleanup, and auto-extend."""
 
 import logging
+from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from typing import cast
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
@@ -21,12 +22,28 @@ from common.exceptions import (
     NoActiveReservationError,
     ReservationConflictError,
     ReservationNotFoundError,
+    UnservedItemsError,
     WaiterCallCooldownError,
 )
-from common.hall_events import emit_hall_reservations_updated, emit_hall_session_auto_extended
-from common.notification_events import emit_cart_created, emit_waiter_called
+from common.hall_events import (
+    emit_hall_reservations_updated,
+    emit_hall_session_auto_extended,
+    emit_preorder_status_for_reservation,
+)
+from common.notification_events import emit_cart_created, emit_kitchen_ticket_injected, emit_waiter_called
 
-from ..models import CartSession, CartSessionStatus, Session, SessionStatus
+from ..models import (
+    CartSession,
+    CartSessionStatus,
+    Order,
+    OrderItem,
+    OrderPaymentStatus,
+    OrderSource,
+    Session,
+    SessionStatus,
+    Ticket,
+    TicketStatus,
+)
 from ..selectors import _resolve_allowed_reservation_participant_ids, get_reservation
 from .cart import _broadcast_cart_updated
 
@@ -183,6 +200,7 @@ def call_waiter(*, session: CartSession, guest_name: str | None = None) -> None:
 
 _STALE_CART_BATCH_SIZE = 500
 _OVERDUE_VISIT_BATCH_SIZE = 200
+_PREORDER_INJECT_BATCH_SIZE = 200
 
 
 def close_stale_cart_sessions(*, restaurant_id: int | None = None, batch_size: int = _STALE_CART_BATCH_SIZE) -> int:
@@ -464,10 +482,236 @@ def close_overdue_visit_sessions(*, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE)
                     continue
                 try:
                     close_visit_session(session=session, actor=None)
-                except ReservationConflictError:
+                except UnservedItemsError:
                     # One bad session must not wedge the cleanup run; the row
-                    # remains overdue and will be retried on a later pass.
+                    # remains overdue and will be retried on a later pass (and,
+                    # once far enough past shift end, force-closed regardless —
+                    # see force_close_sessions_past_shift_end).
                     continue
                 total_closed += 1
 
     return total_closed
+
+
+def force_close_sessions_past_shift_end(
+    *, now: datetime | None = None, batch_size: int = _OVERDUE_VISIT_BATCH_SIZE
+) -> int:
+    """Force-close OPEN sessions left over an hour past their restaurant's shift end.
+
+    close_overdue_visit_sessions refuses to close a session that still has
+    unserved items, so a session can stay wedged open forever if staff never
+    mark those items served/voided — blocking the table for every reservation
+    after it. Once a restaurant is this far past closing, freeing the table
+    matters more than that guard, so this force-closes regardless.
+    """
+    from apps.orders.billing import close_visit_session
+
+    now = now or timezone.now()
+    grace_minutes = max(int(getattr(settings, "SHIFT_END_FORCE_CLOSE_GRACE_MINUTES", 60)), 0)
+    grace = timedelta(minutes=grace_minutes)
+
+    restaurant_ids = list(
+        Session.objects.filter(status=SessionStatus.OPEN, reservation__status=ReservationStatus.ACTIVE)
+        .values_list("restaurant_id", flat=True)
+        .distinct()
+    )
+
+    total_closed = 0
+    for restaurant_id in restaurant_ids:
+        # No configured working hours → no shift boundary to force-close against.
+        close_at = get_working_hours_close_at(restaurant_id, now)
+        if close_at is None or now < close_at + grace:
+            continue
+
+        base = Session.objects.filter(
+            status=SessionStatus.OPEN,
+            reservation__status=ReservationStatus.ACTIVE,
+            restaurant_id=restaurant_id,
+        )
+
+        last_pk = 0
+        while True:
+            batch_ids = list(
+                base.filter(pk__gt=last_pk).order_by("pk").values_list("pk", flat=True)[:batch_size]
+            )
+            if not batch_ids:
+                break
+
+            last_pk = batch_ids[-1]
+
+            with transaction.atomic():
+                sessions = list(
+                    Session.objects.select_for_update(skip_locked=True)
+                    .filter(pk__in=batch_ids, status=SessionStatus.OPEN, reservation__status=ReservationStatus.ACTIVE)
+                    .order_by("pk")
+                )
+                for session in sessions:
+                    close_visit_session(session=session, actor=None, force=True)
+                    total_closed += 1
+
+    return total_closed
+
+
+def _preorder_orders_awaiting_kitchen() -> QuerySet[Order]:
+    """Paid pre-order rounds the kitchen hasn't been handed yet."""
+    return Order.objects.filter(
+        payment_status=OrderPaymentStatus.PAID,
+        source=OrderSource.CUSTOMER_PREORDER,
+        tickets__isnull=True,
+    )
+
+
+def _inject_preorder_orders(
+    order_ids: Iterable[int],
+    *,
+    now: datetime,
+    revalidate: Callable[[Order], bool] | None = None,
+) -> int:
+    """Ticket each of these pre-order Orders and tell the kitchen.
+
+    This is the last step checkout_cart_session does immediately for a live
+    order: create the Ticket, attach it to the order's items, notify the
+    kitchen. Every condition is re-checked under the row lock, since a
+    concurrent injection or a cancellation may have landed since the ids were
+    selected; ``revalidate`` adds the caller's own conditions to that re-check.
+    """
+    injected = 0
+    for order_id in order_ids:
+        with transaction.atomic():
+            order = (
+                Order.objects.select_for_update(skip_locked=True)
+                .select_related("session__table", "session__reservation", "restaurant")
+                .filter(pk=order_id)
+                .first()
+            )
+            if order is None:
+                # skip_locked: the row is either gone or held by another
+                # transaction. Benign on the periodic sweep, which comes back
+                # in a minute — but at seating time this is the whole reason
+                # inject_scheduled_preorders has to cover ACTIVE bookings too,
+                # so say it happened rather than dropping the round in silence.
+                logger.info("Pre-order order id=%s was busy or gone; not ticketed.", order_id)
+                continue
+            if order.payment_status != OrderPaymentStatus.PAID:
+                continue
+            if order.source != OrderSource.CUSTOMER_PREORDER:
+                continue
+            if Ticket.objects.filter(order=order).exists():
+                continue
+            session = order.session
+            if session.reservation is None:
+                continue
+            if revalidate is not None and not revalidate(order):
+                continue
+
+            ticket = Ticket.objects.create(
+                restaurant=order.restaurant,
+                session=session,
+                order=order,
+                status=TicketStatus.INCOMING,
+                injected_at=now,
+            )
+            items_count = OrderItem.objects.filter(order=order).update(ticket=ticket)
+            logger.info(
+                "Handed pre-order %s to the kitchen as ticket %s (%s items).",
+                order.public_id,
+                ticket.public_id,
+                items_count,
+            )
+
+        def _emit_ticket_injected(
+            tk: Ticket = ticket, sess: Session = session, cnt: int = items_count
+        ) -> None:
+            emit_kitchen_ticket_injected(
+                sess.restaurant_id,
+                ticket_id=str(tk.public_id),
+                table_number=sess.table.public_number,
+                items_count=cnt,
+            )
+            emit_preorder_status_for_reservation(sess.restaurant_id, sess.reservation)
+
+        transaction.on_commit(_emit_ticket_injected)
+        injected += 1
+
+    return injected
+
+
+def inject_preorders_for_reservation(reservation: Reservation) -> int:
+    """Hand the kitchen any pre-order rounds still waiting, because the party just sat down.
+
+    inject_scheduled_preorders only sweeps PENDING reservations due within
+    PREORDER_LEAD_MINUTES, and seating has no early window — a party seated
+    more than that ahead of its booking flips to ACTIVE before the sweep ever
+    matches, and the food would never be cooked. Seating is the other moment
+    the kitchen needs the ticket, so ask for it here as well; rounds the sweep
+    already injected are skipped on their existing Ticket.
+    """
+    order_ids = list(
+        _preorder_orders_awaiting_kitchen()
+        .filter(session__reservation=reservation)
+        .order_by("pk")
+        .values_list("pk", flat=True)
+    )
+    if not order_ids:
+        return 0
+    return _inject_preorder_orders(order_ids, now=timezone.now())
+
+
+def inject_scheduled_preorders(*, batch_size: int = _PREORDER_INJECT_BATCH_SIZE) -> int:
+    """Create the kitchen Ticket for paid pre-orders nearing their reservation's start_at.
+
+    confirm_and_pay_preorder builds and pays an Order/OrderItems up front but
+    leaves them ticket-less, so the kitchen doesn't see them yet. This finds
+    paid, ticket-less orders due within PREORDER_LEAD_MINUTES. A booking
+    seated before this runs is normally handled by
+    inject_preorders_for_reservation instead.
+
+    ACTIVE bookings are swept as well as PENDING ones, as a backstop for
+    inject_preorders_for_reservation. That one selects with skip_locked, so a
+    round whose Order row happens to be locked at seating time (an in-flight
+    cancel_preorder, say) is silently passed over — and once the booking is
+    ACTIVE, a PENDING-only sweep never came back for it. The guest had paid,
+    the kitchen never saw the food, and nothing said so.
+
+    The lead window applies only to PENDING rounds. Once the party is seated
+    there is nothing left to wait for, and a booking seated ahead of its slot
+    still has a start_at too far out to match the window.
+    """
+    now = timezone.now()
+    lead_minutes = max(int(getattr(settings, "PREORDER_LEAD_MINUTES", 20)), 0)
+    cutoff = now + timedelta(minutes=lead_minutes)
+
+    base = _preorder_orders_awaiting_kitchen().filter(
+        Q(
+            session__reservation__status=ReservationStatus.PENDING,
+            session__reservation__start_at__lte=cutoff,
+        )
+        | Q(session__reservation__status=ReservationStatus.ACTIVE)
+    )
+
+    def _still_due(order: Order) -> bool:
+        reservation = order.session.reservation
+        if reservation is None:
+            return False
+        if reservation.status == ReservationStatus.ACTIVE:
+            logger.warning(
+                "Recovering pre-order %s: its booking was seated before the order was ticketed.",
+                order.public_id,
+            )
+            return True
+        return reservation.status == ReservationStatus.PENDING and reservation.start_at <= cutoff
+
+    total_injected = 0
+    last_pk = 0
+    while True:
+        batch_ids = list(base.filter(pk__gt=last_pk).order_by("pk").values_list("pk", flat=True)[:batch_size])
+        if not batch_ids:
+            break
+        last_pk = batch_ids[-1]
+        total_injected += _inject_preorder_orders(batch_ids, now=now, revalidate=_still_due)
+
+    # Only when something moved: this runs every 60s, and a "nothing to do"
+    # line each time would bury the ones that matter.
+    if total_injected:
+        logger.info("Handed %s pre-order round(s) to the kitchen.", total_injected)
+    return total_injected

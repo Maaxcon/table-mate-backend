@@ -8,6 +8,7 @@ from apps.restaurants.models import Restaurant, Table
 from common.api import PublicIdRelatedField, get_restaurant_id_from_auth
 
 from .models import Reservation, ReservationStatus
+from .selectors import preorder_window_open
 
 
 class TableInfoSerializer(serializers.ModelSerializer[Table]):
@@ -45,6 +46,13 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
     session_ends_at = serializers.SerializerMethodField()
     session_table = serializers.SerializerMethodField()
     session_table_number = serializers.SerializerMethodField()
+    has_preorder = serializers.SerializerMethodField()
+    preorder_cooking = serializers.SerializerMethodField()
+    preorder_ready = serializers.SerializerMethodField()
+    preorder_total = serializers.SerializerMethodField()
+    preorder_items_count = serializers.SerializerMethodField()
+    preorder_currency = serializers.SerializerMethodField()
+    can_preorder = serializers.SerializerMethodField()
 
     class Meta:
         model = Reservation
@@ -65,6 +73,13 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "session_ends_at",
             "session_table",
             "session_table_number",
+            "has_preorder",
+            "preorder_cooking",
+            "preorder_ready",
+            "preorder_total",
+            "preorder_items_count",
+            "preorder_currency",
+            "can_preorder",
             "status",
             "created_by_staff",
             "notes",
@@ -80,6 +95,13 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "session_ends_at",
             "session_table",
             "session_table_number",
+            "has_preorder",
+            "preorder_cooking",
+            "preorder_ready",
+            "preorder_total",
+            "preorder_items_count",
+            "preorder_currency",
+            "can_preorder",
             "created_at",
             "updated_at",
         ]
@@ -98,6 +120,28 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
 
     def get_session_table_number(self, obj: Reservation) -> str | None:
         return getattr(obj, "session_table_number", None)
+
+    def get_has_preorder(self, obj: Reservation) -> bool:
+        return bool(getattr(obj, "has_preorder", False))
+
+    def get_preorder_cooking(self, obj: Reservation) -> bool:
+        return bool(getattr(obj, "preorder_cooking", False))
+
+    def get_preorder_ready(self, obj: Reservation) -> bool:
+        return bool(getattr(obj, "preorder_ready", False))
+
+    def get_preorder_total(self, obj: Reservation) -> str | None:
+        val = getattr(obj, "preorder_total", None)
+        return str(val) if val is not None else None
+
+    def get_preorder_items_count(self, obj: Reservation) -> int:
+        return int(getattr(obj, "preorder_items_count", None) or 0)
+
+    def get_preorder_currency(self, obj: Reservation) -> str | None:
+        return getattr(obj, "preorder_currency", None)
+
+    def get_can_preorder(self, obj: Reservation) -> bool:
+        return preorder_window_open(obj)
 
     def get_customer_name(self, obj: Reservation) -> str:
         if obj.guest_name:
@@ -182,3 +226,38 @@ class BatchUpdateErrorSerializer(serializers.Serializer[dict[str, object]]):
     detail = serializers.CharField()
     code = serializers.CharField(required=False)
     conflicting_reservation_id = serializers.CharField(required=False)
+
+
+class PreorderItemSerializer(serializers.Serializer[dict[str, object]]):
+    public_id = serializers.CharField()
+    name = serializers.CharField()
+    quantity = serializers.IntegerField()
+    unit_price = serializers.CharField()
+    total_price = serializers.CharField()
+
+
+class PreorderDetailSerializer(serializers.Serializer[dict[str, object]]):
+    """A reservation's paid pre-order rounds, combined into one check.
+
+    Response-shape contract for the `preorder` action. Declared (and used to
+    render) so the published schema matches what the endpoint actually
+    returns — without it drf-spectacular falls back to the viewset's
+    ReservationSerializer, and the generated clients are wrong.
+    """
+
+    order_id = serializers.CharField()
+    currency = serializers.CharField()
+    subtotal = serializers.CharField()
+    tax = serializers.CharField()
+    service_charge = serializers.CharField()
+    total = serializers.CharField()
+    # Two separate facts, deliberately not folded together: is_cooking drives
+    # the "paid" vs "being prepared" badge, can_cancel drives the button. A
+    # participant who isn't the booking's owner can't cancel even though
+    # nothing is cooking yet.
+    is_cooking = serializers.BooleanField()
+    can_cancel = serializers.BooleanField()
+    # Separate again: the guest may still look at (and cancel) the check after
+    # the window for paying another round has closed.
+    can_add_more = serializers.BooleanField()
+    items = PreorderItemSerializer(many=True)

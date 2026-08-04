@@ -1,14 +1,112 @@
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 
-from django.db.models import QuerySet
+from django.conf import settings
+from django.db.models import Exists, OuterRef, QuerySet, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from apps.orders.models import Session, SessionStatus
+from apps.orders.models import (
+    Order,
+    OrderItem,
+    OrderItemStatus,
+    OrderPaymentStatus,
+    OrderSource,
+    Session,
+    SessionStatus,
+    Ticket,
+)
 from apps.restaurants.models import Table
 
 from .models import Reservation, ReservationParticipant, ReservationStatus
+
+
+def _annotate_has_preorder(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
+    """Whether a paid pre-order exists for each reservation, whether the
+    kitchen has already picked it up (inject_scheduled_preorders created a
+    Ticket for it), and whether the kitchen has since finished every item on
+    it — lets the UI show "paid" vs "being prepared" vs "ready" without a
+    second request.
+    """
+    # source, not payment_status, is what makes an order a pre-order: every
+    # in-visit order also flips to PAID once the guest settles the bill
+    # (_recompute_order_payment_status), and matching on PAID alone reported a
+    # meal the guest had already eaten as a pre-order still being prepared.
+    preorder_paid = Order.objects.filter(
+        session__reservation=OuterRef("pk"),
+        source=OrderSource.CUSTOMER_PREORDER,
+        payment_status=OrderPaymentStatus.PAID,
+    )
+    preorder_cooking = Ticket.objects.filter(
+        order__session__reservation=OuterRef("pk"),
+        order__source=OrderSource.CUSTOMER_PREORDER,
+        order__payment_status=OrderPaymentStatus.PAID,
+    )
+    # Still-unfinished items on that same pre-order — once none remain (and
+    # the ticket exists), the kitchen is done and it's ready to be served.
+    preorder_unfinished_items = OrderItem.objects.filter(
+        order__session__reservation=OuterRef("pk"),
+        order__source=OrderSource.CUSTOMER_PREORDER,
+        order__payment_status=OrderPaymentStatus.PAID,
+        status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS],
+    )
+    # Aggregated in subqueries rather than with plain Sum() annotations: summing
+    # over orders and over their items in the same queryset multiplies the rows
+    # of each join against the other, and both totals come out inflated.
+    preorder_total = (
+        preorder_paid.values("session__reservation")
+        .annotate(total=Sum("total_amount"))
+        .values("total")[:1]
+    )
+    preorder_items_count = (
+        OrderItem.objects.filter(
+            order__session__reservation=OuterRef("pk"),
+            order__source=OrderSource.CUSTOMER_PREORDER,
+            order__payment_status=OrderPaymentStatus.PAID,
+        )
+        .exclude(status=OrderItemStatus.VOIDED)
+        .values("order__session__reservation")
+        .annotate(quantity=Sum("quantity"))
+        .values("quantity")[:1]
+    )
+    return qs.annotate(
+        has_preorder=Exists(preorder_paid),
+        preorder_cooking=Exists(preorder_cooking),
+        preorder_ready=Exists(preorder_cooking) & ~Exists(preorder_unfinished_items),
+        preorder_total=Subquery(preorder_total),
+        preorder_items_count=Coalesce(Subquery(preorder_items_count), 0),
+        preorder_currency=Subquery(preorder_paid.values("currency")[:1]),
+    )
+
+
+def preorder_window_open(reservation: Reservation, *, now: datetime | None = None) -> bool:
+    """Whether the guest may still pay for a (further) pre-order round.
+
+    Closes PREORDER_LEAD_MINUTES before the booking starts: from that moment
+    inject_scheduled_preorders hands the paid rounds to the kitchen, and food
+    added after that would arrive whenever it happens to be cooked rather than
+    with the rest of the order.
+    """
+    if reservation.status != ReservationStatus.PENDING:
+        return False
+    lead_minutes = max(int(getattr(settings, "PREORDER_LEAD_MINUTES", 20)), 0)
+    return (now or timezone.now()) < reservation.start_at - timedelta(minutes=lead_minutes)
+
+
+def preorder_status_for_reservation(reservation_id: int) -> str | None:
+    """"paid", "cooking" or "ready" for this booking's pre-order, None if it has none.
+
+    Reads the same annotation the reservation payload exposes, so a pushed
+    status and a re-fetched booking can never disagree.
+    """
+    row = _annotate_has_preorder(Reservation.objects.filter(pk=reservation_id)).first()
+    if row is None or not getattr(row, "has_preorder", False):
+        return None
+    if getattr(row, "preorder_ready", False):
+        return "ready"
+    if getattr(row, "preorder_cooking", False):
+        return "cooking"
+    return "paid"
 
 
 def get_active_reservation_for_table(table: Table) -> Reservation | None:
@@ -70,21 +168,23 @@ def get_customer_reservations(
     restaurant_id: int,
     statuses: list[str] | None = None,
 ) -> QuerySet[Reservation]:
-    return Reservation.objects.filter(
+    qs = Reservation.objects.filter(
         customer_id=customer_id,
         restaurant_id=restaurant_id,
         status__in=statuses or ACTIVE_STATUSES,
     ).select_related("table", "restaurant", "customer")
+    return _annotate_has_preorder(qs)
 
 
 def get_customer_global_reservations(
     customer_id: int,
     statuses: list[str] | None = None,
 ) -> QuerySet[Reservation]:
-    return Reservation.objects.filter(
+    qs = Reservation.objects.filter(
         customer_id=customer_id,
         status__in=statuses or ACTIVE_STATUSES,
     ).select_related("table", "restaurant", "customer")
+    return _annotate_has_preorder(qs)
 
 
 def get_reservation_by_id(reservation_id: str, restaurant_id: int) -> Reservation | None:

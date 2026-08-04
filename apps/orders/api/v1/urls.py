@@ -7,6 +7,7 @@ from .views import (
     CartPayView,
     CartSessionItemViewSet,
     CartSessionViewSet,
+    PreorderCheckoutView,
     SetGuestNameView,
 )
 
@@ -21,6 +22,11 @@ urlpatterns = [
         "sessions/<uuid:session_pk>/checkout/",
         CartCheckoutView.as_view(),
         name="cart-checkout",
+    ),
+    path(
+        "sessions/<uuid:session_pk>/preorder-checkout/",
+        PreorderCheckoutView.as_view(),
+        name="cart-preorder-checkout",
     ),
     path(
         "sessions/<uuid:session_pk>/bill/",
