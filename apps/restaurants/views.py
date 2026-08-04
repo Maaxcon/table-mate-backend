@@ -191,7 +191,7 @@ class RestaurantViewSet(
     serializer_class = RestaurantSerializer
     restaurant_lookup = "id"
     ordering_fields = ["created_at", "updated_at", "name"]
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
 
     def get_permissions(self) -> list[BasePermission]:
         if self.request.method in SAFE_METHODS:
