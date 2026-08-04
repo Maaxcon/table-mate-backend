@@ -18,10 +18,10 @@ class Feedback(RestaurantScopedModel):
         related_name="feedback",
     )
     guest_identity = models.CharField(max_length=255, null=True, blank=True)
-    order = models.OneToOneField(
+    order = models.ForeignKey(
         "orders.Order",
         on_delete=models.CASCADE,
-        related_name="feedback",
+        related_name="feedback_entries",
     )
     overall_rating = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)],
@@ -63,6 +63,14 @@ class Feedback(RestaurantScopedModel):
                     | models.Q(guest__isnull=True, guest_identity__isnull=False)
                 ),
                 name="feedback_single_owner",
+            ),
+            models.UniqueConstraint(
+                fields=["order", "guest"],
+                name="feedback_order_guest_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["order", "guest_identity"],
+                name="feedback_order_guest_identity_unique",
             ),
         ]
 

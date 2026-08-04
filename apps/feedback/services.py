@@ -37,7 +37,15 @@ def _validate_order_for_feedback(
     )
     if served_items.exists():
         raise DomainError("All order items must be served or voided before submitting feedback.")
-    if hasattr(order, "feedback"):
+    feedback_filters = (
+        {"order": order, "guest": guest}
+        if guest is not None
+        else {
+            "order": order,
+            "guest_identity": guest_identity,
+        }
+    )
+    if Feedback.objects.filter(**feedback_filters).exists():
         raise DomainError("Feedback already exists for this order.")
 
 

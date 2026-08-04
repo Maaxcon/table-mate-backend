@@ -388,6 +388,77 @@ def test_update_without_dish_feedback_keeps_dish_ratings(
 
 
 @pytest.mark.django_db
+def test_each_table_guest_can_submit_feedback_for_shared_checkout(
+    restaurant: Restaurant,
+    table: Table,
+    item: Any,
+    restaurant_settings: Any,
+) -> None:
+    now = timezone.now()
+    Reservation.objects.create(
+        restaurant=restaurant,
+        table=table,
+        guest_count=2,
+        start_at=now - timedelta(minutes=30),
+        end_at=now + timedelta(hours=1),
+        status=ReservationStatus.ACTIVE,
+        type=ReservationType.PRE_BOOKED,
+    )
+    second_item = MenuItem.objects.create(
+        restaurant=restaurant,
+        menu=item.menu,
+        name="Second guest dish",
+        price="12.00",
+    )
+    cart = ensure_active_cart_for_table(table=table)
+    add_item_to_cart(session=cart, menu_item_id=str(item.public_id), quantity=1, guest_identity="guest-a")
+    add_item_to_cart(
+        session=cart,
+        menu_item_id=str(second_item.public_id),
+        quantity=1,
+        guest_identity="guest-b",
+    )
+
+    with mock.patch("apps.orders.billing.is_restaurant_open", return_value=True):
+        order = checkout_cart_session(cart_session=cart, user=None)
+    order.payment_status = OrderPaymentStatus.PAID
+    order.save(update_fields=["payment_status"])
+    order.items.update(status=OrderItemStatus.SERVED)
+
+    for guest_id, menu_item in (("guest-a", item), ("guest-b", second_item)):
+        response = _feedback_client(guest_id).post(
+            reverse("guest-feedback-create"),
+            {
+                "order": str(order.public_id),
+                "overall_rating": 5,
+                "service_rating": 4,
+                "dish_feedback": [{"menu_item": str(menu_item.public_id), "rating": 5}],
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+    assert Feedback.objects.filter(order=order).count() == 2
+    assert set(Feedback.objects.filter(order=order).values_list("guest_identity", flat=True)) == {
+        "guest-a",
+        "guest-b",
+    }
+
+    duplicate_response = _feedback_client("guest-a").post(
+        reverse("guest-feedback-create"),
+        {
+            "order": str(order.public_id),
+            "overall_rating": 5,
+            "service_rating": 4,
+        },
+        format="json",
+    )
+
+    assert duplicate_response.status_code == status.HTTP_400_BAD_REQUEST
+    assert duplicate_response.data["detail"] == "Feedback already exists for this order."
+
+
+@pytest.mark.django_db
 def test_update_with_empty_dish_feedback_clears_dish_ratings(
     restaurant: Restaurant,
     table: Table,
