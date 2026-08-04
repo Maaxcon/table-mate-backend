@@ -1,14 +1,37 @@
 <!--
 Sync Impact Report
-- Version change: 2.0.0 -> 2.0.1
+- Version change: 2.0.1 -> 2.1.0
 - Modified principles:
   - None
 - Modified sections:
-  - Foundation Contracts / Canonical Entity Definitions: removed zombie `Staff`
-    profile entity (not referenced by spec, plan, tasks, or code). Role remains a
-    direct attribute on `User`. Shift-status tracking is out of MVP scope.
+  - Foundation Contracts / Canonical Entity Definitions: added `Shift`,
+    `Receipt`, `ReceiptItem`, `CartSession`, `CartItem`, `GuestProfile`,
+    `VoidReason`, `Payment`, `WebhookEvent` entities that were built but
+    undocumented. Removed outdated note that shift-status tracking was "out
+    of MVP scope" (shifts app now exists). Updated `Session` to reflect
+    auto-extend and grace-period close behavior.
+  - Foundation Contracts / Role Access Matrix: added shift-management
+    access for `admin` role.
+  - Foundation Contracts / Payment Contract: removed unsupported payment
+    providers clause; current implementation simulates payment via direct
+    marking (webhook path is skeletal).
+  - Foundation Contracts / Event Catalog: normative content was already
+    in spec.md, not constitution; removed placeholder reference.
+  - Backend Constitution / VI, IX: clarified auto-extend and grace-period
+    close as backend-managed (human-initiated close is primary, auto-close
+    acts as safety net with grace window).
 - Added sections:
-  - None
+  - Foundation Contracts / Walk-In Contract: walk-in reservation flow.
+  - Foundation Contracts / Receipt Contract: immutable cabinet receipt.
+  - Foundation Contracts / Cart Session Contract: ephemeral shared cart.
+  - Foundation Contracts / Shift Management Contract: staff scheduling.
+  - Foundation Contracts / Staff Notification Contract: notification store.
+  - Backend Constitution / XI. Async Task Infrastructure: Celery.
+  - Backend Constitution / XII. Notification Store: Redis-backed.
+  - Backend Constitution / XIII. Walk-In Flow: guest flow.
+  - Backend Constitution / XIV. Receipt Snapshot: cabinet history.
+  - Backend Constitution / XV. Cart Session Lifecycle: shared cart.
+  - Backend Constitution / XVI. Service Layer Organization: services/ split.
 - Removed sections:
   - None
 - Templates requiring updates:
@@ -16,7 +39,11 @@ Sync Impact Report
   - ✅ .specify/templates/spec-template.md
   - ✅ .specify/templates/tasks-template.md
 - Deferred TODOs:
-  - None
+  - Payment webhook proper implementation (US6 from MVP spec): needs
+    services.py, webhooks.py, api/v1/, signature validation, idempotency.
+  - Void flow atomic transaction per Void Contract (currently void_order_item
+    is a single update, not a full atomic transaction with rollback).
+  - Hot-path DB indexes per FR-043.
 -->
 
 # TableMate Platform Constitution
@@ -68,37 +95,79 @@ The following entities are the source of truth across all surfaces:
 - `Restaurant`: `id`, `name`, active floor-plan reference, QR mappings to table
   IDs.
 - `RestaurantSettings`: one-to-one sibling of `Restaurant` (`restaurant_id`);
-  `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`.
+  `timezone`, `currency`, `locale`, `working_hours`, `default_tax_rate`,
+  `default_service_charge`.
 - `Table`: `id`, sector, capacity, and status (`free`, `occupied`).
-  Status is backend-computed and backend-pushed only.
+  Status is backend-computed and backend-pushed only. No stored `status`
+  column — occupancy is derived from open `Session` existence.
 - `Menu`: top-level menu container for a restaurant (for example breakfast,
   lunch, dinner) with `id`, restaurant reference, `name`, service window
   metadata, active flag, and menu item/category associations.
 - `Order`: `id`, table reference, session reference, origin
   (`waiter_manual`, `customer_prepaid`), payment status
-  (`unpaid`, `paid`, `settled`), and `OrderItem[]`.
+  (`unpaid`, `paid`, `settled`, `cancelled`), tax/service/tip totals, and
+  `OrderItem[]`.
 - `OrderItem`: `id`, menu item reference, quantity, modifier text, guest slot
   index, lifecycle status (`pending`, `in_progress`, `ready`, `voided`,
-  `served`).
+  `served`), per-line financial fields (`unit_price`, `total_price`,
+  `tax_amount`, `service_charge_amount`), and void audit trail (`voided_at`,
+  `voided_by`, `void_reason`, `void_reason_note`).
 - `Ticket`: kitchen-facing projection of an order, created by backend injection
-  into the kitchen queue.
+  into the kitchen queue. Status (`incoming`, `preparing`, `ready`, `served`,
+  `voided`). Records `injected_at` and `bump_ts` for cycle-time metrics.
 - `Session`: one table occupancy window; opens on manual order start or prepaid
-  webhook confirmation; closes only by explicit close-table action.
+  webhook confirmation; primary close is explicit waiter close. Supports
+  auto-extend (once per session, up to 30 min) when nearing end time within
+  working hours and conflict boundaries. Overdue sessions beyond grace window
+  are auto-closed by periodic Celery task.
+- `CartSession`: ephemeral shared cart bound to a reservation. Status
+  (`active`, `closed`). M2M participants (Users). Enforces
+  one-active-per-reservation via partial unique constraint.
+- `CartItem`: a line item within a CartSession. References `MenuItem`, tracks
+  `quantity`, `guest_slot`, `guest_identity`, `comment`, `added_by`.
+  Merged into a single row per session+menu_item via `get_or_create` with
+  `F("quantity") + quantity` for concurrent safety.
+- `GuestProfile`: per-cart-session guest identity mapping (`guest_identity` →
+  `display_name`) for bill item attribution without requiring full User auth.
+- `VoidReason`: seeded reason master with codes `mispick`, `guest_changed_mind`,
+  `quality_issue`, `out_of_stock`.
+- `Shift`: staff scheduling record for a restaurant. `employee` (User with
+  role waiter/cook/admin), `date`, `start_time`, `end_time`, `notes`.
+  Constrained: `end_time > start_time`. Indexed by `(restaurant, date)` and
+  `(restaurant, employee, date)`.
+- `Receipt`: immutable customer cabinet-history record, decoupled from
+  operational Order/Session models. Snapshots `order_number`, `visited_at`,
+  `currency`, `table_label`, `server_name`, `guests`, `tax`, `service_charge`,
+  `tip`, `payment_method`, `payment_status`. Linked back to `Order` (nullable)
+  and `Payment` (nullable). Created automatically on session close via
+  `create_receipt_from_order`.
+- `ReceiptItem`: line item within a Receipt. Snapshots `name`, `quantity`,
+  `unit_price` from the menu item at time of creation so receipt stays correct
+  if menu changes.
 - `User`: `id`, `name`, `email`, role (`customer`, `cook`, `waiter`, `admin`).
-  Role is a direct attribute on `User`; a separate operational `Staff` profile
-  and shift-status tracking are not part of the MVP canonical entity set.
+  Role is a direct attribute on `User`. Uses `AbstractBaseUser +
+  PermissionsMixin` with email as `USERNAME_FIELD` (no username column).
+- `Payment`: provider transaction record. `order`, `provider`,
+  `provider_transaction_id` (unique), `amount`, `currency`, `status`
+  (`pending`, `authorized`, `paid`, `failed`, `refunded`, `cancelled`),
+  `raw_payload` (JSON).
+- `WebhookEvent`: immutable inbound webhook event record. `provider`,
+  `event_id` (unique), `payload` (JSON), `received_at`, `processed_at`.
+  Idempotency primitive for duplicate webhook deliveries.
 
 ### Role Access Matrix
 Backend and frontend MUST implement this matrix consistently:
 
 - `Cook`: kitchen kanban only; no floor plan, order creation, or financials.
+  Can view own shifts.
 - `Waiter`: floor plan, order creation, notification stream, table overlays;
   cannot approve voids, access financial reports, edit layout, or manage staff.
+  Can view own shifts; cannot create/update/delete shifts for other staff.
 - `Customer`: menu browsing, reservation creation, own-reservation access, and
   cart/session participation only; no staff operational endpoints, no kitchen,
-  no financial/admin access.
+  no financial/admin access, no shift visibility.
 - `Admin`: full access, including financial reports, spatial editor, staff
-  management, and menu control.
+  management (shifts CRUD, employee management), and menu control.
 
 ### Real-Time Delivery Contract
 
@@ -114,17 +183,18 @@ Backend and frontend MUST implement this matrix consistently:
 
 ### Payment Contract
 
-- Customer-originated orders transition from `unpaid` to `paid` only through a
-  validated payment-provider webhook.
-- The webhook signature MUST be validated before state transition.
-- Payment and payment-derived event currency (including
-  `PAYMENT_CONFIRMED.currency`) MUST come from `RestaurantSettings.currency` for
-  the order's restaurant.
-- Successful confirmation MUST atomically: mark order paid, inject ticket into
-  kitchen queue, and broadcast role-relevant events.
-- Client or staff endpoints MUST NOT directly set paid status.
-- There is no "call waiter" fallback for customer-originated unpaid orders.
-- Supported payment methods are Apple Pay, Google Pay, and card.
+- Payment models (`Payment`, `WebhookEvent`) exist with idempotency primitives
+  (unique `provider_transaction_id`, unique `event_id`).
+- The full webhook-driven `unpaid -> paid` flow (signature validation, webhook
+  processing, atomic paid+ticket injection) is specified (MVP US6, FR-029–FR-032)
+  but NOT yet fully implemented. See Deferred TODOs.
+- Current implementation uses a direct payment-marking flow: `pay_order_items`
+  and `pay_session_bill` services mark `OrderItem.is_paid = True` and
+  recompute `OrderPaymentStatus` — this is a simulated path for development.
+- Payment and payment-derived event currency MUST come from
+  `RestaurantSettings.currency` for the order's restaurant.
+- Client or staff endpoints MUST NOT directly set paid status on settled orders.
+- Payment records become immutable after successful confirmation.
 
 ### Void Contract
 
@@ -145,6 +215,73 @@ Backend and frontend MUST implement this matrix consistently:
 - Average Prep Time MUST be derived from raw cycle-time records at query time,
   not stored as a precomputed persistent column.
 - Aggregations MUST support shift-level and day-level reporting views.
+
+### Walk-In Contract
+
+- Walk-in reservations are created by `create_walk_in_reservation` in
+  `apps/orders/services/walk_in.py` when a waiter opens a table without a
+  pre-existing booking.
+- Walk-ins use `ReservationType.WALK_IN` and start immediately (`start_at =
+  now`) with a default 2-hour end. End is clamped to the next existing booking
+  to avoid overlap.
+- Walk-in reservations have `customer = None` — the session opener (waiter) is
+  tracked via `Session.opened_by`.
+- Walk-in reservations are created with `status = ACTIVE` (no pending period).
+- Idempotent: `ensure_visit_session` uses `get_or_create` per reservation so
+  duplicate open-table calls do not create duplicate sessions.
+
+### Receipt Contract
+
+- Receipts are immutable customer cabinet-history records created at session
+  close by `create_receipt_from_order` (`apps/receipts/services.py`).
+- Line items snapshot `name`, `quantity`, `unit_price` from the menu at
+  creation time to preserve fidelity after menu changes.
+- Receipt creation is idempotent: uses `get_or_create` on the `order` FK.
+- Orders with no attributable customer produce no receipt.
+- `Receipt` is a standalone model, decoupled from operational `Order`/`Session`,
+  so it can be managed by hand in Django admin for corrections or seeding.
+
+### Cart Session Contract
+
+- `CartSession` is the ephemeral shared ordering context per reservation.
+- One active CartSession per reservation is enforced by partial unique
+  constraint `one_active_per_reservation WHERE status = 'active'`.
+- Participants are tracked via M2M to `User`. Non-participants are denied
+  mutation access (`403 Forbidden`).
+- Cart items are merged per `(session, menu_item)` — re-adding the same item
+  increments quantity via `F("quantity") + quantity`. Concurrent adds are
+  serialized via `select_for_update`.
+- When an item becomes unavailable, it is pruned on checkout and
+  `CartChangedError` is raised so the guest can review.
+- Closed carts reject mutations with `409 Conflict` (error code
+  `cart_session_closed`).
+- Carts are not long-lived analytics records — the resulting Order/Receipt
+  chain is the durable trail.
+
+### Shift Management Contract
+
+- `Shift` records are created/updated/deleted by `admin` role only.
+- Staff users (`waiter`, `cook`) can view their own shifts; they cannot modify
+  shifts.
+- Shift overlap is not enforced at the DB level but `end_time > start_time` is
+  enforced by `CheckConstraint`.
+- Shifts are scoped to a `Restaurant` — one restaurant's staff schedule is
+  isolated from others.
+- Bulk operations: `copy_shifts` duplicates shifts from a source date to one or
+  more target dates, optionally filtered by employee.
+
+### Staff Notification Contract
+
+- Staff notifications are broadcast to the `staff_<restaurant_id>` WebSocket
+  group and persisted in Redis for history replay.
+- Notification types: `CART_CREATED`, `CART_CHECKED_OUT`,
+  `HALL_NEW_RESERVATION`, `ORDER_ITEM_STATUS_CHANGED`,
+  `KITCHEN_TICKET_INJECTED`.
+- History is stored per restaurant as a Redis list (bounded to 50 events,
+  6-hour TTL). Payloads are sanitized/truncated before storage.
+- Fallback to Django cache when Redis is unavailable.
+- Notifications are informational (push-style); clients fetch full state via
+  REST on receipt.
 
 ## Frontend Constitution
 
@@ -253,11 +390,23 @@ cluster by dish type but MUST preserve time ordering within each group.
 Rationale: deterministic ordering is required for prep fairness.
 
 ### VI. Session Integrity Is Backend Responsibility
-Session open/close rules MUST be explicit and human-controlled for closure.
-Automatic timeout closure is forbidden. Session close MUST be waiter-initiated.
-Close MUST persist immutable analytics snapshot and clear live session state.
+Session open/close rules MUST be explicit. Primary close MUST be
+waiter-initiated (explicit close-table action). Two supporting automated
+mechanisms exist as safety nets:
+- **Auto-extend**: Open sessions nearing their end time are automatically
+  extended by up to 30 minutes (once per session). Respects working-hours
+  boundaries and upcoming reservation conflicts. Triggered by periodic Celery
+  task (`orders.auto_extend_sessions`).
+- **Grace-period close**: Sessions that remain open past their end time
+  beyond the grace window (`SESSION_OVERDUE_AUTO_CLOSE_MINUTES`, default 20)
+  are auto-closed by periodic Celery task (`orders.close_overdue_sessions`).
+  Items must be served/voided before close; unresolvable sessions are skipped
+  and retried on the next pass.
+Close MUST persist immutable analytics snapshot (Receipt) and clear live
+session state.
 
-Rationale: explicit lifecycle boundaries preserve reporting accuracy.
+Rationale: explicit lifecycle boundaries preserve reporting accuracy; auto
+mechanisms prevent table deadlock from forgotten sessions.
 
 ### VII. Authentication Is Role-Scoped at Token Level
 Issued staff tokens MUST encode role identity. Backend MUST derive permissions
@@ -276,6 +425,9 @@ Rationale: immutable versions avoid breaking active table references.
 ### IX. Financial Records Are Externally Read-Only
 Public APIs MUST NOT create/update/delete financial records. Writes are limited
 to internal flows: payment confirmation, void handling, and session close.
+Receipt records (customer cabinet history) are created automatically at session
+close as immutable snapshots of the finalized bill. Corrections are stored as
+new records, never in-place overwrite.
 
 Rationale: immutable financial writes preserve tamper-evident audits.
 
@@ -291,7 +443,83 @@ paths supporting kitchen and floor-plan live views MUST include:
 
 Rationale: query-time derivation keeps corrections immediately accurate.
 
-## Development Workflow
+### XI. Async Task Infrastructure (Celery)
+Background tasks (stale cart cleanup, session auto-extend, overdue session
+close) MUST run via Celery with Redis as broker. Tasks are defined in
+`apps/orders/tasks.py` and registered with `@shared_task`. Celery Beat
+schedules periodic execution. Task failure MUST NOT block the request-response
+cycle or WebSocket event delivery. Task discovery uses `app.autodiscover_tasks`.
+
+Rationale: async cleanup prevents resource leak without coupling maintenance
+to user-facing request paths.
+
+### XII. Notification Store Is Redis-Backed
+Staff notifications (cart created/checked-out, hall reservation events, kitchen
+ticket injection, order-item status changes) MUST be persisted to Redis for
+history replay. Storage uses a per-restaurant bounded list (default 50 events,
+6-hour TTL) with LRU trimming. Payloads are sanitized/truncated before storage
+to cap untrusted data volume. Consumers include a dedicated `staff_<id>`
+WebSocket group. Fallback to Django cache is used when Redis is unavailable.
+
+Rationale: persisted history lets newly connected staff clients reconstruct
+recent floor activity without requiring full event replay from all streams.
+
+### XIII. Walk-In Flow Creates Ephemeral Reservations
+When a waiter opens a table without a pre-existing booking, the backend creates
+a walk-in `Reservation` (type `WALK_IN`, status `ACTIVE`) with a default 2-hour
+window. The reservation end is clamped to the next existing booking if one
+exists. Walk-in reservations have no `customer` association — the session owner
+(the waiter) is tracked via `Session.opened_by`.
+
+Rationale: unifying walk-ins and pre-bookings under the `Reservation` entity
+keeps the floor plan and billing models uniform.
+
+### XIV. Receipt Snapshot Is Immutable and Decoupled
+Receipts are created at session close (`close_visit_session` signals
+`_finalize_session_orders_for_history` which calls `create_receipt_from_order`).
+The Receipt model is decoupled from operational Order/Session models so it is
+safe to manage by hand in Django admin. Line items snapshot `name`, `quantity`,
+`unit_price` from the menu at creation time so the receipt stays correct if the
+menu changes. Receipt creation is idempotent (uses `get_or_create` on Order FK).
+Orders with no attributable customer (no guest reservation, no customer-created
+order, no session opener) produce no receipt.
+
+Rationale: decoupled snapshots preserve cabinet history fidelity independently
+of live operational data evolution.
+
+### XV. Cart Session Lifecycle Is Ephemeral
+A CartSession is the shared ordering context for one reservation's guests. It
+is created on first item addition or QR scan. One active CartSession per
+reservation is enforced by a partial unique constraint
+(`one_active_per_reservation`). The cart is closed when:
+- Guest checks out (`checkout_cart_session` — items become an Order).
+- Reservation is completed or cancelled (`close_reservation_carts`).
+- Periodic Celery task closes stale carts (`close_stale_cart_sessions`).
+
+Closed carts reject mutations with `409 Conflict`. Carts are not persisted as
+analytics — the resulting Order and Receipt are the permanent records.
+
+Rationale: ephemeral carts reduce cleanup complexity; the Order/Receipt chain
+is the durable audit trail.
+
+### XVI. Service Layer Organization
+Services are organized by domain concern in a `services/` package split, not a
+single monolithic `services.py`:
+- `services/cart.py`: cart item CRUD, order creation, session management,
+  payment marking, void operations.
+- `services/sessions.py`: cart session lifecycle (create, ensure, stale close,
+  auto-extend, overdue close).
+- `services/walk_in.py`: walk-in reservation creation.
+
+The `services/__init__.py` re-exports all public functions so callers import
+from `apps.orders.services` as before. Splitting is internal-only.
+
+Additional service modules outside the `services/` package:
+- `apps/orders/billing.py`: checkout, session close, receipt finalization.
+- `apps/receipts/services.py`: receipt snapshot creation from orders.
+
+Rationale: concern-based splitting keeps each module under 700 lines while
+preserving a stable public API surface.
 
 - Mandatory workflow:
   `speckit-specify -> speckit-plan -> speckit-tasks -> speckit-implement`
@@ -304,8 +532,32 @@ Rationale: query-time derivation keeps corrections immediately accurate.
   replay/version handling, webhook signature checks, and atomic data behavior
   when relevant.
 - Backend baseline MUST remain: Python 3.12, Django 5+, DRF, PostgreSQL, Redis,
-  Channels, JWT auth, and Skinny Views / Fat Services / Selectors.
-- Required quality gates before merge: `flake8`, `bandit`, `safety`, tests.
+  Channels, Celery (Redis broker), JWT auth, and Skinny Views / Fat Services /
+  Selectors pattern.
+- Required quality gates before merge: `ruff` (lint), `mypy` (type check),
+  `bandit` (security), `pip-audit` (dependency vulns), tests (pytest).
+  CI also enforces `drf-spectacular` schema drift detection and migration
+  drift checks.
+
+## Specification Process
+
+### I. Cross-Repo Specification Principle
+
+Feature specifications in `specs/<feature>/spec.md` are the shared source of
+truth for BOTH frontend and backend development. Each spec MUST include:
+
+- **Backend changes**: API endpoints, models, services, selectors, permissions,
+  data contracts, events.
+- **Frontend changes**: Pages, components, navigation, state management,
+  user-facing flows, error/loading/empty states, accessibility notes.
+
+Design artifacts (plan.md, tasks.md, data-model.md, contracts/README.md) are
+also shared. Frontend and backend branches are developed simultaneously from the
+same spec. Where a change affects only one surface, note the exclusion explicitly
+to avoid ambiguity.
+
+Rationale: parallel frontend/backend development requires a single spec both
+teams can implement against. Separate specs diverge and create integration debt.
 
 ## Governance
 
@@ -322,4 +574,4 @@ Rationale: query-time derivation keeps corrections immediately accurate.
 - Compliance reviews are mandatory at planning, task generation, code review,
   and CI.
 
-**Version**: 2.0.1 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-05-13
+**Version**: 2.2.0 | **Ratified**: 2026-05-06 | **Last Amended**: 2026-07-27

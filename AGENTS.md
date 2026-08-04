@@ -51,7 +51,10 @@ Build reliable backend features fast, with clear specs and predictable delivery.
 - Must commit shared workflow artifacts:
 - `AGENTS.md`
 - `.specify/memory/constitution.md` when changed
-- `.specify/**`
+- `.specify/feature.json`
+- `.specify/extensions.yml`
+- `.specify/extensions/git/**`
+- `.specify/templates/**`
 - `specs/**` for the active feature
 - Plus code/tests/migrations related to the feature.
 
