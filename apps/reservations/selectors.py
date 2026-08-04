@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 
-from django.db.models import Exists, OuterRef, QuerySet
+from django.db.models import Exists, OuterRef, QuerySet, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -49,10 +49,32 @@ def _annotate_has_preorder(qs: QuerySet[Reservation]) -> QuerySet[Reservation]:
         order__payment_status=OrderPaymentStatus.PAID,
         status__in=[OrderItemStatus.PENDING, OrderItemStatus.IN_PROGRESS],
     )
+    # Aggregated in subqueries rather than with plain Sum() annotations: summing
+    # over orders and over their items in the same queryset multiplies the rows
+    # of each join against the other, and both totals come out inflated.
+    preorder_total = (
+        preorder_paid.values("session__reservation")
+        .annotate(total=Sum("total_amount"))
+        .values("total")[:1]
+    )
+    preorder_items_count = (
+        OrderItem.objects.filter(
+            order__session__reservation=OuterRef("pk"),
+            order__source=OrderSource.CUSTOMER_PREORDER,
+            order__payment_status=OrderPaymentStatus.PAID,
+        )
+        .exclude(status=OrderItemStatus.VOIDED)
+        .values("order__session__reservation")
+        .annotate(quantity=Sum("quantity"))
+        .values("quantity")[:1]
+    )
     return qs.annotate(
         has_preorder=Exists(preorder_paid),
         preorder_cooking=Exists(preorder_cooking),
         preorder_ready=Exists(preorder_cooking) & ~Exists(preorder_unfinished_items),
+        preorder_total=Subquery(preorder_total),
+        preorder_items_count=Coalesce(Subquery(preorder_items_count), 0),
+        preorder_currency=Subquery(preorder_paid.values("currency")[:1]),
     )
 
 

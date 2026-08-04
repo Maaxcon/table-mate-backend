@@ -48,6 +48,9 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
     has_preorder = serializers.SerializerMethodField()
     preorder_cooking = serializers.SerializerMethodField()
     preorder_ready = serializers.SerializerMethodField()
+    preorder_total = serializers.SerializerMethodField()
+    preorder_items_count = serializers.SerializerMethodField()
+    preorder_currency = serializers.SerializerMethodField()
 
     class Meta:
         model = Reservation
@@ -71,6 +74,9 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "has_preorder",
             "preorder_cooking",
             "preorder_ready",
+            "preorder_total",
+            "preorder_items_count",
+            "preorder_currency",
             "status",
             "created_by_staff",
             "notes",
@@ -89,6 +95,9 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
             "has_preorder",
             "preorder_cooking",
             "preorder_ready",
+            "preorder_total",
+            "preorder_items_count",
+            "preorder_currency",
             "created_at",
             "updated_at",
         ]
@@ -116,6 +125,16 @@ class ReservationSerializer(serializers.ModelSerializer[Reservation]):
 
     def get_preorder_ready(self, obj: Reservation) -> bool:
         return bool(getattr(obj, "preorder_ready", False))
+
+    def get_preorder_total(self, obj: Reservation) -> str | None:
+        val = getattr(obj, "preorder_total", None)
+        return str(val) if val is not None else None
+
+    def get_preorder_items_count(self, obj: Reservation) -> int:
+        return int(getattr(obj, "preorder_items_count", None) or 0)
+
+    def get_preorder_currency(self, obj: Reservation) -> str | None:
+        return getattr(obj, "preorder_currency", None)
 
     def get_customer_name(self, obj: Reservation) -> str:
         if obj.guest_name:

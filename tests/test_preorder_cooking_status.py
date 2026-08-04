@@ -169,6 +169,55 @@ def test_one_item_still_pending_keeps_it_cooking(restaurant: Restaurant, table: 
     assert ready is False
 
 
+def _totals(reservation: Reservation) -> tuple[Decimal | None, int, str | None]:
+    row = _annotate_has_preorder(Reservation.objects.filter(pk=reservation.pk)).first()
+    assert row is not None
+    return row.preorder_total, row.preorder_items_count, row.preorder_currency
+
+
+def test_several_paid_rounds_are_summed_once_each(
+    restaurant: Restaurant, table: Table, item: MenuItem
+) -> None:
+    # Summing orders and their items in one queryset multiplies the joins, so
+    # two rounds of two items each must still report 200.00, not 400.00.
+    reservation = _reservation(restaurant, table)
+    session = _session(restaurant, table, reservation)
+    for _ in range(2):
+        order = _paid_order(restaurant, session)
+        _item(restaurant, order, item, OrderItemStatus.PENDING)
+        _item(restaurant, order, item, OrderItemStatus.PENDING)
+
+    total, count, currency = _totals(reservation)
+    assert total == Decimal("200.00")
+    assert count == 4
+    assert currency == "UAH"
+
+
+def test_voided_items_drop_out_of_the_count(
+    restaurant: Restaurant, table: Table, item: MenuItem
+) -> None:
+    reservation = _reservation(restaurant, table)
+    session = _session(restaurant, table, reservation)
+    order = _paid_order(restaurant, session)
+    _item(restaurant, order, item, OrderItemStatus.PENDING)
+    _item(restaurant, order, item, OrderItemStatus.VOIDED)
+
+    _, count, _ = _totals(reservation)
+    assert count == 1
+
+
+def test_a_booking_without_a_preorder_reports_no_total(
+    restaurant: Restaurant, table: Table
+) -> None:
+    reservation = _reservation(restaurant, table)
+    _session(restaurant, table, reservation)
+
+    total, count, currency = _totals(reservation)
+    assert total is None
+    assert count == 0
+    assert currency is None
+
+
 def test_reservation_list_endpoint_exposes_preorder_ready(
     restaurant: Restaurant, table: Table, item: MenuItem, api: Any
 ) -> None:
