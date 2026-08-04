@@ -21,6 +21,8 @@ class TokenVersionJWTAuthentication(JWTAuthentication):
 
 
 class GuestJWTAuthentication(BaseAuthentication):
+    allow_feedback_only = False
+
     def authenticate(self, request: Request) -> tuple[AnonymousUser, Token] | None:
         jwt_auth = JWTAuthentication()
         header = jwt_auth.get_header(request)
@@ -37,8 +39,14 @@ class GuestJWTAuthentication(BaseAuthentication):
 
         if not validated_token.payload.get("is_guest"):
             return None
+        if validated_token.payload.get("feedback_only") and not self.allow_feedback_only:
+            raise AuthenticationFailed("Feedback tokens can only be used for feedback endpoints.")
 
         return AnonymousUser(), validated_token
 
 
-__all__ = ["GuestJWTAuthentication", "TokenVersionJWTAuthentication"]
+class FeedbackGuestJWTAuthentication(GuestJWTAuthentication):
+    allow_feedback_only = True
+
+
+__all__ = ["FeedbackGuestJWTAuthentication", "GuestJWTAuthentication", "TokenVersionJWTAuthentication"]

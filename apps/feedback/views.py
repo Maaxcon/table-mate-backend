@@ -10,7 +10,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.authentication.authentication import GuestJWTAuthentication, TokenVersionJWTAuthentication
+from apps.authentication.authentication import FeedbackGuestJWTAuthentication, TokenVersionJWTAuthentication
 from apps.authentication.models import User
 from apps.authentication.permissions import IsAdmin
 from common.api import RestaurantScopedViewSetMixin
@@ -148,7 +148,7 @@ class GuestFeedbackViewSet(
     viewsets.GenericViewSet[Feedback],
 ):
     permission_classes = [IsAuthenticatedOrTableGuest]
-    authentication_classes = [GuestJWTAuthentication, TokenVersionJWTAuthentication]
+    authentication_classes = [FeedbackGuestJWTAuthentication, TokenVersionJWTAuthentication]
     serializer_class = GuestFeedbackListSerializer
     lookup_field = "public_id"
     lookup_url_kwarg = "pk"

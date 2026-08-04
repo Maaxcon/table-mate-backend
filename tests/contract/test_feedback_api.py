@@ -6,9 +6,11 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APIClient
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.test import APIClient, APIRequestFactory
 from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.authentication.authentication import GuestJWTAuthentication
 from apps.authentication.models import RoleCode
 from apps.feedback.models import Feedback
 from apps.menu.models import Menu, MenuItem
@@ -28,6 +30,17 @@ def _feedback_client(guest_id: str) -> APIClient:
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
     return client
+
+
+def test_feedback_only_token_is_rejected_by_generic_guest_authentication() -> None:
+    token = AccessToken()
+    token.payload["is_guest"] = True
+    token.payload["guest_id"] = "guest-1"
+    token.payload["feedback_only"] = True
+    request = APIRequestFactory().get("/", HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    with pytest.raises(AuthenticationFailed, match="only be used for feedback"):
+        GuestJWTAuthentication().authenticate(request)
 
 
 @pytest.mark.django_db
