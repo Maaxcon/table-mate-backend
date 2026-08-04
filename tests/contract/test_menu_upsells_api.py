@@ -198,9 +198,15 @@ class TestMenuUpsells:
         category: MenuCategory,
         item: MenuItem,
     ) -> None:
+        other = MenuItemFactory(menu=menu, category=category, restaurant=restaurant, name="Mains Dish", sort_order=1)
         dessert_cat = MenuCategoryFactory(menu=menu, name="Desserts")
-        dessert = MenuItemFactory(menu=menu, category=dessert_cat, restaurant=restaurant, name="Cheesecake")
-        other = MenuItemFactory(menu=menu, category=category, restaurant=restaurant, name="Mains Dish")
+        dessert = MenuItemFactory(
+            menu=menu,
+            category=dessert_cat,
+            restaurant=restaurant,
+            name="Cheesecake",
+            sort_order=50,
+        )
         # No orders at all -> fallback path.
         url = reverse("menu-item-upsells", kwargs={"public_id": item.public_id})
         response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
@@ -209,6 +215,39 @@ class TestMenuUpsells:
         names = [r["name"] for r in response.json()["results"]]
         assert len(names) > 0
         assert names.index(dessert.name) < names.index(other.name)
+
+    def test_no_history_fallback_matches_ukrainian_dessert_drink_categories(
+        self,
+        api_client: Client,
+        restaurant: Restaurant,
+        menu: Menu,
+        category: MenuCategory,
+        item: MenuItem,
+    ) -> None:
+        main = MenuItemFactory(menu=menu, category=category, restaurant=restaurant, name="Основна страва", sort_order=1)
+        dessert_cat = MenuCategoryFactory(menu=menu, name="Десерти")
+        dessert = MenuItemFactory(
+            menu=menu,
+            category=dessert_cat,
+            restaurant=restaurant,
+            name="Чізкейк",
+            sort_order=50,
+        )
+        drink_cat = MenuCategoryFactory(menu=menu, name="Напої")
+        drink = MenuItemFactory(
+            menu=menu,
+            category=drink_cat,
+            restaurant=restaurant,
+            name="Лимонад",
+            sort_order=60,
+        )
+        url = reverse("menu-item-upsells", kwargs={"public_id": item.public_id})
+        response: Any = api_client.get(url, {"restaurant": str(restaurant.public_id)})
+
+        assert response.status_code == status.HTTP_200_OK
+        names = [r["name"] for r in response.json()["results"]]
+        assert names.index(dessert.name) < names.index(main.name)
+        assert names.index(drink.name) < names.index(main.name)
 
     def test_unknown_restaurant_returns_404(self, api_client: Client, item: MenuItem) -> None:
         url = reverse("menu-item-upsells", kwargs={"public_id": item.public_id})

@@ -20,6 +20,23 @@ from .models import Menu, MenuCategory, MenuItem, MenuItemLike
 
 UPSEL_LOOKBACK_DAYS = 90
 
+_DESSERT_DRINK_HINTS = ("dessert", "десерт", "drink", "напій", "напої")
+
+
+def _dessert_drink_category_ids(*, restaurant_id: int) -> set[int]:
+    """Category ids whose name hints at dessert/drink.
+
+    Matching runs in Python because DB case-insensitive operators (UPPER/ILIKE)
+    don't fold Cyrillic under a C collation, so SQL ``icontains`` is unreliable
+    for Ukrainian category names.
+    """
+    names = (
+        MenuCategory.objects.filter(menu__restaurant_id=restaurant_id, menu__is_active=True)
+        .values_list("id", "name")
+        .all()
+    )
+    return {category_id for category_id, name in names if any(hint in name.lower() for hint in _DESSERT_DRINK_HINTS)}
+
 
 def get_active_menus(*, restaurant_id: int) -> QuerySet[Menu]:
     return Menu.objects.filter(restaurant_id=restaurant_id, is_active=True).prefetch_related("items", "categories")
@@ -171,12 +188,10 @@ def get_default_upsell_items(
     )
     if exclude_ids:
         qs = qs.exclude(pk__in=exclude_ids)
+    dessert_drink_ids = _dessert_drink_category_ids(restaurant_id=restaurant_id)
     qs = qs.annotate(
         is_dessert_drink=Case(
-            When(
-                Q(category__name__icontains="dessert") | Q(category__name__icontains="drink"),
-                then=Value(1),
-            ),
+            When(category_id__in=dessert_drink_ids, then=Value(1)),
             default=Value(0),
             output_field=IntegerField(),
         ),
