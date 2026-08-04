@@ -661,6 +661,74 @@ def cancel_preorder(*, order: Order, user: User | None = None) -> Order:
     return order
 
 
+def cancel_preorder_item(*, order_item: OrderItem, user: User | None = None) -> Order:
+    """Void one dish off a paid pre-order and refund just that dish.
+
+    Same window as cancel_preorder: allowed only while no Ticket exists for the
+    round. Voiding the last remaining dish cancels the whole round instead of
+    leaving a paid order with nothing on it.
+
+    Per-item tax stays as it was charged; only the service charge is
+    redistributed, because it is derived from the goods subtotal that just
+    shrank.
+    """
+    with transaction.atomic():
+        order = (
+            Order.objects.select_for_update()
+            .select_related("session__reservation")
+            .get(pk=order_item.order_id)
+        )
+        if order.source != OrderSource.CUSTOMER_PREORDER:
+            raise PreorderNotAllowedError("This dish isn't part of a pre-order.")
+        if order.payment_status != OrderPaymentStatus.PAID:
+            raise PreorderNotAllowedError("This pre-order isn't paid, so there's nothing to refund.")
+        if Ticket.objects.filter(order=order).exists():
+            raise PreorderNotAllowedError(
+                "The kitchen has already started this pre-order — it can't be changed."
+            )
+
+        item = OrderItem.objects.select_for_update().get(pk=order_item.pk)
+        if item.status == OrderItemStatus.VOIDED:
+            raise PreorderNotAllowedError("This dish is already off the pre-order.")
+
+        survivors = list(
+            OrderItem.objects.filter(order=order).exclude(status=OrderItemStatus.VOIDED).exclude(pk=item.pk)
+        )
+        if not survivors:
+            return cancel_preorder(order=order, user=user)
+
+        refunded = item.total_price + item.tax_amount + item.service_charge_amount
+        item.status = OrderItemStatus.VOIDED
+        item.is_paid = False
+        item.voided_at = timezone.now()
+        item.voided_by = user
+        item.service_charge_amount = Decimal("0")
+        item.save(update_fields=["status", "is_paid", "voided_at", "voided_by", "service_charge_amount"])
+
+        _, _, service_charge_rate = _restaurant_billing(order.restaurant_id)
+        subtotal = sum((line.total_price for line in survivors), Decimal("0"))
+        tax = sum((line.tax_amount for line in survivors), Decimal("0"))
+        service_charge = quantize_money(subtotal * service_charge_rate)
+        _distribute_service_charge(survivors, subtotal, service_charge)
+
+        order.tax_total = tax
+        order.service_charge = service_charge
+        order.total_amount = subtotal + tax + service_charge
+        order.save(update_fields=["tax_total", "service_charge", "total_amount"])
+        _recompute_session_totals(order.session)
+
+        logger.info(
+            "Refunded %s %s for dish %s off pre-order %s (asked by %s).",
+            refunded,
+            order.currency,
+            item.public_id,
+            order.public_id,
+            getattr(user, "pk", None),
+        )
+
+    return order
+
+
 def cancel_preorder_rounds(*, orders: Sequence[Order], user: User | None = None) -> list[Order]:
     """Cancel every one of a reservation's pre-order rounds, or none of them.
 

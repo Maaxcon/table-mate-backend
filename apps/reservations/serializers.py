@@ -222,6 +222,7 @@ class BatchUpdateErrorSerializer(serializers.Serializer[dict[str, object]]):
 
 
 class PreorderItemSerializer(serializers.Serializer[dict[str, object]]):
+    public_id = serializers.CharField()
     name = serializers.CharField()
     quantity = serializers.IntegerField()
     unit_price = serializers.CharField()

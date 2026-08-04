@@ -21,8 +21,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.authentication.models import RoleCode, User
-from apps.orders.billing import cancel_preorder_rounds, close_visit_session
-from apps.orders.models import OrderItemStatus, Session, SessionStatus, Ticket
+from apps.orders.billing import cancel_preorder_item, cancel_preorder_rounds, close_visit_session
+from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus, Ticket
 from apps.orders.selectors import (
     _resolve_allowed_reservation_participant_ids,
     get_preorder_orders_for_reservation,
@@ -390,6 +390,11 @@ class ReservationViewSet(
             cancel_preorder_rounds(orders=orders, user=cast(User, request.user))
             return Response(status=status.HTTP_204_NO_CONTENT)
 
+        return self._preorder_check_response(reservation, may_cancel=may_cancel)
+
+    def _preorder_check_response(self, reservation: Reservation, *, may_cancel: bool) -> Response:
+        """The booking's paid rounds as one check, or 204 when it has none."""
+        orders = get_preorder_orders_for_reservation(reservation)
         if not orders:
             return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -403,6 +408,7 @@ class ReservationViewSet(
         can_cancel = may_cancel and not is_cooking
         items = [
             {
+                "public_id": str(item.public_id),
                 "name": item.menu_item.name,
                 "quantity": item.quantity,
                 "unit_price": str(item.unit_price),
@@ -432,6 +438,35 @@ class ReservationViewSet(
             }
         )
         return Response(payload.data)
+
+    @extend_schema(
+        summary="Remove one dish from this reservation's pre-order",
+        description="Voids a single paid dish and refunds it — only while the kitchen "
+        "hasn't started the round. Removing the last dish cancels the whole round, "
+        "which answers 204. Otherwise returns the updated check.",
+        responses={
+            200: PreorderDetailSerializer,
+            204: OpenApiResponse(description="That was the last dish; the pre-order is gone."),
+            404: OpenApiResponse(description="No such dish on this booking's pre-order."),
+            403: OpenApiResponse(description="Only the booking's owner may change it."),
+            409: OpenApiResponse(
+                description="The kitchen has already started the round (code preorder_not_allowed)."
+            ),
+        },
+    )
+    @action(detail=True, methods=["delete"], url_path=r"preorder/items/(?P<item_id>[^/.]+)")
+    def preorder_item(self, request: Request, *args: object, **kwargs: object) -> Response:
+        reservation, may_cancel = self._resolve_preorder_reservation(request)
+        if not may_cancel:
+            raise PermissionDenied("Only the guest who booked the table can change its pre-order.")
+
+        orders = get_preorder_orders_for_reservation(reservation)
+        item = OrderItem.objects.filter(order__in=orders, public_id=kwargs["item_id"]).first()
+        if item is None or item.status == OrderItemStatus.VOIDED:
+            raise NotFound("No such dish on this booking's pre-order.")
+
+        cancel_preorder_item(order_item=item, user=cast(User, request.user))
+        return self._preorder_check_response(reservation, may_cancel=may_cancel)
 
     @extend_schema(
         summary="Available time slots for a table",
