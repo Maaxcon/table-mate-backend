@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -12,6 +13,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from apps.authentication.models import RoleCode, User
 from apps.orders.billing import close_reservation_carts, close_visit_session, ensure_visit_session
 from apps.orders.models import OrderItem, OrderItemStatus, Session, SessionStatus
+from apps.orders.services.sessions import inject_preorders_for_reservation
 from apps.restaurants.models import RestaurantSettings, Table
 from apps.restaurants.selectors import _DAY_KEYS, _hhmm_to_minutes
 from common.exceptions import ReservationCancelError, ReservationConflictError, RestaurantClosedError
@@ -25,6 +27,8 @@ from common.notification_events import emit_hall_new_reservation_notification
 
 from ..editor.selectors import get_available_tables
 from .models import Reservation, ReservationStatus, ReservationType
+
+logger = logging.getLogger(__name__)
 
 
 def check_availability(
@@ -295,7 +299,14 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
     locked.status = ReservationStatus.CANCELLED
     locked.save(update_fields=["status", "updated_at"])
 
-    session = Session.objects.filter(reservation=locked, status=SessionStatus.OPEN).first()
+    session = Session.objects.filter(
+        reservation=locked,
+        status__in=[SessionStatus.OPEN, SessionStatus.SCHEDULED],
+    ).first()
+    # A SCHEDULED session (paid pre-order, party never seated) has to be closed
+    # too, or cancelling leaves it dangling forever. It never occupied the
+    # table, though, so only a previously-OPEN one may report occupied->free.
+    was_open = session is not None and session.status == SessionStatus.OPEN
     if session:
         session.status = SessionStatus.CLOSED
         session.save(update_fields=["status", "updated_at"])
@@ -304,7 +315,7 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
 
     table = locked.table
     if actor is not None and table is not None:
-        if session is not None:
+        if session is not None and was_open:
             transaction.on_commit(
                 lambda: emit_hall_table_status_changed(
                     locked.restaurant_id,
@@ -328,6 +339,128 @@ def cancel_reservation(reservation: Reservation, *, actor: User | None = None) -
         )
 
     return locked
+
+
+_NO_SHOW_BATCH_SIZE = 200
+
+
+def _close_out_cooked_noshow(reservation: Reservation) -> None:
+    """End a no-show whose pre-order the kitchen had already cooked.
+
+    The food was made and paid for, so there is nothing to refund — the
+    booking is spent, not cancelled. It still has to reach a terminal status:
+    left PENDING, activate_pending_reservation's "earlier pending reservation"
+    guard blocks every later booking on that table for good, and the cooked
+    ticket sits on the kitchen board forever because no cleanup job looks at a
+    SCHEDULED session.
+
+    Completing (rather than cancelling) keeps the charge and lets
+    close_visit_session snapshot a receipt, so the guest can see what they
+    paid for. force=True voids whatever the kitchen never served and bumps its
+    tickets off the board.
+    """
+    from apps.orders.billing import close_visit_session
+
+    reservation.status = ReservationStatus.COMPLETED
+    reservation.save(update_fields=["status", "updated_at"])
+
+    session = (
+        Session.objects.filter(reservation=reservation).exclude(status=SessionStatus.CLOSED).first()
+    )
+    if session is None:
+        close_reservation_carts(reservation)
+        return
+    close_visit_session(session=session, actor=None, force=True)
+
+
+def expire_noshow_reservations(*, batch_size: int = _NO_SHOW_BATCH_SIZE) -> int:
+    """Auto-cancel PENDING reservations nobody seated within grace of start_at.
+
+    Example: booked for 12:00, grace is 2 hours — if nobody has seated the
+    table (staff clicking "seat", or the guest self-seating) by 14:00, the
+    booking closes. Without this, a forgotten pending booking sits PENDING
+    forever — and activate_pending_reservation's "earlier pending reservation"
+    guard then permanently blocks every later booking on that table, since the
+    guard has no staleness cutoff of its own.
+
+    A paid pre-order is cancelled too (refunded — payment here is simulated)
+    unless the kitchen already has a Ticket for it: that food was cooked and
+    isn't refundable, so that booking is completed rather than cancelled (see
+    _close_out_cooked_noshow). Either way it leaves PENDING, which is the
+    point — a booking stuck PENDING blocks its table for good.
+    """
+    from apps.orders.billing import cancel_preorder_rounds
+    from apps.orders.models import Order, OrderPaymentStatus, OrderSource
+    from common.exceptions import PreorderNotAllowedError
+
+    now = timezone.now()
+    grace_minutes = max(int(getattr(settings, "RESERVATION_NO_SHOW_GRACE_MINUTES", 120)), 0)
+    cutoff = now - timedelta(minutes=grace_minutes)
+
+    base = Reservation.objects.filter(status=ReservationStatus.PENDING, start_at__lte=cutoff)
+
+    total_expired = 0
+    last_pk = 0
+    while True:
+        batch_ids = list(base.filter(pk__gt=last_pk).order_by("pk").values_list("pk", flat=True)[:batch_size])
+        if not batch_ids:
+            break
+        last_pk = batch_ids[-1]
+
+        with transaction.atomic():
+            # Locking + re-filtering here (not a separate earlier read) closes a
+            # race with activate_pending_reservation: without holding this lock
+            # across the whole decision, a guest seated between our batch SELECT
+            # and the eventual cancel_reservation call would still get cancelled
+            # out from under them — cancel_reservation itself permits ACTIVE too
+            # (it's also used for staff cancelling a seated party), so it can't
+            # catch that case on its own.
+            reservations = list(
+                Reservation.objects.select_for_update(skip_locked=True)
+                .filter(pk__in=batch_ids, status=ReservationStatus.PENDING, start_at__lte=cutoff)
+                .order_by("pk")
+            )
+            for reservation in reservations:
+                paid_orders = list(
+                    Order.objects.filter(
+                        session__reservation=reservation,
+                        source=OrderSource.CUSTOMER_PREORDER,
+                        payment_status=OrderPaymentStatus.PAID,
+                    ).order_by("pk")
+                )
+                try:
+                    cancel_preorder_rounds(orders=paid_orders, user=None)
+                except PreorderNotAllowedError:
+                    # Real food was already cooked on at least one round, so
+                    # none of it is refundable — close the booking out instead
+                    # of cancelling it.
+                    logger.info(
+                        "No-show %s had a cooked pre-order; completing instead of cancelling.",
+                        reservation.public_id,
+                    )
+                    _close_out_cooked_noshow(reservation)
+                    total_expired += 1
+                    continue
+
+                try:
+                    cancel_reservation(reservation, actor=None)
+                except ReservationCancelError:
+                    logger.warning(
+                        "No-show %s could not be cancelled and stays pending.",
+                        reservation.public_id,
+                    )
+                    continue
+                logger.info(
+                    "Expired no-show %s (booked %s, %s pre-order round(s) refunded).",
+                    reservation.public_id,
+                    reservation.start_at.isoformat(),
+                    len(paid_orders),
+                )
+                total_expired += 1
+
+    if total_expired:
+        logger.info("No-show sweep expired %s reservation(s).", total_expired)
+    return total_expired
 
 
 def _prolong_active_reservation(
@@ -452,43 +585,6 @@ def reschedule_reservation(
 ACTIVATION_EARLY_WINDOW = timedelta(minutes=15)  # how early a guest may self-activate
 
 
-def activate_reservation(
-    *,
-    reservation: Reservation,
-    opened_by: Any = None,
-    enforce_window: bool = False,
-) -> Reservation:
-    """Flip a pending reservation to active (staff or the owning customer).
-
-    No QR is needed; the waiter or the owning customer opens the table on
-    arrival. Staff have no time limit. When enforce_window is set (customer
-    self-activation) the booking can only be activated near its start — not more
-    than ACTIVATION_EARLY_WINDOW early — so a guest cannot open a far-future
-    booking. Arriving late is always allowed.
-    Idempotent if already active; rejects completed/cancelled reservations.
-    Opens the visit Session (bill) so the floor plan shows the table occupied.
-    """
-    opened_by_user = opened_by if (opened_by is not None and opened_by.is_authenticated) else None
-    with transaction.atomic():
-        locked = Reservation.objects.select_for_update().get(pk=reservation.pk)
-        if locked.status not in {ReservationStatus.PENDING, ReservationStatus.ACTIVE}:
-            raise ReservationConflictError("Only pending reservations can be activated.")
-        if locked.status == ReservationStatus.PENDING:
-            if enforce_window and locked.start_at - timezone.now() > ACTIVATION_EARLY_WINDOW:
-                raise ReservationConflictError("This reservation cannot be activated yet.")
-            locked.status = ReservationStatus.ACTIVE
-            locked.save(update_fields=["status"])
-        ensure_visit_session(locked, opened_by=opened_by_user)
-
-    restaurant_id = locked.restaurant_id
-    table_id = str(locked.table.public_id) if locked.table else ""
-    if table_id:
-        transaction.on_commit(
-            lambda: emit_hall_reservations_updated(restaurant_id, table_ids=[table_id])
-        )
-    return locked
-
-
 @transaction.atomic
 def activate_reservation_by_scan(
     *,
@@ -523,6 +619,7 @@ def activate_reservation_by_scan(
     reservation.save(update_fields=["status"])
 
     ensure_visit_session(reservation, opened_by=user)
+    inject_preorders_for_reservation(reservation)
 
     restaurant_id = reservation.restaurant_id
     table_id = str(table.public_id)
@@ -635,8 +732,19 @@ def activate_pending_reservation(
         effective_end_at__lte=occupancy_cutoff,
     )
     for stale_session in stale:
-        close_visit_session(session=stale_session, actor=None)
+        # force=True: this is automatic cleanup of a previous, unrelated
+        # reservation's leftover session to make room for the one being
+        # seated now. Without it, unserved items from that old session (e.g.
+        # nobody clicked "served") raise UnservedItemsError here — blocking
+        # staff from seating a brand-new party with a confusing error about
+        # a booking they have nothing to do with.
+        close_visit_session(session=stale_session, actor=None, force=True)
 
+    # Floor the window at the no-show grace: a booking older than that is one
+    # expire_noshow_reservations is about to clear, and must not take the table
+    # out of service in the meantime. Without the floor a single PENDING row
+    # that the sweep can't resolve blocks every later booking on this table.
+    noshow_grace = max(int(getattr(settings, "RESERVATION_NO_SHOW_GRACE_MINUTES", 120)), 0)
     earlier_pending = (
         Reservation.objects.filter(
             restaurant_id=reservation.restaurant_id,
@@ -644,6 +752,7 @@ def activate_pending_reservation(
             status=ReservationStatus.PENDING,
             start_at__lt=reservation.start_at,
             start_at__lte=now,
+            start_at__gt=now - timedelta(minutes=noshow_grace),
         )
         .exclude(id=reservation.id)
         .exists()
@@ -654,21 +763,15 @@ def activate_pending_reservation(
     locked.status = ReservationStatus.ACTIVE
     locked.save(update_fields=["status", "updated_at"])
 
-    restaurant = table.restaurant
-    try:
-        currency = restaurant.settings.currency
-    except RestaurantSettings.DoesNotExist:
-        currency = "UAH"
-    session = Session.objects.create(
-        restaurant_id=reservation.restaurant_id,
-        table=table,
-        reservation=locked,
-        opened_by=actor,
-        guest_count=reservation.guest_count,
-        currency=currency,
-        opened_at=now,
-        ends_at=locked.end_at,
-    )
+    # Reuse ensure_visit_session rather than a raw Session.objects.create():
+    # a paid pre-order (confirm_and_pay_preorder) can already have opened this
+    # same reservation's Session while it was still PENDING — a bare .create()
+    # would then hit either the reservation OneToOne constraint or
+    # orders_one_open_session_per_table as a raw, unhandled IntegrityError.
+    # ensure_visit_session is get-or-create and converts that constraint into
+    # a friendly TableOccupiedError as a backstop.
+    session = ensure_visit_session(locked, opened_by=actor)
+    inject_preorders_for_reservation(locked)
 
     transaction.on_commit(
         lambda: emit_hall_table_status_changed(

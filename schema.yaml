@@ -1943,10 +1943,49 @@ paths:
                 items:
                   $ref: '#/components/schemas/BillItem'
           description: ''
+  /api/orders/cart/sessions/{session_pk}/preorder-checkout/:
+    post:
+      operationId: orders_cart_sessions_preorder_checkout_create
+      description: |-
+        Guest action: confirm and pay for a pre-order before the reservation starts.
+
+        Same response shape as CartCheckoutView, but the order is paid immediately
+        (simulated) and holds no kitchen Ticket yet — see confirm_and_pay_preorder.
+      parameters:
+      - in: path
+        name: session_pk
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Cart
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+          description: ''
+        '400':
+          description: Cart is empty.
+        '409':
+          description: Cart changed (code CART_CHANGED), or reservation already started
+            (code preorder_not_allowed).
   /api/orders/order-items/:
     get:
       operationId: orders_order_items_list
       parameters:
+      - in: query
+        name: include_served
+        schema:
+          type: boolean
+        description: Include served and voided items. Off by default, so the kitchen
+          board only sees outstanding work; the waiter's table overlay sets it to
+          show the full bill.
       - in: query
         name: is_wasted
         schema:
@@ -2203,11 +2242,13 @@ paths:
         schema:
           type: string
           enum:
+          - customer_preorder
           - customer_prepaid
           - waiter_manual
         description: |-
           * `waiter_manual` - Waiter manual
           * `customer_prepaid` - Customer prepaid
+          * `customer_preorder` - Customer pre-order
       - in: query
         name: status
         schema:
@@ -2349,8 +2390,10 @@ paths:
           enum:
           - closed
           - open
+          - scheduled
           - voided
         description: |-
+          * `scheduled` - Scheduled
           * `open` - Open
           * `closed` - Closed
           * `voided` - Voided
@@ -2459,7 +2502,9 @@ paths:
     post:
       operationId: orders_sessions_close_create
       description: 'End the visit: close the session, complete the reservation, and
-        close any active cart so the table is freed. No payment step yet. Idempotent.'
+        close any active cart so the table is freed. No payment step yet. Idempotent.
+        Returns 409 (code unserved_items, with a `count`) if items are still unserved/unvoided
+        — pass `force: true` to close anyway.'
       summary: Close the check
       parameters:
       - in: path
@@ -2470,6 +2515,17 @@ paths:
         required: true
       tags:
       - Orders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCloseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SessionCloseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SessionCloseRequest'
       security:
       - jwtAuth: []
       - jwt_Auth: []
@@ -2957,6 +3013,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reservation'
           description: ''
+    delete:
+      operationId: reservations_reservations_destroy
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/reservations/reservations/{public_id}/activate/:
     post:
       operationId: reservations_reservations_activate_create
@@ -3054,6 +3127,99 @@ paths:
               schema:
                 $ref: '#/components/schemas/Reservation'
           description: ''
+  /api/reservations/reservations/{public_id}/preorder/:
+    get:
+      operationId: reservations_reservations_preorder_retrieve
+      description: Returns all paid pre-order rounds combined into one check, or 204
+        if the booking has none.
+      summary: View this reservation's pre-order
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreorderDetail'
+          description: ''
+        '204':
+          description: No paid pre-order for this reservation.
+    delete:
+      operationId: reservations_reservations_preorder_destroy
+      description: Cancels every paid round (simulated refund) — only while the kitchen
+        hasn't started any of them yet.
+      summary: Cancel this reservation's pre-order
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: Every round was cancelled.
+        '404':
+          description: No pre-order to cancel.
+        '403':
+          description: Only the booking's owner may cancel.
+        '409':
+          description: The kitchen has already started a round (code preorder_not_allowed).
+  /api/reservations/reservations/{public_id}/preorder/items/{item_id}/:
+    delete:
+      operationId: reservations_reservations_preorder_items_destroy
+      description: Voids a single paid dish and refunds it — only while the kitchen
+        hasn't started the round. Removing the last dish cancels the whole round,
+        which answers 204. Otherwise returns the updated check.
+      summary: Remove one dish from this reservation's pre-order
+      parameters:
+      - in: path
+        name: item_id
+        schema:
+          type: string
+        description: Public id of the dish, as returned in the pre-order's items.
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Reservations
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreorderDetail'
+          description: ''
+        '204':
+          description: That was the last dish; the pre-order is gone.
+        '404':
+          description: No such dish on this booking's pre-order.
+        '403':
+          description: Only the booking's owner may change it.
+        '409':
+          description: The kitchen has already started the round (code preorder_not_allowed).
   /api/reservations/reservations/availability/:
     get:
       operationId: reservations_reservations_availability_retrieve
@@ -3927,6 +4093,173 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/shifts/:
+    get:
+      operationId: shifts_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - shifts
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedShiftList'
+          description: ''
+    post:
+      operationId: shifts_create
+      tags:
+      - shifts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShiftWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ShiftWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ShiftWrite'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftWrite'
+          description: ''
+  /api/shifts/{public_id}/:
+    get:
+      operationId: shifts_retrieve
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - shifts
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shift'
+          description: ''
+    patch:
+      operationId: shifts_partial_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - shifts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedShiftWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedShiftWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedShiftWrite'
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftWrite'
+          description: ''
+    delete:
+      operationId: shifts_destroy
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - shifts
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
+  /api/shifts/copy/:
+    post:
+      operationId: shifts_copy_create
+      tags:
+      - shifts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopyShifts'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CopyShifts'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CopyShifts'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopyShifts'
+          description: ''
+  /api/shifts/month_summary/:
+    get:
+      operationId: shifts_month_summary_retrieve
+      tags:
+      - shifts
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shift'
+          description: ''
 components:
   schemas:
     ActionEnum:
@@ -4427,6 +4760,25 @@ components:
       - subtotal
       - tax
       - total
+    CopyShifts:
+      type: object
+      properties:
+        source_date:
+          type: string
+          format: date
+        target_dates:
+          type: array
+          items:
+            type: string
+            format: date
+        employee_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required:
+      - source_date
+      - target_dates
     CreatedBySourceEnum:
       enum:
       - staff
@@ -5921,6 +6273,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Session'
+    PaginatedShiftList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shift'
     PaginatedTableList:
       type: object
       required:
@@ -6428,6 +6803,29 @@ components:
           type: string
           nullable: true
           readOnly: true
+        has_preorder:
+          type: boolean
+          readOnly: true
+        preorder_cooking:
+          type: boolean
+          readOnly: true
+        preorder_ready:
+          type: boolean
+          readOnly: true
+        preorder_total:
+          type: string
+          nullable: true
+          readOnly: true
+        preorder_items_count:
+          type: integer
+          readOnly: true
+        preorder_currency:
+          type: string
+          nullable: true
+          readOnly: true
+        can_preorder:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -6546,6 +6944,27 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PatchedShiftWrite:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        employee:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        notes:
+          type: string
     PatchedTicket:
       type: object
       properties:
@@ -6594,6 +7013,9 @@ components:
           readOnly: true
         items_count:
           type: integer
+          readOnly: true
+        is_preorder:
+          type: boolean
           readOnly: true
         created_at:
           type: string
@@ -6772,6 +7194,68 @@ components:
       - x
       - y
       - zone_id
+    PreorderDetail:
+      type: object
+      description: |-
+        A reservation's paid pre-order rounds, combined into one check.
+
+        Response-shape contract for the `preorder` action. Declared (and used to
+        render) so the published schema matches what the endpoint actually
+        returns — without it drf-spectacular falls back to the viewset's
+        ReservationSerializer, and the generated clients are wrong.
+      properties:
+        order_id:
+          type: string
+        currency:
+          type: string
+        subtotal:
+          type: string
+        tax:
+          type: string
+        service_charge:
+          type: string
+        total:
+          type: string
+        is_cooking:
+          type: boolean
+        can_cancel:
+          type: boolean
+        can_add_more:
+          type: boolean
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderItem'
+      required:
+      - can_add_more
+      - can_cancel
+      - currency
+      - is_cooking
+      - items
+      - order_id
+      - service_charge
+      - subtotal
+      - tax
+      - total
+    PreorderItem:
+      type: object
+      properties:
+        public_id:
+          type: string
+        name:
+          type: string
+        quantity:
+          type: integer
+        unit_price:
+          type: string
+        total_price:
+          type: string
+      required:
+      - name
+      - public_id
+      - quantity
+      - total_price
+      - unit_price
     PublicRestaurant:
       type: object
       properties:
@@ -6924,6 +7408,14 @@ components:
           type: string
           nullable: true
           readOnly: true
+        reservation_public_id:
+          type: string
+          nullable: true
+          description: |-
+            The booking this visit came from, so the guest's booking history can
+            offer the receipt. None for receipts entered by hand in the admin, and
+            for orders that never belonged to a booking.
+          readOnly: true
         visited_at:
           type: string
           format: date-time
@@ -6977,6 +7469,7 @@ components:
       - order_number
       - order_public_id
       - public_id
+      - reservation_public_id
       - restaurant_address
       - restaurant_image
       - restaurant_name
@@ -7081,6 +7574,29 @@ components:
           type: string
           nullable: true
           readOnly: true
+        has_preorder:
+          type: boolean
+          readOnly: true
+        preorder_cooking:
+          type: boolean
+          readOnly: true
+        preorder_ready:
+          type: boolean
+          readOnly: true
+        preorder_total:
+          type: string
+          nullable: true
+          readOnly: true
+        preorder_items_count:
+          type: integer
+          readOnly: true
+        preorder_currency:
+          type: string
+          nullable: true
+          readOnly: true
+        can_preorder:
+          type: boolean
+          readOnly: true
         status:
           $ref: '#/components/schemas/ReservationStatus'
         created_by_staff:
@@ -7097,12 +7613,19 @@ components:
           format: date-time
           readOnly: true
       required:
+      - can_preorder
       - created_at
       - customer
       - customer_name
       - end_at
       - guest_count
+      - has_preorder
       - opened_at
+      - preorder_cooking
+      - preorder_currency
+      - preorder_items_count
+      - preorder_ready
+      - preorder_total
       - public_id
       - restaurant
       - restaurant_info
@@ -7283,6 +7806,12 @@ components:
       - tax
       - total
       - updated_at
+    SessionCloseRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          default: false
     SessionPayRequest:
       type: object
       properties:
@@ -7293,11 +7822,13 @@ components:
             format: uuid
     SessionStatusEnum:
       enum:
+      - scheduled
       - open
       - closed
       - voided
       type: string
       description: |-
+        * `scheduled` - Scheduled
         * `open` - Open
         * `closed` - Closed
         * `voided` - Voided
@@ -7321,14 +7852,93 @@ components:
         * `round` - round
         * `square` - square
         * `booth` - booth
+    Shift:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        employee:
+          type: string
+          format: uuid
+        employee_name:
+          type: string
+          readOnly: true
+        employee_role:
+          type: string
+          readOnly: true
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        notes:
+          type: string
+        duration_hours:
+          type: number
+          format: double
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - date
+      - duration_hours
+      - employee
+      - employee_name
+      - employee_role
+      - end_time
+      - public_id
+      - start_time
+      - updated_at
+    ShiftWrite:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        employee:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        notes:
+          type: string
+      required:
+      - date
+      - employee
+      - end_time
+      - public_id
+      - start_time
     SourceEnum:
       enum:
       - waiter_manual
       - customer_prepaid
+      - customer_preorder
       type: string
       description: |-
         * `waiter_manual` - Waiter manual
         * `customer_prepaid` - Customer prepaid
+        * `customer_preorder` - Customer pre-order
     Table:
       type: object
       properties:
@@ -7534,6 +8144,9 @@ components:
         items_count:
           type: integer
           readOnly: true
+        is_preorder:
+          type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -7547,6 +8160,7 @@ components:
       - daily_number
       - guest_count
       - injected_at
+      - is_preorder
       - items_count
       - label
       - order

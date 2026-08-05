@@ -8,7 +8,8 @@ from django.db import transaction
 from django.db.models import QuerySet
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -27,16 +28,31 @@ from common.api import (
     require_restaurant_id_from_auth,
 )
 from common.exceptions import TableOccupiedError
-from common.hall_events import emit_hall_reservations_updated, emit_hall_table_status_changed
+from common.hall_events import (
+    emit_hall_reservations_updated,
+    emit_hall_table_status_changed,
+    emit_preorder_status_for_reservation,
+)
 from common.notification_events import emit_kitchen_ticket_injected, emit_order_item_status_changed
 
 from .billing import close_visit_session, ensure_visit_session
-from .models import Order, OrderItem, OrderItemStatus, Session, SessionStatus, Ticket, TicketStatus, VoidReason
+from .models import (
+    Order,
+    OrderItem,
+    OrderItemStatus,
+    OrderSource,
+    Session,
+    SessionStatus,
+    Ticket,
+    TicketStatus,
+    VoidReason,
+)
 from .serializers import (
     CreateOrderSerializer,
     OrderItemSerializer,
     OrderItemVoidRequestSerializer,
     OrderSerializer,
+    SessionCloseRequestSerializer,
     SessionPayRequestSerializer,
     SessionSerializer,
     TicketSerializer,
@@ -153,15 +169,22 @@ class SessionViewSet(
     @extend_schema(
         summary="Close the check",
         description="End the visit: close the session, complete the reservation, and close any "
-        "active cart so the table is freed. No payment step yet. Idempotent.",
-        request=None,
+        "active cart so the table is freed. No payment step yet. Idempotent. Returns 409 "
+        "(code unserved_items, with a `count`) if items are still unserved/unvoided — pass "
+        "`force: true` to close anyway.",
+        request=SessionCloseRequestSerializer,
         responses=SessionSerializer,
     )
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        session = close_visit_session(session=self.get_object(), actor=cast(User, request.user))
-        serializer = self.get_serializer(session)
-        return Response(serializer.data)
+        serializer = SessionCloseRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        session = close_visit_session(
+            session=self.get_object(),
+            actor=cast(User, request.user),
+            force=serializer.validated_data["force"],
+        )
+        return Response(self.get_serializer(session).data)
 
     @extend_schema(
         summary="Process payment",
@@ -336,6 +359,22 @@ class TicketViewSet(
 
 
 @extend_schema(tags=["Orders"])
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="include_served",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "Include served and voided items. Off by default, so the kitchen "
+                    "board only sees outstanding work; the waiter's table overlay sets "
+                    "it to show the full bill."
+                ),
+            )
+        ]
+    )
+)
 class OrderItemViewSet(
     RestaurantScopedViewSetMixin[OrderItem],
     viewsets.ModelViewSet[OrderItem],
@@ -371,9 +410,29 @@ class OrderItemViewSet(
         if restaurant_id is None:
             return qs.none()
         qs = get_kitchen_order_items(restaurant_id)
-        if self.action == "list":
+        if self.action == "list" and not self._wants_served_items():
             qs = qs.exclude(status__in=[OrderItemStatus.SERVED, OrderItemStatus.VOIDED])
         return qs
+
+    def _wants_served_items(self) -> bool:
+        """Whether this list call wants the whole bill, served/voided included.
+
+        The kitchen board only wants outstanding work, so handled items drop
+        off it. The waiter's table overlay needs every line the guest is being
+        charged for — served ones greyed out, but still visible. Callers ask
+        for the second with ``include_served=true``.
+
+        The original signal was the mere presence of an
+        ``order__session__public_id`` filter, which coupled the two views
+        through an undeclared string and meant ``?order__session__public_id=``
+        — empty, matching nothing — silently switched behaviour as well. Still
+        honoured so a client deployed before this change keeps its bill, but it
+        now needs a real value, and it can go once every caller sends the flag.
+        """
+        params = self.request.query_params
+        if params.get("include_served", "").strip().lower() in {"1", "true", "yes"}:
+            return True
+        return bool(params.get("order__session__public_id", "").strip())
 
     def perform_create(self, serializer):  # type: ignore[no-untyped-def]
         serializer.save(restaurant_id=get_restaurant_id_from_auth(self.request))
@@ -408,6 +467,11 @@ class OrderItemViewSet(
                     menu_item_name=instance.menu_item.name if instance.menu_item else "",
                     status=instance.status,
                 )
+                if instance.order.source == OrderSource.CUSTOMER_PREORDER:
+                    emit_preorder_status_for_reservation(
+                        instance.restaurant_id,
+                        instance.order.session.reservation if instance.order.session else None,
+                    )
 
             transaction.on_commit(_emit)
 

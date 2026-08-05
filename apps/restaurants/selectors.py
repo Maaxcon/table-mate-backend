@@ -1,4 +1,5 @@
 from datetime import UTC, timedelta
+from datetime import date as date_cls
 from datetime import datetime as datetime_cls
 from typing import Any, TypedDict
 from zoneinfo import ZoneInfo
@@ -147,6 +148,34 @@ def get_working_hours_close_at(
     return None
 
 
+def get_working_hours_for_date(
+    restaurant_id: int,
+    date: datetime_cls | date_cls,
+) -> tuple[str, str] | None:
+    """Return the (open, close) HH:MM strings for the day-of-week of ``date``.
+
+    Returns None if no settings, no configured hours, or no entry for that day.
+    """
+    settings = get_restaurant_settings(restaurant_id)
+    if settings is None:
+        return None
+    working_hours = settings.working_hours or {}
+    if not working_hours:
+        return None
+
+    day_key = _DAY_KEYS[date.weekday()]
+    hours = working_hours.get(day_key)
+    if not isinstance(hours, dict):
+        return None
+
+    open_time = hours.get("open")
+    close_time = hours.get("close")
+    if not isinstance(open_time, str) or not isinstance(close_time, str):
+        return None
+
+    return (open_time, close_time)
+
+
 def list_employees(restaurant_id: int) -> QuerySet[User]:
     return User.objects.filter(restaurant_id=restaurant_id).exclude(role=RoleCode.CUSTOMER).order_by("role", "email")
 
@@ -234,5 +263,6 @@ __all__ = [
     "get_restaurant_settings",
     "get_tables_with_occupancy",
     "get_working_hours_close_at",
+    "get_working_hours_for_date",
     "list_employees",
 ]

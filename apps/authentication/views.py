@@ -16,7 +16,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.orders.models import CartSession, CartSessionStatus
 from apps.orders.services import ensure_active_cart_for_table
-from apps.reservations.models import Reservation
+from apps.reservations.models import Reservation, ReservationStatus
 from apps.restaurants.models import Restaurant, Table
 from common.exceptions import NoActiveReservationError, ReservationNotYetActiveError
 
@@ -286,7 +286,13 @@ class GuestInitView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
         else:
-            session = _find_active_session_for_reservation(reservation_id)
+            try:
+                session = _find_active_session_for_reservation(reservation_id)
+            except ReservationNotYetActiveError as exc:
+                return Response(
+                    {"detail": exc.default_detail, "code": exc.default_code, "start_at": exc.start_at},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
             if session is None:
                 return Response(
                     {"detail": "No active cart session found for this reservation."},
@@ -296,7 +302,14 @@ class GuestInitView(APIView):
         cart_session_id = str(session.public_id)
         guest_id = _carry_forward_guest_id(request)
         token = _issue_guest_token(cart_session_id=cart_session_id, guest_id=guest_id)
-        return Response({"access": token})
+        # Authoritative pre-order flag: whether the reservation behind this
+        # cart has actually started yet. Computed from the session's own
+        # reservation rather than left for the frontend to infer from which
+        # branch succeeded — a cart opened by an earlier pre-order round is
+        # found here via the ACTIVE-cart lookup, not the PENDING fallback,
+        # so that inference was wrong for a second visit to the same cart.
+        is_preorder = session.reservation.status == ReservationStatus.PENDING
+        return Response({"access": token, "is_preorder": is_preorder})
 
 
 def _ensure_session_for_table(table_id: str) -> CartSession:
@@ -333,6 +346,11 @@ def _find_active_session_for_reservation(reservation_id: Any) -> CartSession | N
     reservation = Reservation.objects.filter(public_id=reservation_id).select_related("table").first()
     if reservation is None or reservation.table is None:
         return None
+    if reservation.status == ReservationStatus.PENDING:
+        # Tell the caller when it starts (mirrors _ensure_session_for_table's
+        # table_id branch) instead of a bare "not found" — the frontend uses
+        # this to offer pre-ordering ahead of arrival.
+        raise ReservationNotYetActiveError(start_at=reservation.start_at.isoformat())
     try:
         return ensure_active_cart_for_table(table=reservation.table)
     except NoActiveReservationError:

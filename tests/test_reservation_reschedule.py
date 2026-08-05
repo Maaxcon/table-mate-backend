@@ -180,9 +180,9 @@ def test_customer_can_prolong_active_reservation_with_open_session(
     api_factory: Callable[..., AuthContext],
 ) -> None:
     """Activating a reservation always opens a Session on its table (see
-    activate_reservation). A guest prolonging that same reservation must not
-    have their own session's grace-cutoff block the extension as a false
-    self-conflict — regression test for that exact bug.
+    activate_pending_reservation). A guest prolonging that same reservation
+    must not have their own session's grace-cutoff block the extension as a
+    false self-conflict — regression test for that exact bug.
     """
     customer = user_factory(role=RoleCode.CUSTOMER)
     customer.save()

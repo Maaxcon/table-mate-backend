@@ -19,6 +19,9 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
         conflicting_id = getattr(exc, "conflicting_reservation_id", None)
         if conflicting_id is not None:
             data["conflicting_reservation_id"] = str(conflicting_id)
+        count = getattr(exc, "count", None)
+        if count is not None:
+            data["count"] = count
         return Response(data, status=exc.default_status_code)
     if isinstance(exc, PermissionDenied):
         return Response(

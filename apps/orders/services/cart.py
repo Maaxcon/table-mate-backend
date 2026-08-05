@@ -396,7 +396,13 @@ def pay_session_bill(
         return locked
 
 
+# SCHEDULED may be abandoned but not opened from here: promoting it to OPEN is
+# ensure_visit_session's job, which runs the table's occupancy checks first and
+# flips the reservation to ACTIVE. Without the entry, SCHEDULED falls through to
+# the terminal-state branch and staff get told a booking they can still cancel
+# is terminal.
 _SESSION_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    SessionStatus.SCHEDULED: {SessionStatus.CLOSED, SessionStatus.VOIDED},
     SessionStatus.OPEN: {SessionStatus.CLOSED, SessionStatus.VOIDED},
 }
 
@@ -448,6 +454,7 @@ def open_session(
     opened_at: str | datetime,
     actor: User,
 ) -> Session:
+    from apps.orders.billing import _table_occupied_on_conflict
     from apps.orders.billing import close_visit_session as _close_visit_session
     from common.exceptions import TableOccupiedError
 
@@ -482,17 +489,22 @@ def open_session(
         guest_count=guest_count,
     )
 
-    session = Session.objects.create(
-        restaurant_id=restaurant_id,
-        table=table,
-        reservation=reservation,
-        opened_by=opened_by,
-        guest_count=guest_count,
-        status=SessionStatus.OPEN,
-        currency=currency,
-        opened_at=opened_at,
-        ends_at=reservation.end_at,
-    )
+    # The pre-checks above only see OPEN sessions on ACTIVE reservations, so any
+    # other open session on this table reaches the create as a raw IntegrityError
+    # from orders_one_open_session_per_table. Give the walk-in path the same
+    # readable error the reservation path gets.
+    with _table_occupied_on_conflict():
+        session = Session.objects.create(
+            restaurant_id=restaurant_id,
+            table=table,
+            reservation=reservation,
+            opened_by=opened_by,
+            guest_count=guest_count,
+            status=SessionStatus.OPEN,
+            currency=currency,
+            opened_at=opened_at,
+            ends_at=reservation.end_at,
+        )
 
     transaction.on_commit(
         lambda: emit_hall_table_status_changed(

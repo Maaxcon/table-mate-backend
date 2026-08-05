@@ -19,6 +19,7 @@ class ReceiptSerializer(serializers.ModelSerializer[Receipt]):
     restaurant_address = serializers.CharField(source="restaurant.address", read_only=True)
     restaurant_phone = serializers.CharField(source="restaurant.phone", read_only=True)
     restaurant_image = serializers.SerializerMethodField()
+    reservation_public_id = serializers.SerializerMethodField()
     subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
@@ -33,6 +34,7 @@ class ReceiptSerializer(serializers.ModelSerializer[Receipt]):
             "restaurant_address",
             "restaurant_phone",
             "restaurant_image",
+            "reservation_public_id",
             "visited_at",
             "currency",
             "table_label",
@@ -47,6 +49,14 @@ class ReceiptSerializer(serializers.ModelSerializer[Receipt]):
             "payment_method",
             "payment_status",
         ]
+
+    def get_reservation_public_id(self, obj: Receipt) -> str | None:
+        """The booking this visit came from, so the guest's booking history can
+        offer the receipt. None for receipts entered by hand in the admin, and
+        for orders that never belonged to a booking."""
+        session = getattr(obj.order, "session", None) if obj.order_id else None
+        reservation = getattr(session, "reservation", None)
+        return str(reservation.public_id) if reservation else None
 
     def get_restaurant_image(self, obj: Receipt) -> str | None:
         image = getattr(obj.restaurant, "cover_image", None)

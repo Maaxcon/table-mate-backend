@@ -13,6 +13,7 @@ from .channels import hall_group_name, staff_group_name
 
 if TYPE_CHECKING:
     from apps.authentication.models import User
+    from apps.reservations.models import Reservation
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,49 @@ def emit_hall_new_reservation(
     }
     _broadcast_hall_event(restaurant_id, event)
     _send_to_staff_group(restaurant_id, event)
+
+
+def emit_hall_preorder_status_changed(
+    restaurant_id: int,
+    *,
+    reservation_id: str,
+    status: str,
+) -> None:
+    """Tell the guest's booking list that their pre-order moved on.
+
+    Carries the booking's public id and one of paid/cooking/ready — the same
+    thing the reservation payload already exposes to whoever can read it, and
+    nothing about the food or the money.
+    """
+    event: dict[str, object] = {
+        "event_name": "HALL_PREORDER_STATUS_CHANGED",
+        "schema_version": "1",
+        "event_id": _stable_event_id("HALL_PREORDER_STATUS_CHANGED", reservation_id, status),
+        "reservation_id": reservation_id,
+        "status": status,
+        "occurred_at": timezone.now().isoformat(),
+    }
+    _broadcast_hall_event(restaurant_id, event)
+    _send_to_staff_group(restaurant_id, event)
+
+
+def emit_preorder_status_for_reservation(restaurant_id: int, reservation: Reservation | None) -> None:
+    """Resolve the booking's current pre-order state and push it, if it has one."""
+    if reservation is None:
+        return
+
+    # Imported here, not at module scope: apps.reservations already imports
+    # apps.orders, which imports this module.
+    from apps.reservations.selectors import preorder_status_for_reservation
+
+    status = preorder_status_for_reservation(reservation.pk)
+    if status is None:
+        return
+    emit_hall_preorder_status_changed(
+        restaurant_id,
+        reservation_id=str(reservation.public_id),
+        status=status,
+    )
 
 
 def emit_hall_zone_created(

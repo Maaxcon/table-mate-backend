@@ -109,7 +109,34 @@ class RestaurantClosedError(DomainError):
     default_status_code = HTTPStatus.CONFLICT
 
 
+class ShiftCopyConflictError(DomainError):
+    default_detail = "Some shifts already exist on target dates."
+    default_code = "shift_copy_conflict"
+    default_status_code = HTTPStatus.CONFLICT
+
 class WaiterCallCooldownError(DomainError):
     default_detail = "The waiter was already called for this table recently."
     default_code = "waiter_call_cooldown"
     default_status_code = HTTPStatus.TOO_MANY_REQUESTS
+
+
+class PreorderNotAllowedError(DomainError):
+    default_detail = "Pre-order is only available before the reservation starts."
+    default_code = "preorder_not_allowed"
+    default_status_code = HTTPStatus.CONFLICT
+
+
+class UnservedItemsError(DomainError):
+    """Closing a check was blocked because some items aren't served/voided yet.
+
+    Carries the count so the caller (waiter UI) can offer a "close anyway"
+    override instead of a dead end — see close_visit_session's `force` param.
+    """
+
+    default_detail = "Some items haven't been served yet."
+    default_code = "unserved_items"
+    default_status_code = HTTPStatus.CONFLICT
+
+    def __init__(self, *args: object, count: int = 0) -> None:
+        super().__init__(*args)
+        self.count = count
