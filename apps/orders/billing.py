@@ -438,6 +438,7 @@ def _build_order_from_cart(
                 order=order,
                 menu_item=cart_item.menu_item,
                 guest_slot=cart_item.guest_slot or 0,
+                guest_identity=cart_item.guest_identity,
                 guest_display_name=(guest_names.get(cart_item.guest_identity) if cart_item.guest_identity else None),
                 quantity=cart_item.quantity,
                 comment=cart_item.comment,
