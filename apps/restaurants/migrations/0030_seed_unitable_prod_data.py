@@ -4,6 +4,10 @@ from django.db import migrations
 
 
 def _seed_unitable(apps: object, schema_editor: object) -> None:
+    from apps.restaurants.models import Restaurant
+
+    if Restaurant.objects.filter(name="UniTable").exists():
+        return
     module = import_module("apps.restaurants.migrations.0022_seed_unitable_prod_data")
     module.seed_unitable(apps, schema_editor)
 

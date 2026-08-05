@@ -5,6 +5,10 @@ from django.db import migrations
 
 def _seed_new_restaurants(apps: object, schema_editor: object) -> None:
     module = import_module("apps.restaurants.migrations.0023_seed_new_restaurants")
+    from apps.restaurants.models import Restaurant
+
+    if Restaurant.objects.filter(name__in=module._NEW_RESTAURANT_NAMES).exists():
+        return
     module.seed_new_restaurants(apps, schema_editor)
 
 
