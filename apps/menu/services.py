@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Menu, MenuCategory, MenuItem
+from .selectors import get_default_upsell_items, get_upsell_suggestions
 
 
 def reorder(queryset: QuerySet[Any], entries: list[dict[str, Any]]) -> None:
@@ -100,3 +101,37 @@ def _unique_copy_name(menu: Menu, base: str) -> str:
         name = f"{base} (copy {counter})"
         counter += 1
     return name
+
+
+def get_upsells_for_item(
+    *,
+    restaurant_id: int,
+    item: MenuItem,
+    guest_token: str | None = None,
+    limit: int = 6,
+) -> list[MenuItem]:
+    """Suggest complementary items for a dish.
+
+    Uses co-occurrence from completed order history, then fills remaining slots
+    with the fallback set so an available dish never yields an empty result.
+    """
+    suggestions = list(
+        get_upsell_suggestions(
+            restaurant_id=restaurant_id,
+            target_item=item,
+            guest_token=guest_token,
+            limit=limit,
+        )
+    )
+    if len(suggestions) >= limit:
+        return suggestions
+
+    picked_ids = {s.pk for s in suggestions}
+    fallback = get_default_upsell_items(
+        restaurant_id=restaurant_id,
+        target_item=item,
+        guest_token=guest_token,
+        limit=limit - len(suggestions),
+        exclude_ids=picked_ids,
+    )
+    return suggestions + list(fallback)

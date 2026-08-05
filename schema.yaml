@@ -1337,6 +1337,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/ToggleMenuItemLikeResponse'
           description: ''
+  /api/menu/items/{public_id}/upsells/:
+    get:
+      operationId: menu_items_upsells_retrieve
+      description: Complementary items (add-ons, pairings, desserts, drinks) for the
+        dish, ranked by co-occurrence in completed orders with a category-aware fallback.
+      summary: Smart upsell suggestions for a dish
+      parameters:
+      - in: query
+        name: guest_token
+        schema:
+          type: string
+        description: Anonymous client token for personalized like state.
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      - in: query
+        name: restaurant
+        schema:
+          type: string
+          format: uuid
+        description: Restaurant public UUID
+        required: true
+      tags:
+      - Menu
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpsellSuggestionResponse'
+          description: ''
   /api/menu/items/search/:
     get:
       operationId: menu_items_search_retrieve
@@ -7700,6 +7738,24 @@ components:
       - public_id
       - start_at
       - table_id
+    UpsellSuggestionResponse:
+      type: object
+      description: |-
+        Read-only envelope for smart upsell suggestions.
+
+        ``results`` reuses the canonical ``MenuItemSerializer`` so clients render
+        suggestions with the same item component used across the menu.
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuItem'
+      required:
+      - count
+      - results
     User:
       type: object
       properties:
