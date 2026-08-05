@@ -109,6 +109,7 @@ No constitution violations — feature is fully additive and backward-compatible
 - **Name-based reads**: admin read returns localized names (translation → `entity.name`); `_localized_m2m_names` fallback changes from hardcoded `"uk"`/key to `entity.name`. Public vocab endpoints become restaurant-scoped `[{public_id, name}]`.
 - **Seeding**: via data migrations only (existing seed scripts are stale/unused). Migration seeds the standard 14 allergens per restaurant, backfills `name` from the locale-matching translation, removes default-locale translation rows, remaps junction rows per restaurant, and deletes global rows.
 - **Frontend**: dish form uses a shared free-text field for both allergens and ingredients (type + Add + chips); no dropdown/`useAllergens`/`fetchAllergens`/`allergenOptions` in the dish flow; `AdminAllergen`/`AdminIngredient` types gain `name`; Translations tab shows `name` as the non-editable primary-language value.
+- **Frontend i18n single source of truth**: UI strings live only in `../table-mate-frontend/public/locales/{lng}/translation.json`, loaded at runtime by i18next-http-backend (`/locales/{{lng}}/translation.json`). The bundled `resources` import and `src/i18n/locales/` were removed (T084) so no translations ship in the JS bundle and no second copy can drift. Adding a language requires only dropping a `public/locales/<lng>/translation.json` file (no config change — `supportedLngs` already lists all 23 codes); editing a string means editing `public/locales/{en,uk}/translation.json` only.
 
 ## Proposed Work Breakdown
 
