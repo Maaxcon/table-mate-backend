@@ -3,6 +3,7 @@ from typing import Any
 from django.db import transaction
 from django.db.models import Avg, Count, DecimalField, QuerySet
 from django.db.models.functions import Coalesce
+from django.http import Http404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers, status, viewsets
@@ -45,6 +46,7 @@ from .serializers import (
     ReorderEntrySerializer,
     ToggleMenuItemLikeRequestSerializer,
     ToggleMenuItemLikeResponseSerializer,
+    UpsellSuggestionResponseSerializer,
 )
 
 
@@ -336,6 +338,43 @@ class MenuItemViewSet(
             }
         )
         response_serializer.is_valid(raise_exception=True)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        summary="Smart upsell suggestions for a dish",
+        description="Complementary items (add-ons, pairings, desserts, drinks) for the dish, "
+        "ranked by co-occurrence in completed orders with a category-aware fallback.",
+        parameters=[
+            OpenApiParameter(
+                name="restaurant",
+                description="Restaurant public UUID",
+                required=True,
+                type=OpenApiTypes.UUID,
+            ),
+            OpenApiParameter(
+                name="guest_token",
+                description="Anonymous client token for personalized like state.",
+                required=False,
+                type=str,
+            ),
+        ],
+        responses={status.HTTP_200_OK: UpsellSuggestionResponseSerializer},
+    )
+    @action(detail=True, methods=["get"], url_path="upsells")
+    def upsells(self, request: Request, *args: object, **kwargs: object) -> Response:
+        item = self.get_object()
+        if not item.is_available:
+            raise Http404("Menu item not found.")
+        guest_token = request.query_params.get("guest_token")
+        suggestions = services.get_upsells_for_item(
+            restaurant_id=item.restaurant_id,
+            item=item,
+            guest_token=guest_token,
+        )
+        response_serializer = UpsellSuggestionResponseSerializer(
+            instance={"count": len(suggestions), "results": suggestions},
+            context=self.get_serializer_context(),
+        )
         return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
