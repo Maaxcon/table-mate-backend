@@ -100,5 +100,15 @@ services:
     depends_on:
       web:
         condition: service_started
+
+  llm-service:
+    image: ollama/ollama:latest
+    container_name: table_mate_llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama  # Persists downloaded models on host
+    restart: unless-stopped
 volumes:
   postgres_data:
+  ollama_storage:
