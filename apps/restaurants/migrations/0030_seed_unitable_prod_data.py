@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
     # columns. Keep this at the tail of the restaurants dependency chain.
     dependencies = [
         ("restaurants", "0029_tabletranslation_zonetranslation"),
-        ("menu", "0025_allergen_ingredient_finalize_not_null"),
+        ("menu", "0026_allergen_ingredient_drop_key"),
         ("editor", "0010_layoutentitytranslation"),
         ("authentication", "0008_seed_django_admin_superuser"),
     ]
