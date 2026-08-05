@@ -4443,6 +4443,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/Restaurant'
           description: ''
+    put:
+      operationId: restaurants_restaurants_update
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Restaurant'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Restaurant'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Restaurant'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+          description: ''
     patch:
       operationId: restaurants_restaurants_partial_update
       parameters:
@@ -4521,6 +4554,100 @@ paths:
               schema:
                 $ref: '#/components/schemas/Restaurant'
           description: ''
+    post:
+      operationId: restaurants_restaurants_translations_create
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Restaurant'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Restaurant'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Restaurant'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+          description: ''
+  /api/restaurants/restaurants/{public_id}/translations/{lang}/:
+    put:
+      operationId: restaurants_restaurants_translations_update
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Restaurant'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Restaurant'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Restaurant'
+        required: true
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Restaurant'
+          description: ''
+    delete:
+      operationId: restaurants_restaurants_translations_destroy
+      parameters:
+      - in: path
+        name: lang
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/restaurants/tables/:
     get:
       operationId: restaurants_tables_list
