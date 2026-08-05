@@ -18,6 +18,7 @@ class TokenVersionJWTAuthenticationScheme(OpenApiAuthenticationExtension):
 class GuestJWTAuthenticationScheme(OpenApiAuthenticationExtension):
     target_class = "apps.authentication.authentication.GuestJWTAuthentication"
     name = "guestJwtAuth"
+    match_subclasses = True
 
     def get_security_definition(self, auto_schema: object) -> dict[str, str]:
         return {
