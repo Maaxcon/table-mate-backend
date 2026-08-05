@@ -109,6 +109,12 @@ class RestaurantClosedError(DomainError):
     default_status_code = HTTPStatus.CONFLICT
 
 
+class WaiterCallCooldownError(DomainError):
+    default_detail = "The waiter was already called for this table recently."
+    default_code = "waiter_call_cooldown"
+    default_status_code = HTTPStatus.TOO_MANY_REQUESTS
+
+
 class ShiftCopyConflictError(DomainError):
     default_detail = "Some shifts already exist on target dates."
     default_code = "shift_copy_conflict"
