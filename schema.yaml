@@ -3095,6 +3095,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/Employee'
           description: ''
+    delete:
+      operationId: restaurants_employees_destroy
+      description: Demotes a staff member back to a regular customer account. The
+        account is preserved, while its role and restaurant binding are cleared. Existing
+        staff tokens are invalidated.
+      summary: Remove staff member
+      parameters:
+      - in: path
+        name: public_id
+        schema:
+          type: string
+          pattern: ^[0-9a-fA-F-]{36}$
+        required: true
+      tags:
+      - Restaurants
+      security:
+      - jwtAuth: []
+      - jwt_Auth: []
+      responses:
+        '204':
+          description: No response body
   /api/restaurants/employees/assign/:
     post:
       operationId: restaurants_employees_assign_create

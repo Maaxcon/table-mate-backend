@@ -319,7 +319,7 @@ class EmployeeViewSet(
     serializer_class = EmployeeSerializer
     filterset_fields = ["role", "is_active"]
     ordering_fields = ["role", "email", "created_at", "updated_at"]
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_serializer_class(self) -> type[BaseSerializer[User]]:
         if self.action == "create":
@@ -344,6 +344,18 @@ class EmployeeViewSet(
         employee = cast(User, serializer.instance)
         self._guard_last_admin(employee, serializer.validated_data)
         services.manage_employee(employee, **serializer.validated_data)
+
+    @extend_schema(
+        summary="Remove staff member",
+        description="Demotes a staff member back to a regular customer account. The account is preserved, "
+        "while its role and restaurant binding are cleared. Existing staff tokens are invalidated.",
+        responses={204: None},
+    )
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        employee = self.get_object()
+        self._guard_last_admin(employee, {"role": RoleCode.CUSTOMER})
+        services.remove_employee(employee)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def _guard_last_admin(self, employee: User, data: dict[str, Any]) -> None:
         """Block a change that would leave the restaurant with no active admin."""

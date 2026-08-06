@@ -3,7 +3,7 @@ from typing import Any
 from django.conf import settings as django_settings
 from django.db import transaction
 
-from apps.authentication.models import User
+from apps.authentication.models import RoleCode, User
 
 from .models import Restaurant, RestaurantSettings, Table
 
@@ -84,6 +84,21 @@ def assign_employee(*, user: User, restaurant_id: int, role: str) -> User:
     return user
 
 
+@transaction.atomic
+def remove_employee(employee: User) -> User:
+    """Demote a staff member back to a regular customer account.
+
+    The user row is preserved so the account can keep signing in as a customer;
+    only the role and restaurant binding are cleared. The role-change signal
+    bumps token_version, so the staff user's active sessions are invalidated
+    immediately.
+    """
+    employee.role = RoleCode.CUSTOMER
+    employee.restaurant_id = None
+    employee.save(update_fields=["role", "restaurant_id", "updated_at"])
+    return employee
+
+
 def build_table_menu_url(table: Table) -> str:
     """Menu deep link a table's QR code encodes.
 
@@ -99,5 +114,6 @@ __all__ = [
     "manage_employee",
     "create_employee",
     "assign_employee",
+    "remove_employee",
     "build_table_menu_url",
 ]
