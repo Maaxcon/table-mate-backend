@@ -88,6 +88,7 @@ class EmployeeSerializer(serializers.ModelSerializer[User]):
             "email",
             "first_name",
             "last_name",
+            "staff_display_name",
             "phone",
             "role",
             "is_active",
@@ -106,13 +107,13 @@ class EmployeeCreateSerializer(serializers.ModelSerializer[User]):
         fields = [
             "public_id",
             "email",
-            "first_name",
-            "last_name",
+            "staff_display_name",
             "phone",
             "role",
             "is_active",
         ]
         read_only_fields = ["public_id", "is_active"]
+        extra_kwargs = {"staff_display_name": {"required": True, "allow_blank": False}}
 
     def validate_role(self, value: str) -> str:
         if value == RoleCode.CUSTOMER:
@@ -120,9 +121,21 @@ class EmployeeCreateSerializer(serializers.ModelSerializer[User]):
         return value
 
     def validate_email(self, value: str) -> str:
-        if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
+        user = User.objects.filter(email__iexact=value).first()
+        if user is None:
+            return value
+        if user.role != RoleCode.CUSTOMER or user.restaurant_id is not None:
+            raise serializers.ValidationError("This user cannot be assigned as staff.")
+        self._existing_user = user
         return value
+
+    @property
+    def existing_user(self) -> User | None:
+        return getattr(self, "_existing_user", None)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        attrs = super().validate(attrs)
+        return attrs
 
 
 class EmployeeAssignSerializer(serializers.Serializer[Any]):

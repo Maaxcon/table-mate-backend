@@ -57,6 +57,7 @@ class User(BaseModel, AbstractBaseUser, PermissionsMixin):
     google_sub = models.CharField(max_length=255, unique=True, null=True, blank=True)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
+    staff_display_name = models.CharField(max_length=150, blank=True)
     phone = models.CharField(max_length=32, null=True, blank=True)
     role = models.CharField(
         max_length=20,

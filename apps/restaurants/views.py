@@ -335,10 +335,19 @@ class EmployeeViewSet(
         # Restaurant comes from the admin's auth context, never the request body,
         # so an admin can only add staff to their own restaurant.
         restaurant_id = require_restaurant_id_from_auth(self.request)
-        serializer.instance = services.create_employee(
-            restaurant_id=restaurant_id,
-            **serializer.validated_data,
-        )
+        employee_serializer = cast(EmployeeCreateSerializer, serializer)
+        if employee_serializer.existing_user is not None:
+            serializer.instance = services.assign_employee(
+                user=employee_serializer.existing_user,
+                restaurant_id=restaurant_id,
+                role=employee_serializer.validated_data["role"],
+                staff_display_name=employee_serializer.validated_data["staff_display_name"],
+            )
+        else:
+            serializer.instance = services.create_employee(
+                restaurant_id=restaurant_id,
+                **serializer.validated_data,
+            )
 
     def perform_update(self, serializer: BaseSerializer[User]) -> None:
         employee = cast(User, serializer.instance)

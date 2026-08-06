@@ -21,7 +21,7 @@ SETTINGS_UPDATABLE = frozenset(
         "price_band",
     }
 )
-EMPLOYEE_UPDATABLE = frozenset({"role", "is_active", "first_name", "last_name", "phone"})
+EMPLOYEE_UPDATABLE = frozenset({"role", "is_active", "staff_display_name", "first_name", "last_name", "phone"})
 
 
 def _apply_fields(instance: Any, data: dict[str, Any], allowed: frozenset[str]) -> list[str]:
@@ -72,15 +72,20 @@ def create_employee(*, restaurant_id: int, email: str, role: str, **data: Any) -
         restaurant_id=restaurant_id,
         first_name=data.get("first_name", ""),
         last_name=data.get("last_name", ""),
+        staff_display_name=data["staff_display_name"],
         phone=data.get("phone"),
     )
 
 
 @transaction.atomic
-def assign_employee(*, user: User, restaurant_id: int, role: str) -> User:
+def assign_employee(*, user: User, restaurant_id: int, role: str, staff_display_name: str | None = None) -> User:
     user.role = role
     user.restaurant_id = restaurant_id
-    user.save(update_fields=["role", "restaurant_id", "updated_at"])
+    update_fields = ["role", "restaurant_id", "updated_at"]
+    if staff_display_name is not None:
+        user.staff_display_name = staff_display_name
+        update_fields.append("staff_display_name")
+    user.save(update_fields=update_fields)
     return user
 
 
@@ -95,7 +100,8 @@ def remove_employee(employee: User) -> User:
     """
     employee.role = RoleCode.CUSTOMER
     employee.restaurant_id = None
-    employee.save(update_fields=["role", "restaurant_id", "updated_at"])
+    employee.staff_display_name = ""
+    employee.save(update_fields=["role", "restaurant_id", "staff_display_name", "updated_at"])
     return employee
 
 

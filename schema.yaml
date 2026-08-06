@@ -4275,6 +4275,9 @@ components:
         last_name:
           type: string
           maxLength: 150
+        staff_display_name:
+          type: string
+          maxLength: 150
         phone:
           type: string
           nullable: true
@@ -4308,10 +4311,7 @@ components:
           type: string
           format: email
           maxLength: 254
-        first_name:
-          type: string
-          maxLength: 150
-        last_name:
+        staff_display_name:
           type: string
           maxLength: 150
         phone:
@@ -4327,6 +4327,7 @@ components:
       - email
       - is_active
       - public_id
+      - staff_display_name
     GoogleAuth:
       type: object
       properties:
@@ -5586,6 +5587,9 @@ components:
           type: string
           maxLength: 150
         last_name:
+          type: string
+          maxLength: 150
+        staff_display_name:
           type: string
           maxLength: 150
         phone:
