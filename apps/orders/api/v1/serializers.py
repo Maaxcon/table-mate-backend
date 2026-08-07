@@ -107,6 +107,8 @@ class CartItemSerializer(serializers.ModelSerializer[CartItem]):
             "menu_item_detail",
             "quantity",
             "comment",
+            "modifiers",
+            "unit_price",
             "added_by",
             "guest_slot",
             "is_mine",

@@ -431,7 +431,7 @@ def _build_order_from_cart(
         GuestProfile.objects.filter(cart_session=cart_session).values_list("guest_identity", "display_name")
     )
     for cart_item in cart_items:
-        unit_price = cart_item.menu_item.price
+        unit_price = cart_item.unit_price if cart_item.unit_price is not None else cart_item.menu_item.price
         line_total = quantize_money(unit_price * cart_item.quantity)
         line_tax = quantize_money(line_total * tax_rate)
         order_items.append(
@@ -445,6 +445,7 @@ def _build_order_from_cart(
                 ),
                 quantity=cart_item.quantity,
                 comment=cart_item.comment,
+                modifiers=cart_item.modifiers or None,
                 unit_price=unit_price,
                 total_price=line_total,
                 tax_rate=tax_rate,

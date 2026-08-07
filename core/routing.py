@@ -16,10 +16,14 @@ from apps.editor.routing import (  # noqa: E402
 from apps.orders.routing import (  # noqa: E402
     websocket_urlpatterns as orders_ws_patterns,
 )
+from apps.assistant.routing import (  # noqa: E402
+    websocket_urlpatterns as assistant_ws_patterns,
+)
 
 websocket_urlpatterns: list[URLPattern | URLResolver] = [
     *editor_ws_patterns,
     *orders_ws_patterns,
+    *assistant_ws_patterns,
 ]
 
 application = ProtocolTypeRouter(

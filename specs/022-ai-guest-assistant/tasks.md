@@ -25,11 +25,11 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create `apps/assistant/` app skeleton (`__init__.py`, `apps.py` with `AssistantConfig`) and register `apps.assistant` in `INSTALLED_APPS` in `core/settings/base.py`; add `httpx` to dependencies in `pyproject.toml` and lock with `uv lock`
-- [ ] T002 [P] Add `ASSISTANT_OLLAMA_URL` (default `http://llm-service:11434`), `ASSISTANT_OLLAMA_MODEL`, `ASSISTANT_PROPOSAL_TTL_SECONDS` (300), `ASSISTANT_HOURLY_CAP`, `ASSISTANT_DAILY_CAP` to `core/settings/base.py`
-- [ ] T003 [P] Register `assistant_cleanup` daily Celery beat schedule in `core/celery.py` (confirm `app.autodiscover_tasks` picks up `apps.assistant.tasks`)
-- [ ] T004 [P] Wire REST URLs in `core/urls.py` (`path("api/assistant/", include("apps.assistant.api.v1.urls"))`) and WS consumer route in `core/routing.py` (`ws/assistant/<uuid:conversation_id>/` → `apps.assistant.consumers.AssistantConsumer`); document the existing `core/routing.py` loading `production` settings while `manage.py` uses `local` (see research.md R7)
-- [ ] T005 [P] Scaffold `apps/assistant/api/v1/` (`__init__.py`, `urls.py`, `serializers.py`, `views.py`) and `tests/assistant/` directory
+- [X] T001 Create `apps/assistant/` app skeleton (`__init__.py`, `apps.py` with `AssistantConfig`) and register `apps.assistant` in `INSTALLED_APPS` in `core/settings/base.py`; add `httpx` to dependencies in `pyproject.toml` and lock with `uv lock`
+- [X] T002 [P] Add `ASSISTANT_OLLAMA_URL` (default `http://llm-service:11434`), `ASSISTANT_OLLAMA_MODEL`, `ASSISTANT_PROPOSAL_TTL_SECONDS` (300), `ASSISTANT_HOURLY_CAP`, `ASSISTANT_DAILY_CAP` to `core/settings/base.py`
+- [X] T003 [P] Register `assistant_cleanup` daily Celery beat schedule in `core/celery.py` (confirm `app.autodiscover_tasks` picks up `apps.assistant.tasks`)
+- [X] T004 [P] Wire REST URLs in `core/urls.py` (`path("api/assistant/", include("apps.assistant.api.v1.urls"))`) and WS consumer route in `core/routing.py` (`ws/assistant/<uuid:conversation_id>/` → `apps.assistant.consumers.AssistantConsumer`); document the existing `core/routing.py` loading `production` settings while `manage.py` uses `local` (see research.md R7)
+- [X] T005 [P] Scaffold `apps/assistant/api/v1/` (`__init__.py`, `urls.py`, `serializers.py`, `views.py`) and `tests/assistant/` directory
 
 ---
 
@@ -39,21 +39,21 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T006 Create assistant models — `Conversation`, `Message`, `ToolProposal`, `ToolCall`, `HandoffRequest` — in `apps/assistant/models.py` per `data-model.md` (partial unique index on pending `ToolProposal` per conversation, user XOR guest_key check, conversation→ToolCall `SET_NULL`, retention-safe FK semantics) + migration in `apps/assistant/migrations/`
-- [ ] T007 Implement selectors for conversations, messages, proposals, and handoffs in `apps/assistant/selectors.py` (scoped by owner identity + restaurant)
-- [ ] T008 Implement conversation service (`get_or_create`, ownership enforcement, language defaulting) in `apps/assistant/services/conversations.py`
-- [ ] T009 Implement `ToolRegistry` (name → schema/executor/needs_confirmation) and persona→tool-set binding in `apps/assistant/services/registry.py` (FR-014/FR-015 seam)
-- [ ] T010 Implement deterministic intent router (`info`/`booking`/`cart`/`none`) that returns the focused ≤5-tool set per turn in `apps/assistant/services/router.py` (FR-020)
-- [ ] T011 Implement Ollama client in `apps/assistant/services/ollama.py`: httpx async POST to `{ASSISTANT_OLLAMA_URL}/api/chat` with `format: "json"`, system prompt enumerating current tool set + injected `ui_context` (FR-021), strict JSON parse, DRF-serializer schema validation (FR-018), single re-prompt on malformed output then courteous fallback + hand-off offer
-- [ ] T012 Implement message pipeline in `apps/assistant/services/pipeline.py`: Redis-backed hourly/daily rate-cap counters keyed on owner identity (FR-023, 429 with `retry_after`), persist user `Message`, enqueue `assistant_process_turn`
-- [ ] T013 Implement Celery tasks in `apps/assistant/tasks.py`: `assistant_process_turn` (router → ollama → persist/broadcast), `assistant_followup` (post-reject follow-up), `assistant_cleanup` (delete conversations >7 d, ToolCall >30 d, expire stale proposals — FR-022/FR-024)
-- [ ] T014 Implement WS consumer in `apps/assistant/consumers.py`: join `assistant_conversation_<conversation_id>` group, typed/versioned event builders (`ASSISTANT_MESSAGE`, `ASSISTANT_ACTION_PROPOSED`, `ASSISTANT_ACTION_RESULT`, `schema_version: 1`), at-least-once delivery + reconnect replay source (C4, FR-013)
-- [ ] T015 Implement REST conversations + messages endpoints in `apps/assistant/api/v1/views.py` + `serializers.py`: `POST conversations/`, `GET conversations/{id}/` (with `pending_proposal`), `POST conversations/{id}/messages/` (202 + enqueue), `GET conversations/{id}/messages/` (history/replay); all `IsAuthenticated` with ownership checks
-- [ ] T016 [P] Contract test for conversations/messages REST API in `tests/assistant/test_conversations.py` (201/202/400/401/403/404, ownership, history replay shape)
-- [ ] T017 [P] Pipeline test in `tests/assistant/test_pipeline.py` (hourly/daily caps → 429 no inference, malformed input, enqueue happens)
-- [ ] T018 [P] Ollama client test (mocked `httpx`/Ollama) in `tests/assistant/test_ollama_client.py` (valid JSON accepted, out-of-schema rejected + re-prompt, unreachable → fallback, no credentials in prompt)
-- [ ] T019 [P] Router test in `tests/assistant/test_router.py` (each intent yields the focused tool set; tool set ≤5; `none` yields no tools)
-- [ ] T020 [P] WS event contract test in `tests/assistant/test_events.py` (payload/schema_version correctness, unknown-version ignore, replay window, at-least-once/idempotency assumptions)
+- [X] T006 Create assistant models — `Conversation`, `Message`, `ToolProposal`, `ToolCall`, `HandoffRequest` — in `apps/assistant/models.py` per `data-model.md` (partial unique index on pending `ToolProposal` per conversation, user XOR guest_key check, conversation→ToolCall `SET_NULL`, retention-safe FK semantics) + migration in `apps/assistant/migrations/`
+- [X] T007 Implement selectors for conversations, messages, proposals, and handoffs in `apps/assistant/selectors.py` (scoped by owner identity + restaurant)
+- [X] T008 Implement conversation service (`get_or_create`, ownership enforcement, language defaulting) in `apps/assistant/services/conversations.py`
+- [X] T009 Implement `ToolRegistry` (name → schema/executor/needs_confirmation) and persona→tool-set binding in `apps/assistant/services/registry.py` (FR-014/FR-015 seam)
+- [X] T010 Implement deterministic intent router (`info`/`booking`/`cart`/`none`) that returns the focused ≤5-tool set per turn in `apps/assistant/services/router.py` (FR-020)
+- [X] T011 Implement Ollama client in `apps/assistant/services/ollama.py`: httpx async POST to `{ASSISTANT_OLLAMA_URL}/api/chat` with `format: "json"`, system prompt enumerating current tool set + injected `ui_context` (FR-021), strict JSON parse, DRF-serializer schema validation (FR-018), single re-prompt on malformed output then courteous fallback + hand-off offer
+- [X] T012 Implement message pipeline in `apps/assistant/services/pipeline.py`: Redis-backed hourly/daily rate-cap counters keyed on owner identity (FR-023, 429 with `retry_after`), persist user `Message`, enqueue `assistant_process_turn`
+- [X] T013 Implement Celery tasks in `apps/assistant/tasks.py`: `assistant_process_turn` (router → ollama → persist/broadcast), `assistant_followup` (post-reject follow-up), `assistant_cleanup` (delete conversations >7 d, ToolCall >30 d, expire stale proposals — FR-022/FR-024)
+- [X] T014 Implement WS consumer in `apps/assistant/consumers.py`: join `assistant_conversation_<conversation_id>` group, typed/versioned event builders (`ASSISTANT_MESSAGE`, `ASSISTANT_ACTION_PROPOSED`, `ASSISTANT_ACTION_RESULT`, `schema_version: 1`), at-least-once delivery + reconnect replay source (C4, FR-013)
+- [X] T015 Implement REST conversations + messages endpoints in `apps/assistant/api/v1/views.py` + `serializers.py`: `POST conversations/`, `GET conversations/{id}/` (with `pending_proposal`), `POST conversations/{id}/messages/` (202 + enqueue), `GET conversations/{id}/messages/` (history/replay); all `IsAuthenticated` with ownership checks
+- [X] T016 [P] Contract test for conversations/messages REST API in `tests/assistant/test_conversations.py` (201/202/400/401/403/404, ownership, history replay shape)
+- [X] T017 [P] Pipeline test in `tests/assistant/test_pipeline.py` (hourly/daily caps → 429 no inference, malformed input, enqueue happens)
+- [X] T018 [P] Ollama client test (mocked `httpx`/Ollama) in `tests/assistant/test_ollama_client.py` (valid JSON accepted, out-of-schema rejected + re-prompt, unreachable → fallback, no credentials in prompt)
+- [X] T019 [P] Router test in `tests/assistant/test_router.py` (each intent yields the focused tool set; tool set ≤5; `none` yields no tools)
+- [X] T020 [P] WS event contract test in `tests/assistant/test_events.py` (payload/schema_version correctness, unknown-version ignore, replay window, at-least-once/idempotency assumptions)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -67,11 +67,11 @@
 
 ### Implementation for User Story 1
 
-- [ ] T021 [P] [US1] Implement `get_menu` executor (search + translations fallback, price/availability/allergens/ingredients) in `apps/assistant/services/tools.py`
-- [ ] T022 [P] [US1] Implement `get_restaurant_info` executor (hours/address/policy/contact; `payment` → staff referral, no financial data) in `apps/assistant/services/tools.py`
-- [ ] T023 [P] [US1] Implement `check_availability` executor (reuse reservation availability selectors; nearest alternatives when taken/outside hours — FR-007) in `apps/assistant/services/tools.py`
-- [ ] T024 [US1] Wire read-only silent execution into `assistant_process_turn` in `apps/assistant/tasks.py` (run tool, inject result back into prompt, summarize via `ASSISTANT_MESSAGE`) for the `info` intent
-- [ ] T025 [US1] Integration test for US1 in `tests/assistant/test_tools.py` (menu/allergen/hours/policy answers against live data, data-boundary refusal SC-005, tool result summarization)
+- [X] T021 [P] [US1] Implement `get_menu` executor (search + translations fallback, price/availability/allergens/ingredients) in `apps/assistant/services/tools.py`
+- [X] T022 [P] [US1] Implement `get_restaurant_info` executor (hours/address/policy/contact; `payment` → staff referral, no financial data) in `apps/assistant/services/tools.py`
+- [X] T023 [P] [US1] Implement `check_availability` executor (reuse reservation availability selectors; nearest alternatives when taken/outside hours — FR-007) in `apps/assistant/services/tools.py`
+- [X] T024 [US1] Wire read-only silent execution into `assistant_process_turn` in `apps/assistant/tasks.py` (run tool, inject result back into prompt, summarize via `ASSISTANT_MESSAGE`) for the `info` intent
+- [X] T025 [US1] Integration test for US1 in `tests/assistant/test_tools.py` (menu/allergen/hours/policy answers against live data, data-boundary refusal SC-005, tool result summarization)
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -85,12 +85,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T026 [P] [US2] Implement proposals service in `apps/assistant/services/proposals.py`: `create` (summary/consequence/5-min `expires_at`, FR-024), `confirm` (atomic `pending→confirmed` transition keyed on `proposal_id`, re-validate at execution time FR-006, dispatch), `reject` (enqueue `assistant_followup`), lazy expiry
-- [ ] T027 [P] [US2] Implement `create_reservation` executor (party_size/date/time/notes; on confirm re-check availability then reuse reservation service) in `apps/assistant/services/tools.py`
-- [ ] T028 [US2] Implement proposal `confirm`/`reject` REST endpoints in `apps/assistant/api/v1/views.py` + `serializers.py` (200 result / 409 expired-or-processed / 403 not-owner; idempotent duplicate confirm returns recorded result)
-- [ ] T029 [US2] Emit `ASSISTANT_ACTION_PROPOSED` (post-create) and `ASSISTANT_ACTION_RESULT` (post-commit only — No-Optimistic-Truth Rule) in `apps/assistant/services/proposals.py` + `consumers.py`
-- [ ] T030 [US2] Write `ToolCall` audit record (actor, channel, tool, inputs, outcome, reference_id, timestamps) in the same transaction as execution in `apps/assistant/services/proposals.py` (FR-010)
-- [ ] T031 [US2] Test booking flow in `tests/assistant/test_proposals.py` (SC-001 end-to-end, slot-taken-between-proposal-and-confirm → `slot_taken` + alternatives, expiry SC-013, duplicate-confirm idempotency SC-006, audit trail SC-004)
+- [X] T026 [P] [US2] Implement proposals service in `apps/assistant/services/proposals.py`: `create` (summary/consequence/5-min `expires_at`, FR-024), `confirm` (atomic `pending→confirmed` transition keyed on `proposal_id`, re-validate at execution time FR-006, dispatch), `reject` (enqueue `assistant_followup`), lazy expiry
+- [X] T027 [P] [US2] Implement `create_reservation` executor (party_size/date/time/notes; on confirm re-check availability then reuse reservation service) in `apps/assistant/services/tools.py`
+- [X] T028 [US2] Implement proposal `confirm`/`reject` REST endpoints in `apps/assistant/api/v1/views.py` + `serializers.py` (200 result / 409 expired-or-processed / 403 not-owner; idempotent duplicate confirm returns recorded result)
+- [X] T029 [US2] Emit `ASSISTANT_ACTION_PROPOSED` (post-create) and `ASSISTANT_ACTION_RESULT` (post-commit only — No-Optimistic-Truth Rule) in `apps/assistant/services/proposals.py` + `consumers.py`
+- [X] T030 [US2] Write `ToolCall` audit record (actor, channel, tool, inputs, outcome, reference_id, timestamps) in the same transaction as execution in `apps/assistant/services/proposals.py` (FR-010)
+- [X] T031 [US2] Test booking flow in `tests/assistant/test_proposals.py` (SC-001 end-to-end, slot-taken-between-proposal-and-confirm → `slot_taken` + alternatives, expiry SC-013, duplicate-confirm idempotency SC-006, audit trail SC-004)
 
 **Checkpoint**: At this point, User Story 2 should be fully functional and testable independently
 
@@ -104,9 +104,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T032 [P] [US3] Implement `add_to_cart` executor (menu_item_id, quantity, modifiers, guest slot/comment; re-check `is_available` + active cart at execution) in `apps/assistant/services/tools.py`
-- [ ] T033 [US3] Integrate `cart` intent: expose `get_menu` + `add_to_cart`, and drive modifier clarification before proposing when required modifiers are missing (US-3/AS-4) in `apps/assistant/services/router.py` + `tools.py`
-- [ ] T034 [US3] Test cart flow in `tests/assistant/test_tools.py` (SC-002 add-with-modifiers, unavailable item → alternatives, missing modifier → ask before propose, closed cart → `cart_closed`)
+- [X] T032 [P] [US3] Implement `add_to_cart` executor (menu_item_id, quantity, modifiers, guest slot/comment; re-check `is_available` + active cart at execution) in `apps/assistant/services/tools.py`
+- [X] T033 [US3] Integrate `cart` intent: expose `get_menu` + `add_to_cart`, and drive modifier clarification before proposing when required modifiers are missing (US-3/AS-4) in `apps/assistant/services/router.py` + `tools.py`
+- [X] T034 [US3] Test cart flow in `tests/assistant/test_tools.py` (SC-002 add-with-modifiers, unavailable item → alternatives, missing modifier → ask before propose, closed cart → `cart_closed`)
 
 **Checkpoint**: At this point, User Story 3 should be fully functional and testable independently
 
@@ -120,8 +120,8 @@
 
 ### Implementation for User Story 4
 
-- [ ] T035 [P] [US4] Implement `reschedule_reservation` executor (date/time/party_size; re-check availability at confirm; not-owner/`reservation_not_found` guards) in `apps/assistant/services/tools.py`
-- [ ] T036 [P] [US4] Implement `cancel_reservation` executor with destructive-action confirmation (proposal `consequence` MUST name the exact reservation being cancelled — Destructive Action Confirmation Contract) in `apps/assistant/services/tools.py`
+- [X] T035 [P] [US4] Implement `reschedule_reservation` executor (date/time/party_size; re-check availability at confirm; not-owner/`reservation_not_found` guards) in `apps/assistant/services/tools.py`
+- [X] T036 [P] [US4] Implement `cancel_reservation` executor with destructive-action confirmation (proposal `consequence` MUST name the exact reservation being cancelled — Destructive Action Confirmation Contract) in `apps/assistant/services/tools.py`
 - [ ] T037 [US4] Test modify/cancel in `tests/assistant/test_proposals.py` (reschedule + slot freed, cancel requires consequence + confirm, conflict → valid alternative, `already_cancelled` guard)
 
 **Checkpoint**: At this point, User Story 4 should be fully functional and testable independently
@@ -136,9 +136,9 @@
 
 ### Implementation for User Story 5
 
-- [ ] T038 [P] [US5] Implement handoff service in `apps/assistant/services/handoff.py` (record `HandoffRequest` with `context_summary`, mark `notified_at`)
-- [ ] T039 [US5] Implement `POST conversations/{id}/handoff/` endpoint in `apps/assistant/api/v1/views.py` + `serializers.py` (201 + `handoff_id`)
-- [ ] T040 [US5] Push staff notification via `staff_<restaurant_id>` group + Redis notification store (reuse `common/notification_store.py`/`channels.py`) in `apps/assistant/services/handoff.py` (FR-011, constitution XII)
+- [X] T038 [P] [US5] Implement handoff service in `apps/assistant/services/handoff.py` (record `HandoffRequest` with `context_summary`, mark `notified_at`)
+- [X] T039 [US5] Implement `POST conversations/{id}/handoff/` endpoint in `apps/assistant/api/v1/views.py` + `serializers.py` (201 + `handoff_id`)
+- [X] T040 [US5] Push staff notification via `staff_<restaurant_id>` group + Redis notification store (reuse `common/notification_store.py`/`channels.py`) in `apps/assistant/services/handoff.py` (FR-011, constitution XII)
 - [ ] T041 [US5] Test hand-off in `tests/assistant/test_handoff.py` (SC-008 record + notification, guest keeps chatting after hand-off, payment referral FR-009)
 
 **Checkpoint**: At this point, User Story 5 should be fully functional and testable independently
@@ -153,9 +153,9 @@
 
 ### Implementation for User Story 6
 
-- [ ] T042 [P] [US6] Make tool discovery data-driven: `ToolRegistry` auto-discovers registered tools, intent router reads category→tool mapping from the registry in `apps/assistant/services/registry.py` + `router.py`
-- [ ] T043 [US6] Add `admin` persona demo bound to the `admin` role (role-bounded tool set) with cross-persona denial at dispatch in `apps/assistant/services/registry.py` + `services/proposals.py` (FR-015)
-- [ ] T044 [US6] Test extension mechanism in `tests/assistant/test_registry.py` (add tool/persona without touching existing assistants — SC-007; guest persona denied admin-only tool regardless of model output)
+- [X] T042 [P] [US6] Make tool discovery data-driven: `ToolRegistry` auto-discovers registered tools, intent router reads category→tool mapping from the registry in `apps/assistant/services/registry.py` + `router.py`
+- [X] T043 [US6] Add `admin` persona demo bound to the `admin` role (role-bounded tool set) with cross-persona denial at dispatch in `apps/assistant/services/registry.py` + `services/proposals.py` (FR-015)
+- [X] T044 [US6] Test extension mechanism in `tests/assistant/test_registry.py` (add tool/persona without touching existing assistants — SC-007; guest persona denied admin-only tool regardless of model output)
 
 **Checkpoint**: At this point, User Story 6 should be fully functional and testable independently
 
@@ -165,8 +165,8 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T045 [P] Retention verification: `assistant_cleanup` deletes conversations >7 d and `ToolCall` >30 d and expires stale proposals; add `tests/assistant/test_cleanup.py` (SC-011, FR-022/FR-024)
-- [ ] T046 [P] Security hardening: run `bandit -r apps/assistant`, confirm no secrets/credentials ever reach the prompt or model payload, sanitize/truncate stored payloads in `apps/assistant/services/ollama.py`
+- [X] T045 [P] Retention verification: `assistant_cleanup` deletes conversations >7 d and `ToolCall` >30 d and expires stale proposals; add `tests/assistant/test_cleanup.py` (SC-011, FR-022/FR-024)
+- [X] T046 [P] Security hardening: run `bandit -r apps/assistant`, confirm no secrets/credentials ever reach the prompt or model payload, sanitize/truncate stored payloads in `apps/assistant/services/ollama.py`
 - [ ] T047 [P] OpenAPI drift gate: regenerate `schema.yaml` (drf-spectacular) and confirm the diff contains only additive assistant endpoints; update committed snapshot
 - [ ] T048 Run `quickstart.md` validation (US-1..US-6 acceptance scenarios + SC-001..SC-013) and record results
 - [ ] T049 Run full quality gates: `ruff check apps/assistant tests/assistant`, `mypy`, `bandit`, `pip-audit`, `pytest tests/assistant -q`

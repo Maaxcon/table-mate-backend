@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "apps.receipts",
     "apps.shifts",
     "apps.translations",
+    "apps.assistant",
 ]
 
 MIDDLEWARE = [
@@ -230,7 +231,28 @@ CELERY_BEAT_SCHEDULE = {
         "task": "reservations.expire_noshow_reservations",
         "schedule": float(env.int("EXPIRE_NOSHOW_RESERVATIONS_INTERVAL_SECONDS", default=300)),
     },
+    "assistant-cleanup": {
+        "task": "assistant.cleanup",
+        "schedule": float(env.int("ASSISTANT_CLEANUP_INTERVAL_SECONDS", default=86400)),
+    },
 }
+
+# AI Guest Assistant — the model is a pure reasoning layer over a local Ollama
+# deployment (docker-compose `llm-service`, reachable at the container network
+# name; local dev overrides via env to `http://localhost:11434`). The backend is
+# the execution layer ("LLM proposes, app disposes"): the model never holds
+# credentials and the client never receives tool schemas or the model URL.
+ASSISTANT_OLLAMA_URL = env.str("ASSISTANT_OLLAMA_URL", default="http://llm-service:11434")
+ASSISTANT_OLLAMA_MODEL = env.str("ASSISTANT_OLLAMA_MODEL", default="qwen2.5:7b")
+# Write-tool proposals expire 5 minutes after creation (FR-024).
+ASSISTANT_PROPOSAL_TTL_SECONDS = env.int("ASSISTANT_PROPOSAL_TTL_SECONDS", default=300)
+# Per-guest rate caps enforced in Redis before any model inference (FR-023).
+ASSISTANT_HOURLY_CAP = env.int("ASSISTANT_HOURLY_CAP", default=20)
+ASSISTANT_DAILY_CAP = env.int("ASSISTANT_DAILY_CAP", default=100)
+# Retention windows (FR-022): conversations (cascade) after 7 days, audit trail
+# (ToolCall) after 30 days.
+ASSISTANT_CONVERSATION_RETENTION_DAYS = env.int("ASSISTANT_CONVERSATION_RETENTION_DAYS", default=7)
+ASSISTANT_AUDIT_RETENTION_DAYS = env.int("ASSISTANT_AUDIT_RETENTION_DAYS", default=30)
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "TableMate Platform API",

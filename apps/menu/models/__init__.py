@@ -240,3 +240,65 @@ class MenuItemLike(RestaurantScopedModel):
 
     def __str__(self) -> str:
         return f"{self.menu_item_id}:{self.guest_token}"
+
+
+class ModifierGroup(RestaurantScopedModel):
+    """A selectable choice group for a menu item (e.g. Size, Extras).
+
+    ``is_required`` groups must have at least one option chosen before the item
+    can be added to a cart (US-3/AS-4).
+    """
+
+    menu_item = models.ForeignKey(
+        "menu.MenuItem",
+        on_delete=models.CASCADE,
+        related_name="modifier_groups",
+    )
+    name = models.CharField(max_length=255)
+    is_required = models.BooleanField(default=False)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["menu_item", "name"],
+                name="modifier_group_item_name_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["restaurant", "id"],
+                name="menu_modifiergroup_rest_uniq",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.menu_item_id} → {self.name}"
+
+
+class ModifierOption(RestaurantScopedModel):
+    """A concrete choice within a :class:`ModifierGroup` with a price delta."""
+
+    group = models.ForeignKey(
+        "menu.ModifierGroup",
+        on_delete=models.CASCADE,
+        related_name="options",
+    )
+    name = models.CharField(max_length=255)
+    price_delta = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "name"],
+                name="modifier_option_group_name_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["restaurant", "id"],
+                name="menu_modifieroption_rest_uniq",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.group_id} → {self.name}"

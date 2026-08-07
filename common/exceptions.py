@@ -1,4 +1,5 @@
 from http import HTTPStatus
+from typing import Any
 
 
 class DomainError(Exception):
@@ -100,6 +101,26 @@ class CartChangedError(DomainError):
 class MenuItemUnavailableError(DomainError):
     default_detail = "Menu item is not available."
     default_code = "menu_item_unavailable"
+    default_status_code = HTTPStatus.BAD_REQUEST
+
+
+class ModifierRequiredError(DomainError):
+    """A required modifier group has no selection for this menu item."""
+
+    default_detail = "A required modifier must be chosen for this item."
+    default_code = "modifier_required"
+    default_status_code = HTTPStatus.BAD_REQUEST
+
+    def __init__(self, *args: object, missing: list[dict[str, Any]] | None = None) -> None:
+        super().__init__(*args)
+        self.missing = missing or []
+
+
+class InvalidModifierError(DomainError):
+    """A submitted modifier choice does not belong to this menu item."""
+
+    default_detail = "A submitted modifier is not valid for this item."
+    default_code = "invalid_modifier"
     default_status_code = HTTPStatus.BAD_REQUEST
 
 

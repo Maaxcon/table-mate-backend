@@ -29,6 +29,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from apps.authentication.models import User
 from apps.orders.broadcast import cart_group_send
+from apps.orders.services.modifiers import modifiers_key, normalize_modifiers
 from apps.reservations.models import ReservationStatus
 from apps.restaurants.models import Table
 from apps.restaurants.selectors import is_restaurant_open
@@ -104,6 +105,7 @@ def add_item_to_cart(
     guest_slot: int | None = None,
     comment: str | None = None,
     client_id: str | None = None,
+    modifiers: Any | None = None,
 ) -> CartItem:
     with transaction.atomic():
         session = CartSession.objects.select_for_update().get(pk=session.pk)
@@ -127,52 +129,45 @@ def add_item_to_cart(
         if not menu_item.is_available:
             raise MenuItemUnavailableError(f"Menu item '{menu_item.name}' is not available.")
 
+        snapshot, price_delta = normalize_modifiers(menu_item, modifiers)
+        key = modifiers_key(snapshot) if snapshot else None
+        unit_price = menu_item.price + price_delta
+
         if guest_identity is not None:
             guest_slot = _assign_guest_slot(session, guest_identity)
 
-        defaults: dict[str, object] = {
-            "quantity": quantity,
-            "comment": comment,
-            "guest_slot": guest_slot,
-            "guest_identity": guest_identity,
-        }
-        if _is_authenticated_user(user):
-            user = cast(User, user)
-            defaults["added_by"] = user
-
-        try:
-            with transaction.atomic():
-                item, created = CartItem.objects.get_or_create(
-                    cart_session=session,
-                    menu_item=menu_item,
-                    restaurant_id=session.restaurant_id,
-                    defaults=defaults,
+        item = (
+            CartItem.objects.select_for_update()
+            .filter(cart_session=session, menu_item=menu_item, modifiers_key=key)
+            .first()
+        )
+        if item is None:
+            try:
+                with transaction.atomic():
+                    item = CartItem.objects.create(
+                        cart_session=session,
+                        menu_item=menu_item,
+                        restaurant_id=session.restaurant_id,
+                        quantity=quantity,
+                        comment=comment,
+                        guest_slot=guest_slot,
+                        guest_identity=guest_identity,
+                        modifiers=snapshot,
+                        modifiers_key=key,
+                        unit_price=unit_price,
+                        **({"added_by": user} if _is_authenticated_user(user) else {}),
+                    )
+            except IntegrityError as exc:
+                if exc.__cause__ is None or getattr(exc.__cause__, "pgcode", None) != "23505":
+                    raise
+                item = (
+                    CartItem.objects.select_for_update()
+                    .filter(cart_session=session, menu_item=menu_item, modifiers_key=key)
+                    .get()
                 )
-        except IntegrityError as exc:
-            if exc.__cause__ is None or getattr(exc.__cause__, "pgcode", None) != "23505":
-                raise
-            item = (
-                CartItem.objects.select_for_update()
-                .filter(
-                    cart_session=session,
-                    menu_item=menu_item,
-                    restaurant_id=session.restaurant_id,
-                )
-                .get()
-            )
-            created = False
-        if not created:
-            update_fields: dict[str, object] = {
-                "quantity": F("quantity") + quantity,
-                "updated_at": timezone.now(),
-            }
-            # The cart holds one row per menu item, so a re-add with a new comment
-            # must overwrite the stored note. A blank/absent comment leaves the
-            # existing one in place (e.g. tapping + on a card has no comment).
-            if comment is not None:
-                update_fields["comment"] = comment
-            CartItem.objects.filter(pk=item.pk).update(**update_fields)
-            item.refresh_from_db(fields=["quantity", "comment", "updated_at"])
+                _increment_cart_item(item, quantity, comment)
+        else:
+            _increment_cart_item(item, quantity, comment)
 
         item.menu_item = menu_item
         item.cart_session = session
@@ -183,6 +178,20 @@ def add_item_to_cart(
             item.added_by = user
         _broadcast_cart_updated(session, client_id)
     return item
+
+
+def _increment_cart_item(item: CartItem, quantity: int, comment: str | None) -> None:
+    update_fields: dict[str, object] = {
+        "quantity": F("quantity") + quantity,
+        "updated_at": timezone.now(),
+    }
+    # The cart holds one row per (menu item, modifier set), so a re-add with a
+    # new comment must overwrite the stored note. A blank/absent comment leaves
+    # the existing one in place (e.g. tapping + on a card has no comment).
+    if comment is not None:
+        update_fields["comment"] = comment
+    CartItem.objects.filter(pk=item.pk).update(**update_fields)
+    item.refresh_from_db(fields=["quantity", "comment", "updated_at"])
 
 
 def remove_item_from_cart(

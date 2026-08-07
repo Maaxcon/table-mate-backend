@@ -27,6 +27,15 @@ class CartItem(RestaurantScopedModel):
     guest_slot = models.PositiveIntegerField(null=True, blank=True)
     guest_identity = models.CharField(max_length=255, null=True, blank=True)
 
+    # Applied modifier choices, denormalized for display/price (snapshot):
+    # [{"modifier_id", "option_id", "name", "price_delta"}]. modifiers_key is a
+    # deterministic fingerprint of the canonical set so cart lines can be
+    # keyed by (session, item, modifier-set).
+    modifiers = models.JSONField(default=list, blank=True)
+    modifiers_key = models.CharField(max_length=64, null=True, blank=True)
+    # Unit price snapshot including modifier price deltas (base + sum of deltas).
+    unit_price = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+
     class Meta:
         ordering = ["-created_at", "-id"]
         constraints = [
@@ -36,7 +45,13 @@ class CartItem(RestaurantScopedModel):
             ),
             models.UniqueConstraint(
                 fields=["cart_session", "menu_item"],
-                name="orders_cartitem_unique_session_item",
+                condition=models.Q(modifiers_key__isnull=True),
+                name="orders_cartitem_unique_session_item_nomod",
+            ),
+            models.UniqueConstraint(
+                fields=["cart_session", "menu_item", "modifiers_key"],
+                condition=models.Q(modifiers_key__isnull=False),
+                name="orders_cartitem_unique_session_item_mod",
             ),
             models.UniqueConstraint(
                 fields=["restaurant", "id"],
