@@ -315,3 +315,4 @@ The assistant follows the "model proposes, the application disposes" pattern. Th
 - The AI model runs on Ollama with structured output/JSON mode (per project decision); because it is a small local model, the tool catalog is kept intentionally small with intent routing and strict schemas (FR-018, FR-020)
 - The model NEVER holds credentials or makes direct requests; execution always goes through an app-side execution layer under the guest's authenticated session (FR-017)
 - The execution layer is the customer client (which holds the session token) and/or a lightweight backend middleware; the exact split is decided in the plan
+- The assistant chat widget, proposal confirmation dialogue, and offline/reconnect handling are implemented in the customer web app repo per the Frontend Surface, Offline & Reconnection, and Destructive Action Confirmation contracts in this spec (constitution C-I — one shared spec for frontend and backend)

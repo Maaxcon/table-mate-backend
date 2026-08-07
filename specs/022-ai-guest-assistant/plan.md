@@ -9,6 +9,8 @@ Build an in-app AI guest assistant for the restaurant customer web app. A guest 
 
 The design follows the "LLM proposes, app disposes" architecture (FR-017/FR-018/FR-019/FR-020/FR-021) and is built so future assistants (e.g., a staff admin assistant) plug in additively via a tool registry and persona-scoped tool sets (FR-014/FR-015, US-6).
 
+The customer web app consumes the REST + WS contracts: it renders the chat widget, the confirmation dialogue (summary + consequence, expiry countdown, dismiss-notify), offline write-blocking with reconnect replay, and the hand-off UX. Those frontend deliverables are tracked as Phase 10 in tasks.md and implemented in the customer web app repo on the same feature branch (constitution C-I).
+
 ## Technical Context
 
 **Language/Version**: Python 3.12, Django 5, DRF

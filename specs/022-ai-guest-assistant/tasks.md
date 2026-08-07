@@ -5,7 +5,7 @@
 
 **Tests**: Test tasks are REQUIRED for this feature — the constitution mandates verification for role-based access, realtime (WebSocket) event contracts, replay/version handling, transactional/atomic data behavior, and destructive-action confirmation, all of which are in scope (see constitution Compliance "Tasks artifacts MUST include verification for role enforcement, websocket replay/version handling, ... and atomic data behavior when relevant").
 
-**Scope note**: This repository is the backend. The spec's Frontend Surface Contract (chat widget mounting, offline write-blocking, confirmation dialogue rendering) is consumed by the customer web app repo; the backend deliverables here are the REST + WS contracts and their tests.
+**Scope note**: This feature spans both repositories (constitution C-I — one shared spec for frontend and backend). The backend deliverables (this repo) are the REST + WS contracts and their tests (Phases 1-9). The frontend deliverables live in the customer web app repo (`../table-mate-frontend`, same feature branch `feat/041-AI-guest-assistant`) and are tracked as Phase 10 (chat widget, confirmation dialogue, offline/reconnect handling, hand-off UX).
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -18,6 +18,7 @@
 ## Path Conventions
 
 - Django apps live under `apps/` (e.g. `apps/assistant/`), core wiring in `core/`, tests under `tests/` at repository root. No `src/` prefix.
+- Frontend tasks (Phase 10) target the customer web app repo: feature code under `src/features/assistant/`, API helpers in `src/api/client.ts`, WS patterns modeled on `src/features/notification-stream/hooks/useNotificationStream.ts`, generated types under `src/types/api/types.gen.ts` (from `npm run generate:api`), i18n keys in `public/locales/<lang>/translation.json`.
 
 ---
 
@@ -173,6 +174,33 @@
 
 ---
 
+## Phase 10: Frontend Implementation (Customer Web App)
+
+**Purpose**: Implement the spec's Frontend Surface Contract, Offline & Reconnection Contract, and Destructive Action Confirmation Contract in the customer web app repo (`../table-mate-frontend`, branch `feat/041-AI-guest-assistant`), consuming the REST + WS contracts from Phases 1-9 (C13, Frontend Constitution VI/VIII, C-I). The frontend renders the chat, surfaces confirmation dialogues, and holds the guest's session token for its own authenticated requests — it never receives raw tool proposals to execute and never receives model credentials (R1).
+
+**⚠️ Depends on**: backend REST + WS contracts (Phases 1-5) and committed `schema.yaml` with assistant endpoints (T047) for generated API types.
+
+**Independent Test**: As an authenticated customer, open the chat widget, ask a menu question (answer streams via WS), request a booking, confirm the dialogue (reservation appears), cancel the reservation (consequence named, requires confirm), disconnect mid-conversation (sends blocked, error state shown), reconnect (history replays, writes re-enable).
+
+### Implementation for Frontend
+
+- [ ] FT001 [P] Regenerate frontend API types: run `npm run generate:api` (openapi-ts against `../table-mate-backend/schema.yaml`) and confirm `src/types/api/types.gen.ts` now includes assistant conversation/proposal/handoff request-response types; commit
+- [ ] FT002 [P] Add assistant i18n strings: `assistant.*` keys (widget labels, input placeholder, send button, typing indicator, confirmation dialogue approve/dismiss, limit notice, offline/error state, hand-off copy) to `public/locales/en/translation.json` (and any other shipped locales)
+- [ ] FT003 [P] Implement assistant REST helpers in `src/features/assistant/api.ts` (modeled on `src/features/reservation/api.ts` + `src/api/client.ts`): `createOrGetConversation`, `fetchConversation(id)` (with `pending_proposal`), `sendMessage(id, text, ui_context)` (202 + `message_id`), `fetchMessages(id)` (replay history), `confirmProposal(id)`, `rejectProposal(id)`, `requestHandoff(id, reason)`; map 429 to a typed limit error carrying `retry_after`, map 409 to proposal-expired/already-processed
+- [ ] FT004 [P] Implement `useAssistantSocket` hook in `src/features/assistant/hooks/useAssistantSocket.ts` (modeled on `useNotificationStream.ts`): connect `${env.wsUrl}/ws/assistant/<conversation_id>/` with `["access_token", token]` subprotocol, reconnect w/ exponential backoff + jitter, token refresh on close 4001, ignore unknown `schema_version`, expose `isConnected` + parsed `ASSISTANT_MESSAGE`/`ASSISTANT_ACTION_PROPOSED`/`ASSISTANT_ACTION_RESULT` events
+- [ ] FT005 [P] Implement `useAssistantChat` state hook in `src/features/assistant/hooks/useAssistantChat.ts`: conversation lifecycle (create-or-resume on open), message list append (user echo + assistant events), `pending_proposal` tracking, send/confirm/reject/handoff actions, and rate-limit + offline handling
+- [ ] FT006 [P] Build `AssistantWidget` component in `src/features/assistant/components/AssistantWidget.tsx` (chat surface: message bubbles, input, send button, typing indicator, proposal confirmation slot) mounted only for the customer role tree — staff roles MUST NOT mount it (Role Tree Mounting Rule, Frontend Constitution I)
+- [ ] FT007 [P] Build `ProposalConfirmationModal` component in `src/features/assistant/components/ProposalConfirmationModal.tsx` per the Destructive Action Confirmation Contract: renders summary + consequence, Approve/Dismiss, shows countdown from `expires_at` (disables confirm past expiry), calls confirm/reject endpoints, dismissal notifies the assistant (follow-up)
+- [ ] FT008 [P] Implement offline/reconnect UX per Offline & Reconnection Contract: persistent error state + write-blocking (send + confirm disabled) while disconnected; on reconnect refresh conversation state (`fetchMessages` + `fetchConversation`) before re-enabling writes (Frontend Constitution VI)
+- [ ] FT009 [P] Handle 429 rate-limit UX: friendly limit notice with `retry_after`, no message sent, input stays usable after the window (FR-023, SC-012)
+- [ ] FT010 [P] Mount the widget in customer-facing pages (e.g., `src/pages/MenuPage.tsx` and/or `CabinetPage.tsx`) gated by customer role; wire `ui_context` (active view, cart item count, menu category) into `sendMessage` for deictic references (FR-021)
+- [ ] FT011 [P] Frontend unit tests in `src/features/assistant/`: socket hook (reconnect, schema_version ignore, token refresh), chat state (send/confirm/reject/handoff, offline write-blocking, rate-limit), widget mount gating (customer vs staff), confirmation modal (summary/consequence render, expiry countdown, approve/dismiss paths)
+- [ ] FT012 Run frontend quality gates in `../table-mate-frontend`: `npm run lint`, `npm run test`, `npm run build`, `npm run format:check`; commit on `feat/041-AI-guest-assistant`
+
+**Checkpoint**: At this point the assistant is usable end-to-end from the customer UI against the backend contracts (SC-001/SC-002/SC-004/SC-005/SC-008/SC-012).
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -182,7 +210,8 @@
 - **User Stories (Phase 3+)**: All depend on Foundational phase completion
   - User stories can then proceed in parallel (if staffed)
   - Or sequentially in priority order (P1 → P2 → P3)
-- **Polish (Final Phase)**: Depends on all desired user stories being complete
+- **Polish (Phase 9)**: Depends on all desired user stories being complete
+- **Frontend (Phase 10)**: Depends on the REST + WS contracts (Phases 1-5) and the committed `schema.yaml` (T047) for generated API types; runs in the customer web app repo in parallel with the backend Polish phase (Phase 9)
 
 ### User Story Dependencies
 
@@ -210,6 +239,7 @@
 - Within US2: T026-T027 in parallel, then T028-T030 (sequential wiring), then T031
 - Within US4: T035-T036 in parallel, then T037
 - Within US5: T038 in parallel with nothing else in the story; T039-T040 sequential, then T041
+- Frontend (Phase 10): FT001-FT011 run in parallel after backend contracts + `schema.yaml` land; FT012 (quality gates) is last
 
 ---
 
@@ -251,7 +281,8 @@ Task: "Implement create_reservation executor in apps/assistant/services/tools.py
 5. Add User Story 4 (modify/cancel, P2) → Test independently → Deploy/Demo
 6. Add User Story 5 (hand-off, P2) → Test independently → Deploy/Demo
 7. Add User Story 6 (extension, P3) → Test independently → Deploy/Demo
-8. Polish & quality gates (Phase 9) before PR
+8. Frontend (Phase 10) once contracts + `schema.yaml` land → Test end-to-end → Deploy/Demo
+9. Polish & quality gates (Phase 9) before PR
 
 ### Parallel Team Strategy
 
@@ -263,6 +294,7 @@ With multiple developers:
    - Developer B: User Story 2 (proposals infra, unblocks US3/US4)
    - Developer C: User Story 5
 3. After US2 proposal endpoints: Developer A/B/C pick up US3/US4/US6
+4. Once backend contracts + `schema.yaml` are committed, a frontend developer starts Phase 10 in the customer web app repo in parallel with the remaining backend Polish work (Phase 9)
 
 ---
 
@@ -273,7 +305,7 @@ With multiple developers:
 - Each user story should be independently completable and testable
 - Verification tasks for role enforcement (T016, T044), websocket event contracts + unknown-version handling (T020), at-least-once delivery + replay (T020), atomic data behavior (T031/T034/T037), and destructive-action confirmation (T036/T037) are REQUIRED by the constitution and included above
 - Webhook/payment path: N/A for this feature (FR-009 payment referral only; T022 covers the referral)
-- Frontend offline UX + confirmation-dialogue rendering are consumed in the customer web app repo against these contracts; no frontend build tasks live in this repo
+- Frontend implementation (Phase 10) lives in the customer web app repo against the backend contracts from Phases 1-9; the widget's confirmation dialogue, offline write-blocking, and reconnect replay follow the spec's Frontend Surface / Offline & Reconnection / Destructive Action Confirmation contracts and Frontend Constitution VI/VIII
 - Commit after each task or logical group; verify tests fail before implementing where a test is written ahead of implementation
 - Stop at any checkpoint to validate the story independently
 - Avoid: vague tasks, same-file conflicts, cross-story dependencies that break independence
