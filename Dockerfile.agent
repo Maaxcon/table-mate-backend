@@ -1,0 +1,37 @@
+FROM node:20-slim
+
+# Install system dependencies, Git, Python3, and Curl
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    iputils-ping \
+    ca-certificates \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv (matching your test runner environment)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Install OpenCode globally
+RUN npm install -g opencode-ai
+
+# Configure non-root user matching host user ID/Group ID
+ARG UID=1000
+ARG GID=1000
+
+RUN groupadd -g ${GID} agentgroup || true && \
+    useradd -u ${UID} -g ${GID} -m -s /bin/bash agentuser || true
+
+USER agentuser
+
+ENV PATH="/home/agentuser/.local/bin:${PATH}"
+
+RUN uv tool install specify-cli
+
+WORKDIR /workspace
+
+# Keep shell open by default
+CMD ["bash"]

@@ -109,6 +109,35 @@ services:
     volumes:
       - ollama_storage:/root/.ollama  # Persists downloaded models on host
     restart: unless-stopped
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./:/workspace/table-mate-backend:rw
+      - ../table-mate-frontend:/workspace/table-mate-frontend:rw
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WORKSPACE_DIR=/workspace
+      - HTTP_PROXY=http://host.docker.internal:9052
+      - HTTPS_PROXY=http://host.docker.internal:9052
+      - NO_PROXY=localhost,127.0.0.1,db,redis,web,frontend,worker,beat
+    working_dir: /workspace
+    tty: true
+    stdin_open: true
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
 volumes:
   postgres_data:
   ollama_storage:
